@@ -2,6 +2,7 @@ using LogoDesignPortal.Application.Interfaces.Authentication;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Infrastructure.Authentication;
 using LogoDesignPortal.Infrastructure.Persistence;
+using LogoDesignPortal.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +24,9 @@ public static class DependencyInjection
         // Register DbContext as interface
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<ApplicationDbContext>());
+
+        // Repositories
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 
         // Authentication
         services.AddScoped<IJwtTokenService, JwtTokenService>();

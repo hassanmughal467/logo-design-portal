@@ -1,92 +1,104 @@
-# Logo Design Portal - Backend (Phase 1)
+# Logo Design Portal - Production-Ready Backend
 
-## Overview
-This is the backend foundation for the Logo Design Business Web Portal, built with ASP.NET Core Web API (.NET 8) using Clean Architecture principles.
+## 🎯 Overview
+A production-ready ASP.NET Core Web API backend for a Logo Design Business Portal, built with Clean Architecture principles, featuring JWT authentication with refresh tokens, role-based authorization, secure file handling, and comprehensive order management.
 
-## Architecture
+## 🏗️ Architecture
 
-The solution follows Clean Architecture with the following structure:
+### Clean Architecture Layers
 
 ```
 LogoDesignPortal.sln
 │
 ├── src
-│   ├── LogoDesignPortal.Domain
-│   │   ├── Entities
-│   │   │   ├── BaseEntity.cs
-│   │   │   ├── User.cs
-│   │   │   └── Role.cs
-│   │   └── Enums
-│   │       └── SystemRoles.cs
-│
-│   ├── LogoDesignPortal.Application
-│   │   ├── Interfaces
-│   │   │   ├── Authentication
-│   │   │   │   └── IJwtTokenService.cs
-│   │   │   ├── Persistence
-│   │   │   │   └── IApplicationDbContext.cs
-│   │   │   ├── IAuthService.cs
-│   │   │   └── IUserService.cs
-│   │   ├── DTOs
-│   │   │   ├── Auth
-│   │   │   │   ├── LoginRequestDto.cs
-│   │   │   │   ├── AuthResponseDto.cs
-│   │   │   │   └── UserDto.cs
-│   │   │   └── Users
-│   │   │       ├── CreateUserRequestDto.cs
-│   │   │       └── UserResponseDto.cs
-│   │   └── Services
-│   │       ├── AuthService.cs
-│   │       └── UserService.cs
-│
-│   ├── LogoDesignPortal.Infrastructure
-│   │   ├── Authentication
-│   │   │   └── JwtTokenService.cs
-│   │   ├── Persistence
-│   │   │   ├── ApplicationDbContext.cs
-│   │   │   └── Configurations
-│   │   │       ├── UserConfiguration.cs
-│   │   │       └── RoleConfiguration.cs
-│   │   └── DependencyInjection.cs
-│
-│   ├── LogoDesignPortal.API
-│   │   ├── Controllers
-│   │   │   ├── AuthController.cs
-│   │   │   └── UsersController.cs
-│   │   ├── Middleware
-│   │   │   └── ExceptionMiddleware.cs
-│   │   ├── Program.cs
-│   │   └── appsettings.json
+│   ├── LogoDesignPortal.Domain          # Core entities, enums
+│   ├── LogoDesignPortal.Application     # Business logic, DTOs, services
+│   ├── LogoDesignPortal.Infrastructure  # Data access, external services
+│   └── LogoDesignPortal.API             # Controllers, middleware, configuration
 ```
 
-## Features (Phase 1)
+## ✨ Features
 
-✅ Clean Architecture project structure  
-✅ JWT Authentication  
-✅ Role-based Authorization  
-✅ Base entities (User, Role) with BaseEntity  
-✅ EF Core + SQL Server  
-✅ DbContext with separate configurations  
-✅ Swagger (JWT enabled)  
-✅ Global exception handling  
-✅ SuperAdmin can create users with any role  
+### Authentication & Authorization
+- ✅ JWT Authentication with Refresh Tokens
+- ✅ Role-based Authorization (SuperAdmin, Admin, Designer, Client)
+- ✅ Client Registration & Login
+- ✅ Secure token management
 
-## Roles
+### Order Management
+- ✅ Logo order creation
+- ✅ Assign orders to designers
+- ✅ Order status tracking (Pending, InProgress, Completed, Cancelled)
+- ✅ Order status history
+- ✅ Role-based order access
 
-- **SuperAdmin**: Full system access, can create users with any role
-- **Admin**: Administrative access with restricted client data access
-- **Designer**: Designer access without client identity information
-- **Client**: Client access to their own data
+### File Management
+- ✅ Secure file upload (max 10MB)
+- ✅ File type validation
+- ✅ Secure file download (not publicly accessible)
+- ✅ File deletion with authorization
 
-## Prerequisites
+### Data Security
+- ✅ Client info masking for Admin (no personal data)
+- ✅ Designers never see client identity
+- ✅ Soft delete implementation
+- ✅ Audit fields (CreatedAt, CreatedBy, UpdatedAt, UpdatedBy)
 
+### Technical Features
+- ✅ AutoMapper for DTO mapping
+- ✅ Repository pattern
+- ✅ Global exception handling
+- ✅ Swagger with JWT support
+- ✅ EF Core Code-First with Migrations
+- ✅ Soft delete support
+
+## 📊 Entities
+
+- **User** - System users with roles
+- **Role** - User roles (SuperAdmin, Admin, Designer, Client)
+- **ClientProfile** - Client-specific information
+- **DesignerProfile** - Designer-specific information
+- **LogoOrder** - Logo design orders
+- **LogoFile** - Uploaded logo files
+- **OrderStatusHistory** - Order status change history
+- **Invoice** - Order invoices
+
+## 🔐 User Roles & Permissions
+
+### SuperAdmin
+- Full system access
+- Can create users with any role
+- Can view all orders and client information
+- Can assign orders to designers
+
+### Admin
+- Administrative access
+- **Cannot see client personal data** (email, phone masked)
+- Can view all orders
+- Can assign orders to designers
+
+### Designer
+- **Cannot see client identity** (client info completely hidden)
+- Can view assigned orders only
+- Can upload/download files for assigned orders
+- Can update order status
+
+### Client
+- Can create orders
+- Can view own orders only
+- Can upload/download files for own orders
+- Can update own order status
+
+## 🚀 Getting Started
+
+### Prerequisites
 - .NET 8 SDK
-- SQL Server (LocalDB or full SQL Server instance)
-- Visual Studio 2022 or VS Code / Rider
+- SQL Server (LocalDB or full instance)
+- Visual Studio 2022 / VS Code / Rider
 
-## Setup Instructions
+### Setup
 
-1. **Restore NuGet packages:**
+1. **Clone and restore packages:**
    ```bash
    cd Backend
    dotnet restore
@@ -99,7 +111,7 @@ LogoDesignPortal.sln
    }
    ```
 
-3. **Update JWT settings** in `src/LogoDesignPortal.API/appsettings.json`:
+3. **Update JWT settings** (change in production!):
    ```json
    "Jwt": {
      "Key": "YourSuperSecretKeyForJWTTokenGenerationThatShouldBeAtLeast32CharactersLong!",
@@ -107,7 +119,6 @@ LogoDesignPortal.sln
      "Audience": "LogoDesignPortalUsers"
    }
    ```
-   ⚠️ **Important**: Change the JWT Key to a secure random string in production!
 
 4. **Run the application:**
    ```bash
@@ -115,67 +126,191 @@ LogoDesignPortal.sln
    dotnet run
    ```
 
-5. **Access Swagger UI:**
-   - Navigate to `https://localhost:5001/swagger` or `http://localhost:5000/swagger`
+5. **Access Swagger:**
+   - Navigate to `https://localhost:5001/swagger`
 
-## Default SuperAdmin Credentials
+### Database Migrations
+
+```bash
+cd src/LogoDesignPortal.Infrastructure
+dotnet ef migrations add InitialCreate --startup-project ../LogoDesignPortal.API
+dotnet ef database update --startup-project ../LogoDesignPortal.API
+```
+
+## 🔑 Default Credentials
 
 - **Email**: `superadmin@logodesign.com`
 - **Password**: `SuperAdmin@123`
 
-⚠️ **Important**: Change these credentials immediately in production!
+⚠️ **Change these immediately in production!**
 
-## API Endpoints
+## 📡 API Endpoints
 
 ### Authentication
-- `POST /api/auth/login` - Login and get JWT token
+- `POST /api/auth/login` - Login (returns JWT + Refresh Token)
+- `POST /api/auth/register` - Client registration
+- `POST /api/auth/refresh-token` - Refresh access token
 
-### Users (Requires Authentication)
-- `POST /api/users` - Create a new user (SuperAdmin only)
+### Orders
+- `POST /api/orders` - Create order (Client only)
+- `GET /api/orders/{id}` - Get order by ID
+- `GET /api/orders/my-orders` - Get client's orders
+- `GET /api/orders/assigned-orders` - Get designer's assigned orders
+- `GET /api/orders` - Get all orders (SuperAdmin, Admin)
+- `POST /api/orders/{id}/assign` - Assign order to designer (SuperAdmin, Admin)
+- `PUT /api/orders/{id}/status` - Update order status
+
+### Files
+- `POST /api/files/upload/{orderId}` - Upload file
+- `GET /api/files/{id}/download` - Download file (secure)
+- `GET /api/files/order/{orderId}` - Get order files
+- `DELETE /api/files/{id}` - Delete file
+
+### Users
+- `POST /api/users` - Create user (SuperAdmin only)
 - `GET /api/users/{id}` - Get user by ID
 - `GET /api/users` - Get all users (SuperAdmin, Admin)
 
-## Testing with Swagger
+## 🧪 Testing with Swagger
 
-1. Open Swagger UI at `/swagger`
-2. Use the `/api/auth/login` endpoint to authenticate:
+1. **Register a client:**
    ```json
+   POST /api/auth/register
    {
-     "email": "superadmin@logodesign.com",
-     "password": "SuperAdmin@123"
+     "email": "client@example.com",
+     "password": "Password123",
+     "firstName": "John",
+     "lastName": "Doe",
+     "companyName": "Acme Corp",
+     "phoneNumber": "+1234567890"
    }
    ```
-3. Copy the `token` from the response
-4. Click the "Authorize" button in Swagger
-5. Enter: `Bearer <your-token>`
-6. Now you can test protected endpoints
 
-## Database
+2. **Login:**
+   ```json
+   POST /api/auth/login
+   {
+     "email": "client@example.com",
+     "password": "Password123"
+   }
+   ```
 
-The database is automatically created on first run using `EnsureCreated()`. The following are seeded:
+3. **Copy the token** from response
 
-- **Roles**: SuperAdmin, Admin, Designer, Client
-- **Default User**: SuperAdmin user with email `superadmin@logodesign.com`
+4. **Click "Authorize"** in Swagger and enter: `Bearer <your-token>`
 
-## Architecture Highlights
+5. **Create an order:**
+   ```json
+   POST /api/orders
+   {
+     "title": "New Logo Design",
+     "description": "Need a modern logo for my company",
+     "price": 500.00,
+     "deadline": "2024-12-31T00:00:00Z",
+     "colorPreferences": "Blue and white",
+     "stylePreferences": "Modern, minimalist"
+   }
+   ```
 
-- **BaseEntity**: All entities inherit from BaseEntity with common properties (Id, CreatedAt, UpdatedAt)
-- **IApplicationDbContext**: Interface for database context abstraction
-- **IJwtTokenService**: Separate JWT token generation service
-- **Entity Configurations**: Separate configuration files for each entity (UserConfiguration, RoleConfiguration)
-- **ExceptionMiddleware**: Centralized exception handling
+## 🔒 Security Features
 
-## Next Steps (Future Phases)
+### File Security
+- Files stored outside web root
+- Access controlled by authorization
+- File type validation
+- File size limits (10MB)
+- Secure download endpoints
 
-- Orders management
-- File uploads
-- Invoices
-- Frontend integration
-- Advanced features
+### Data Privacy
+- **Admin**: Client email/phone masked
+- **Designer**: Client identity completely hidden
+- Soft delete (data not permanently removed)
+- Audit trail (CreatedBy, UpdatedBy)
 
-## Notes
+### Authentication
+- JWT tokens with 1-hour expiry
+- Refresh tokens with 7-day expiry
+- Secure password hashing (BCrypt)
+- Token validation
 
-- This is Phase 1 - Backend Foundation only
-- No frontend implementation
-- No advanced features (Orders, Files, Invoices)
-- Code is production-ready and extensible
+## 📁 File Storage
+
+Files are stored in the `Files` directory (configurable in `appsettings.json`):
+```json
+"FileStorage": {
+  "Path": "Files"
+}
+```
+
+⚠️ **Ensure this directory is not publicly accessible!**
+
+## 🗄️ Database
+
+- **Database**: SQL Server
+- **ORM**: Entity Framework Core
+- **Migrations**: Code-First approach
+- **Soft Delete**: Implemented via `IsDeleted` flag
+- **Audit Fields**: Automatic tracking
+
+## 🛠️ Technologies
+
+- **.NET 8**
+- **ASP.NET Core Web API**
+- **Entity Framework Core 8.0**
+- **SQL Server**
+- **JWT Authentication**
+- **AutoMapper**
+- **BCrypt.Net**
+- **Swagger/OpenAPI**
+
+## 📝 Code Structure
+
+### Domain Layer
+- Entities (User, Role, LogoOrder, etc.)
+- Enums (OrderStatus, SystemRoles)
+- BaseEntity with audit fields
+
+### Application Layer
+- DTOs (Data Transfer Objects)
+- Interfaces (IAuthService, IOrderService, etc.)
+- Services (Business logic)
+- AutoMapper profiles
+
+### Infrastructure Layer
+- DbContext and configurations
+- Repository implementations
+- JWT token service
+- File storage service
+
+### API Layer
+- Controllers
+- Middleware (Exception handling)
+- Program.cs configuration
+
+## 🚨 Production Checklist
+
+- [ ] Change JWT key to secure random string
+- [ ] Change default SuperAdmin credentials
+- [ ] Update connection string
+- [ ] Configure proper CORS policy
+- [ ] Set up HTTPS only
+- [ ] Configure file storage path (outside web root)
+- [ ] Set up logging
+- [ ] Configure environment variables
+- [ ] Set up database backups
+- [ ] Review and test all authorization rules
+
+## 📚 Next Steps
+
+- Add invoice generation
+- Add email notifications
+- Add payment integration
+- Add order comments/chat
+- Add file versioning
+- Add advanced reporting
+- Add unit tests
+- Add integration tests
+
+## 📄 License
+
+This project is production-ready and follows industry best practices for security, scalability, and maintainability.
