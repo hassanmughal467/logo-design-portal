@@ -1,0 +1,72 @@
+/* PrimeNG Theme */
+@import "primeng/resources/themes/lara-light-blue/theme.css";
+@import "primeng/resources/primeng.css";
+@import "primeicons/primeicons.css";
+
+/* Custom Premium Theme Variables */
+:root {
+  --primary-color: #6366f1;
+  --primary-color-text: #ffffff;
+  --secondary-color: #8b5cf6;
+  --accent-color: #ec4899;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --danger-color: #ef4444;
+  --surface-ground: #f8fafc;
+  --surface-card: #ffffff;
+  --text-color: #0f172a;
+  --text-color-secondary: #64748b;
+  --border-radius: 8px;
+  --font-family: 'Inter', sans-serif;
+}
+
+/* Global Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  color: var(--text-color);
+  background-color: var(--surface-ground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Utility Classes */
+.text-primary {
+  color: var(--text-color);
+}
+
+.text-secondary {
+  color: var(--text-color-secondary);
+}
+
+.bg-primary {
+  background-color: var(--surface-card);
+}
+
+.bg-secondary {
+  background-color: var(--surface-ground);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-ground);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-color-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-color);
+}

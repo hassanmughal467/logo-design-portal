@@ -1,0 +1,90 @@
+<div class="messages-page">
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">Messages</h1>
+      <p class="page-subtitle">Client communications and messages</p>
+    </div>
+    <div class="header-actions">
+      <p-badge [value]="unreadCount.toString()" severity="danger" *ngIf="unreadCount > 0"></p-badge>
+    </div>
+  </div>
+
+  <p-card styleClass="messages-card">
+    <p-table 
+      [value]="messages" 
+      [loading]="loading"
+      [paginator]="true"
+      [rows]="rows"
+      [first]="first"
+      (onPage)="first = $event.first"
+      [globalFilterFields]="['subject', 'clientName', 'message']"
+      [rowsPerPageOptions]="[10, 25, 50]"
+      styleClass="p-datatable-striped"
+      [responsive]="true">
+      
+      <ng-template pTemplate="caption">
+        <div class="table-header">
+          <span class="p-input-icon-left">
+            <i class="pi pi-search"></i>
+            <input 
+              type="text" 
+              pInputText 
+              [(ngModel)]="globalFilter" 
+              placeholder="Search messages..." 
+              class="search-input" />
+          </span>
+        </div>
+      </ng-template>
+
+      <ng-template pTemplate="header">
+        <tr>
+          <th style="width: 3rem"></th>
+          <th>From</th>
+          <th>Subject</th>
+          <th>Message</th>
+          <th pSortableColumn="createdAt">
+            Date <p-sortIcon field="createdAt"></p-sortIcon>
+          </th>
+          <th>Actions</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-message>
+        <tr [class.unread]="!message.isRead">
+          <td>
+            <i class="pi pi-circle-fill" [class.text-primary]="!message.isRead" style="font-size: 0.5rem;" *ngIf="!message.isRead"></i>
+          </td>
+          <td>{{ message.clientName }}</td>
+          <td>
+            <strong>{{ message.subject }}</strong>
+          </td>
+          <td>
+            <span class="message-preview">{{ message.message.substring(0, 50) }}{{ message.message.length > 50 ? '...' : '' }}</span>
+          </td>
+          <td>{{ formatDate(message.createdAt) }}</td>
+          <td>
+            <p-button 
+              icon="pi pi-check" 
+              styleClass="p-button-text p-button-rounded p-button-sm"
+              (onClick)="markAsRead(message.id)"
+              *ngIf="!message.isRead"
+              pTooltip="Mark as Read"
+              tooltipPosition="top">
+            </p-button>
+          </td>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="6" class="empty-message">
+            <div class="empty-state">
+              <i class="pi pi-inbox empty-icon"></i>
+              <p>No messages found</p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-card>
+</div>

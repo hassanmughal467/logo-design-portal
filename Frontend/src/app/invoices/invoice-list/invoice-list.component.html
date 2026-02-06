@@ -1,0 +1,126 @@
+<div class="invoices-page">
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">Invoices Management</h1>
+      <p class="page-subtitle">Track payments and manage invoices</p>
+    </div>
+    <div class="header-actions">
+      <p-button 
+        label="Generate Invoice" 
+        icon="pi pi-plus" 
+        styleClass="p-button-primary">
+      </p-button>
+    </div>
+  </div>
+
+  <p-card styleClass="invoices-card">
+    <p-table 
+      [value]="invoices" 
+      [loading]="loading"
+      [paginator]="true"
+      [rows]="rows"
+      [first]="first"
+      (onPage)="first = $event.first"
+      [globalFilterFields]="['invoiceNumber', 'clientName']"
+      [rowsPerPageOptions]="[10, 25, 50]"
+      styleClass="p-datatable-striped"
+      [responsive]="true">
+      
+      <ng-template pTemplate="caption">
+        <div class="table-header">
+          <span class="p-input-icon-left">
+            <i class="pi pi-search"></i>
+            <input 
+              type="text" 
+              pInputText 
+              [(ngModel)]="globalFilter" 
+              placeholder="Search invoices..." 
+              class="search-input" />
+          </span>
+          <p-dropdown 
+            [options]="statuses" 
+            [(ngModel)]="selectedStatus"
+            placeholder="Filter by Status"
+            [showClear]="true"
+            styleClass="status-filter">
+          </p-dropdown>
+        </div>
+      </ng-template>
+
+      <ng-template pTemplate="header">
+        <tr>
+          <th pSortableColumn="invoiceNumber">
+            Invoice # <p-sortIcon field="invoiceNumber"></p-sortIcon>
+          </th>
+          <th>Client</th>
+          <th pSortableColumn="amount">
+            Amount <p-sortIcon field="amount"></p-sortIcon>
+          </th>
+          <th pSortableColumn="status">
+            Status <p-sortIcon field="status"></p-sortIcon>
+          </th>
+          <th pSortableColumn="dueDate">
+            Due Date <p-sortIcon field="dueDate"></p-sortIcon>
+          </th>
+          <th>Actions</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-invoice>
+        <tr>
+          <td>
+            <div class="invoice-number-cell">
+              <i class="pi pi-file-pdf"></i>
+              <span>{{ invoice.invoiceNumber }}</span>
+            </div>
+          </td>
+          <td>{{ invoice.clientName }}</td>
+          <td>
+            <span class="currency-text">{{ formatCurrency(invoice.amount) }}</span>
+          </td>
+          <td>
+            <p-tag 
+              [value]="invoice.status" 
+              [severity]="getStatusSeverity(invoice.status)"
+              [rounded]="true">
+            </p-tag>
+          </td>
+          <td>
+            <span [class.overdue]="isOverdue(invoice.dueDate)">
+              {{ formatDate(invoice.dueDate) }}
+            </span>
+          </td>
+          <td>
+            <div class="action-buttons">
+              <p-button 
+                icon="pi pi-download" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                (onClick)="downloadInvoice(invoice.id)"
+                pTooltip="Download PDF"
+                tooltipPosition="top">
+              </p-button>
+              <p-button 
+                icon="pi pi-send" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                (onClick)="sendInvoice(invoice.id)"
+                pTooltip="Send Invoice"
+                tooltipPosition="top">
+              </p-button>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="6" class="empty-message">
+            <div class="empty-state">
+              <i class="pi pi-file-pdf empty-icon"></i>
+              <p>No invoices found</p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-card>
+</div>

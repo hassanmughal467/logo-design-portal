@@ -1,0 +1,107 @@
+<div class="main-layout">
+  <!-- Sidebar -->
+  <p-sidebar 
+    [(visible)]="sidebarVisible" 
+    [modal]="false" 
+    position="left" 
+    styleClass="sidebar"
+    [dismissible]="true"
+    [showCloseIcon]="false">
+    <ng-template pTemplate="header">
+      <div class="sidebar-header">
+        <div class="logo-section">
+          <i class="pi pi-palette logo-icon"></i>
+          <h2>Logo Design Portal</h2>
+        </div>
+        <button 
+          pButton 
+          icon="pi pi-times" 
+          (click)="sidebarVisible = false"
+          class="p-button-text p-button-rounded p-button-sm sidebar-close-btn"
+          pTooltip="Close Sidebar"
+          tooltipPosition="right">
+        </button>
+      </div>
+    </ng-template>
+    <div class="sidebar-content">
+      <div class="user-info-section" *ngIf="user && user.role">
+        <div class="user-avatar">
+          <i class="pi pi-user"></i>
+        </div>
+        <div class="user-details">
+          <p class="user-name">{{ user.firstName }} {{ user.lastName }}</p>
+          <p class="user-role" [class]="'role-' + user.role.toLowerCase()">
+            {{ user.role }}
+          </p>
+        </div>
+      </div>
+      <p-menu 
+        [model]="menuItems" 
+        styleClass="sidebar-menu">
+      </p-menu>
+      
+      <!-- Debug: Show menu items count -->
+      <div *ngIf="menuItems.length === 0" class="menu-debug" style="padding: 1rem; color: red; font-size: 0.8rem;">
+        No menu items loaded. User role: {{ user?.role }}
+      </div>
+    </div>
+  </p-sidebar>
+
+  <!-- Main Content Area -->
+  <div class="main-content" [class.sidebar-open]="sidebarVisible">
+    <!-- Top Navigation Bar -->
+    <header class="top-navbar">
+      <div class="navbar-left">
+        <button 
+          pButton 
+          icon="pi pi-bars" 
+          (click)="sidebarVisible = !sidebarVisible" 
+          class="p-button-text p-button-rounded sidebar-toggle-btn"
+          pTooltip="Toggle Sidebar"
+          tooltipPosition="bottom">
+        </button>
+        <div class="breadcrumb-section">
+          <p-breadcrumb [model]="breadcrumbItems" [home]="breadcrumbHome"></p-breadcrumb>
+        </div>
+      </div>
+      <div class="navbar-right">
+        <div class="navbar-actions">
+          <span class="p-input-icon-left global-search">
+            <i class="pi pi-search"></i>
+            <input 
+              type="text" 
+              pInputText 
+              [(ngModel)]="globalSearchQuery" 
+              (keyup.enter)="performGlobalSearch()"
+              placeholder="Search..." 
+              class="search-input" />
+          </span>
+          <button 
+            pButton 
+            icon="pi pi-bell" 
+            class="p-button-text p-button-rounded notification-btn"
+            pTooltip="Notifications"
+            tooltipPosition="bottom">
+            <span class="notification-badge" *ngIf="hasNotifications">3</span>
+          </button>
+        </div>
+        <p-menu #userMenu [model]="userMenuItems" [popup]="true"></p-menu>
+        <button 
+          pButton 
+          [label]="user?.firstName + ' ' + user?.lastName" 
+          icon="pi pi-user" 
+          (click)="userMenu.toggle($event)"
+          class="p-button-text user-menu-btn">
+          <span class="user-role-badge" [class]="'role-' + user?.role?.toLowerCase()">
+            {{ user?.role }}
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Page Content -->
+    <main class="page-content">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+</div>

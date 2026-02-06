@@ -1,0 +1,230 @@
+<div class="users-page">
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">Users Management</h1>
+      <p class="page-subtitle">Manage system users and their roles</p>
+    </div>
+    <div class="header-actions">
+      <p-button 
+        *ngIf="canCreateUser()"
+        label="Create User" 
+        icon="pi pi-plus" 
+        (onClick)="openCreateDialog()"
+        styleClass="p-button-primary">
+      </p-button>
+    </div>
+  </div>
+
+  <p-card styleClass="users-card">
+    <p-table 
+      [value]="users" 
+      [loading]="loading"
+      [paginator]="true"
+      [rows]="rows"
+      [first]="first"
+      (onPage)="first = $event.first"
+      [globalFilterFields]="['firstName', 'lastName', 'email', 'role']"
+      [rowsPerPageOptions]="[10, 25, 50]"
+      styleClass="p-datatable-striped p-datatable-sm"
+      [responsive]="true">
+      
+      <ng-template pTemplate="caption">
+        <div class="table-header">
+          <span class="p-input-icon-left">
+            <i class="pi pi-search"></i>
+            <input 
+              type="text" 
+              pInputText 
+              [(ngModel)]="globalFilter" 
+              placeholder="Search users..." 
+              class="search-input" />
+          </span>
+        </div>
+      </ng-template>
+
+      <ng-template pTemplate="header">
+        <tr>
+          <th style="width: 3rem"></th>
+          <th pSortableColumn="firstName">
+            Name <p-sortIcon field="firstName"></p-sortIcon>
+          </th>
+          <th pSortableColumn="email">
+            Email <p-sortIcon field="email"></p-sortIcon>
+          </th>
+          <th pSortableColumn="role">
+            Role <p-sortIcon field="role"></p-sortIcon>
+          </th>
+          <th pSortableColumn="isActive">
+            Status <p-sortIcon field="isActive"></p-sortIcon>
+          </th>
+          <th pSortableColumn="createdAt">
+            Created <p-sortIcon field="createdAt"></p-sortIcon>
+          </th>
+          <th>Actions</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-user>
+        <tr>
+          <td>
+            <p-tableCheckbox [value]="user"></p-tableCheckbox>
+          </td>
+          <td>
+            <div class="user-name-cell">
+              <i class="pi pi-user user-icon"></i>
+              <span>{{ user.firstName }} {{ user.lastName }}</span>
+            </div>
+          </td>
+          <td>{{ user.email }}</td>
+          <td>
+            <p-tag 
+              [value]="user.role" 
+              [severity]="getRoleSeverity(user.role)"
+              [rounded]="true">
+            </p-tag>
+          </td>
+          <td>
+            <p-tag 
+              [value]="user.isActive ? 'Active' : 'Inactive'" 
+              [severity]="user.isActive ? 'success' : 'danger'"
+              [rounded]="true">
+            </p-tag>
+          </td>
+          <td>{{ formatDate(user.createdAt) }}</td>
+          <td>
+            <div class="action-buttons">
+              <p-button 
+                icon="pi pi-eye" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                pTooltip="View Details"
+                tooltipPosition="top">
+              </p-button>
+              <p-button 
+                icon="pi pi-pencil" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                pTooltip="Edit User"
+                tooltipPosition="top">
+              </p-button>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="7" class="empty-message">
+            <div class="empty-state">
+              <i class="pi pi-users empty-icon"></i>
+              <p>No users found</p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-card>
+
+  <!-- Create User Dialog -->
+  <p-dialog 
+    [(visible)]="displayCreateDialog" 
+    header="Create New User" 
+    [modal]="true"
+    [style]="{width: '500px'}"
+    [closable]="true">
+    
+    <form [formGroup]="createUserForm" (ngSubmit)="createUser()">
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="email">Email <span class="required">*</span></label>
+          <input 
+            id="email"
+            type="email" 
+            pInputText 
+            formControlName="email"
+            [class.ng-invalid]="createUserForm.get('email')?.invalid && createUserForm.get('email')?.touched" />
+          <small 
+            class="p-error" 
+            *ngIf="createUserForm.get('email')?.invalid && createUserForm.get('email')?.touched">
+            Valid email is required
+          </small>
+        </div>
+
+        <div class="form-field">
+          <label for="password">Password <span class="required">*</span></label>
+          <input 
+            id="password"
+            type="password" 
+            pInputText 
+            formControlName="password"
+            [class.ng-invalid]="createUserForm.get('password')?.invalid && createUserForm.get('password')?.touched" />
+          <small 
+            class="p-error" 
+            *ngIf="createUserForm.get('password')?.invalid && createUserForm.get('password')?.touched">
+            Password must be at least 6 characters
+          </small>
+        </div>
+
+        <div class="form-field">
+          <label for="firstName">First Name <span class="required">*</span></label>
+          <input 
+            id="firstName"
+            type="text" 
+            pInputText 
+            formControlName="firstName"
+            [class.ng-invalid]="createUserForm.get('firstName')?.invalid && createUserForm.get('firstName')?.touched" />
+          <small 
+            class="p-error" 
+            *ngIf="createUserForm.get('firstName')?.invalid && createUserForm.get('firstName')?.touched">
+            First name is required
+          </small>
+        </div>
+
+        <div class="form-field">
+          <label for="lastName">Last Name <span class="required">*</span></label>
+          <input 
+            id="lastName"
+            type="text" 
+            pInputText 
+            formControlName="lastName"
+            [class.ng-invalid]="createUserForm.get('lastName')?.invalid && createUserForm.get('lastName')?.touched" />
+          <small 
+            class="p-error" 
+            *ngIf="createUserForm.get('lastName')?.invalid && createUserForm.get('lastName')?.touched">
+            Last name is required
+          </small>
+        </div>
+
+        <div class="form-field full-width">
+          <label for="role">Role <span class="required">*</span></label>
+          <p-dropdown 
+            id="role"
+            [options]="roles" 
+            formControlName="role"
+            placeholder="Select Role"
+            [class.ng-invalid]="createUserForm.get('role')?.invalid && createUserForm.get('role')?.touched">
+          </p-dropdown>
+          <small 
+            class="p-error" 
+            *ngIf="createUserForm.get('role')?.invalid && createUserForm.get('role')?.touched">
+            Role is required
+          </small>
+        </div>
+      </div>
+    </form>
+
+    <ng-template pTemplate="footer">
+      <p-button 
+        label="Cancel" 
+        icon="pi pi-times" 
+        (onClick)="displayCreateDialog = false"
+        styleClass="p-button-text">
+      </p-button>
+      <p-button 
+        label="Create" 
+        icon="pi pi-check" 
+        (onClick)="createUser()"
+        [disabled]="createUserForm.invalid"
+        styleClass="p-button-primary">
+      </p-button>
+    </ng-template>
+  </p-dialog>
+</div>

@@ -1,0 +1,116 @@
+<div class="projects-page">
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">Logo Projects</h1>
+      <p class="page-subtitle">Track logo design projects and revisions</p>
+    </div>
+  </div>
+
+  <p-card styleClass="projects-card">
+    <p-table 
+      [value]="projects" 
+      [loading]="loading"
+      [paginator]="true"
+      [rows]="rows"
+      [first]="first"
+      (onPage)="first = $event.first"
+      [globalFilterFields]="['title', 'clientName', 'packageType']"
+      [rowsPerPageOptions]="[10, 25, 50]"
+      styleClass="p-datatable-striped"
+      [responsive]="true">
+      
+      <ng-template pTemplate="caption">
+        <div class="table-header">
+          <span class="p-input-icon-left">
+            <i class="pi pi-search"></i>
+            <input 
+              type="text" 
+              pInputText 
+              [(ngModel)]="globalFilter" 
+              placeholder="Search projects..." 
+              class="search-input" />
+          </span>
+          <p-dropdown 
+            [options]="statuses" 
+            [(ngModel)]="selectedStatus"
+            placeholder="Filter by Status"
+            [showClear]="true"
+            styleClass="status-filter">
+          </p-dropdown>
+        </div>
+      </ng-template>
+
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Project Title</th>
+          <th>Client</th>
+          <th>Designer</th>
+          <th>Package</th>
+          <th>Status</th>
+          <th>Revisions</th>
+          <th>Approval</th>
+          <th>Deadline</th>
+          <th>Actions</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-project>
+        <tr>
+          <td>
+            <div class="project-title-cell">
+              <i class="pi pi-palette"></i>
+              <span>{{ project.title }}</span>
+            </div>
+          </td>
+          <td>{{ project.clientName }}</td>
+          <td>{{ project.designerName || 'Unassigned' }}</td>
+          <td>
+            <p-tag 
+              [value]="project.packageType" 
+              [severity]="getPackageSeverity(project.packageType)"
+              [rounded]="true">
+            </p-tag>
+          </td>
+          <td>
+            <p-tag 
+              [value]="project.status" 
+              [severity]="getStatusSeverity(project.status)"
+              [rounded]="true">
+            </p-tag>
+          </td>
+          <td>
+            <span class="revision-badge">{{ project.revisionCount }}</span>
+          </td>
+          <td>
+            <p-tag 
+              [value]="project.approvalStatus" 
+              [severity]="project.approvalStatus === 'Approved' ? 'success' : project.approvalStatus === 'Rejected' ? 'danger' : 'warning'"
+              [rounded]="true">
+            </p-tag>
+          </td>
+          <td>{{ formatDate(project.deadline) }}</td>
+          <td>
+            <p-button 
+              icon="pi pi-eye" 
+              styleClass="p-button-text p-button-rounded p-button-sm"
+              (onClick)="viewProject(project.id)"
+              pTooltip="View Project"
+              tooltipPosition="top">
+            </p-button>
+          </td>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="9" class="empty-message">
+            <div class="empty-state">
+              <i class="pi pi-palette empty-icon"></i>
+              <p>No projects found</p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-card>
+</div>

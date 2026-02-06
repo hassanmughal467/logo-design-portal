@@ -1,0 +1,243 @@
+<div class="dashboard">
+  <!-- Header Section -->
+  <div class="dashboard-header">
+    <div class="header-content">
+      <h1 class="dashboard-title">Dashboard</h1>
+      <p class="welcome-text">Welcome back, <strong>{{ user?.firstName }} {{ user?.lastName }}</strong>!</p>
+    </div>
+    <div class="header-actions">
+      <p-button 
+        *ngIf="user?.role === 'Client'"
+        label="New Order" 
+        icon="pi pi-plus" 
+        (onClick)="navigateToOrders()"
+        styleClass="p-button-primary">
+      </p-button>
+      <!-- Quick Navigation Test Buttons -->
+      <div class="quick-nav" style="display: flex; gap: 0.5rem; margin-left: 1rem;">
+        <p-button 
+          *ngIf="user?.role === 'SuperAdmin' || user?.role === 'Admin'"
+          label="Users" 
+          icon="pi pi-users" 
+          (onClick)="navigateToRoute('/users')"
+          styleClass="p-button-outlined">
+        </p-button>
+        <p-button 
+          label="Orders" 
+          icon="pi pi-shopping-cart" 
+          (onClick)="navigateToRoute('/orders')"
+          styleClass="p-button-outlined">
+        </p-button>
+        <p-button 
+          label="Designers" 
+          icon="pi pi-user-edit" 
+          (onClick)="navigateToRoute('/designers')"
+          styleClass="p-button-outlined">
+        </p-button>
+        <p-button 
+          *ngIf="user?.role === 'SuperAdmin'"
+          label="Permissions" 
+          icon="pi pi-key" 
+          (onClick)="navigateToRoute('/permissions')"
+          styleClass="p-button-outlined">
+        </p-button>
+        <p-button 
+          label="Files" 
+          icon="pi pi-file" 
+          (onClick)="navigateToRoute('/files')"
+          styleClass="p-button-outlined">
+        </p-button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading-container">
+    <p-progressSpinner 
+      strokeWidth="4" 
+      animationDuration="1s"
+      [style]="{width: '50px', height: '50px'}">
+    </p-progressSpinner>
+    <p class="loading-text">Loading dashboard data...</p>
+  </div>
+
+  <!-- Dashboard Content -->
+  <div *ngIf="!loading" class="dashboard-content">
+    <!-- Statistics Cards -->
+    <div class="stats-grid">
+      <div class="stat-card" *ngFor="let stat of stats" [class]="'stat-' + stat.color">
+        <div class="stat-icon-wrapper">
+          <div class="stat-icon" [class]="'bg-' + stat.color">
+            <i [class]="stat.icon"></i>
+          </div>
+        </div>
+        <div class="stat-content" [class.clickable]="stat.clickable" (click)="stat.clickable && navigateToRoute(stat.route)">
+          <h3 class="stat-value">
+            <span *ngIf="stat.isCurrency">$</span>{{ stat.isCurrency ? (stat.value | number:'1.2-2') : (stat.value | number) }}<span *ngIf="stat.suffix">{{ stat.suffix }}</span>
+          </h3>
+          <p class="stat-label">{{ stat.label }}</p>
+        </div>
+        <div class="stat-decoration"></div>
+      </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="charts-grid" *ngIf="dashboardData && (dashboardData.ordersByStatus.length > 0 || dashboardData.ordersByMonth.length > 0)">
+      <!-- Status Distribution Chart -->
+      <div class="chart-card" *ngIf="dashboardData && dashboardData.ordersByStatus.length > 0">
+        <p-card header="Orders by Status" styleClass="chart-card-content">
+          <div class="chart-container">
+            <p-chart 
+              type="doughnut" 
+              [data]="statusChartData" 
+              [options]="statusChartOptions"
+              [style]="{'height': '300px'}">
+            </p-chart>
+          </div>
+        </p-card>
+      </div>
+
+      <!-- Monthly Trend Chart -->
+      <div class="chart-card" *ngIf="dashboardData && dashboardData.ordersByMonth.length > 0">
+        <p-card header="Orders Trend (Last 6 Months)" styleClass="chart-card-content">
+          <div class="chart-container">
+            <p-chart 
+              type="line" 
+              [data]="monthlyChartData" 
+              [options]="monthlyChartOptions"
+              [style]="{'height': '300px'}">
+            </p-chart>
+          </div>
+        </p-card>
+      </div>
+    </div>
+
+    <!-- Recent Orders Section -->
+    <div class="recent-orders-section">
+      <p-card header="Recent Orders" styleClass="content-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Recent Orders</h3>
+              <p class="card-subtitle">Latest {{ (dashboardData.recentOrders.length || 0) }} orders</p>
+            </div>
+            <p-button 
+              label="View All" 
+              icon="pi pi-arrow-right" 
+              iconPos="right"
+              styleClass="p-button-text"
+              (onClick)="navigateToOrders()">
+            </p-button>
+          </div>
+        </ng-template>
+
+        <div *ngIf="!dashboardData || dashboardData.recentOrders.length === 0" class="empty-state">
+          <i class="pi pi-inbox empty-icon"></i>
+          <p class="empty-text">No orders found</p>
+          <p class="empty-subtext" *ngIf="user?.role === 'Client'">
+            Create your first order to get started!
+          </p>
+          <p-button 
+            *ngIf="user?.role === 'Client'"
+            label="Create Order" 
+            icon="pi pi-plus" 
+            (onClick)="navigateToOrders()"
+            styleClass="p-button-primary">
+          </p-button>
+        </div>
+
+        <p-table 
+          *ngIf="dashboardData && dashboardData.recentOrders.length > 0"
+          [value]="dashboardData.recentOrders" 
+          [paginator]="false"
+          [rows]="10"
+          styleClass="p-datatable-sm recent-orders-table"
+          [responsive]="true">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Due Date</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-order>
+            <tr class="order-row" (click)="navigateToOrder(order.id)">
+              <td>
+                <div class="order-title">
+                  <i class="pi pi-file-edit"></i>
+                  <span>{{ order.title }}</span>
+                </div>
+              </td>
+              <td>
+                <p-tag 
+                  [value]="order.status" 
+                  [severity]="getStatusSeverity(order.status)"
+                  [rounded]="true">
+                </p-tag>
+              </td>
+              <td>
+                <span class="date-text">{{ formatDate(order.createdAt) }}</span>
+              </td>
+              <td>
+                <span class="date-text" [class.overdue]="isOverdue(order.dueDate)">
+                  {{ formatDate(order.dueDate) }}
+                </span>
+              </td>
+              <td>
+                <p-button 
+                  icon="pi pi-eye" 
+                  styleClass="p-button-text p-button-rounded p-button-sm"
+                  (onClick)="navigateToOrder(order.id); $event.stopPropagation()"
+                  pTooltip="View Details"
+                  tooltipPosition="top">
+                </p-button>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </p-card>
+    </div>
+
+    <!-- Quick Actions Section (Role-based) -->
+    <div class="quick-actions-section" *ngIf="user?.role === 'SuperAdmin' || user?.role === 'Admin'">
+      <p-card header="Quick Actions" styleClass="content-card">
+        <div class="quick-actions-grid">
+          <div class="action-item" (click)="navigateToRoute('/users')">
+            <i class="pi pi-users action-icon"></i>
+            <div class="action-content">
+              <h4>Manage Users</h4>
+              <p>Create and manage user accounts</p>
+            </div>
+            <i class="pi pi-arrow-right action-arrow"></i>
+          </div>
+          <div class="action-item" (click)="navigateToRoute('/orders')">
+            <i class="pi pi-shopping-cart action-icon"></i>
+            <div class="action-content">
+              <h4>View All Orders</h4>
+              <p>Monitor and manage all orders</p>
+            </div>
+            <i class="pi pi-arrow-right action-arrow"></i>
+          </div>
+          <div class="action-item" (click)="navigateToRoute('/designers')">
+            <i class="pi pi-user-edit action-icon"></i>
+            <div class="action-content">
+              <h4>Designer Profiles</h4>
+              <p>Manage designer profiles and availability</p>
+            </div>
+            <i class="pi pi-arrow-right action-arrow"></i>
+          </div>
+          <div class="action-item" *ngIf="user?.role === 'SuperAdmin'" (click)="navigateToRoute('/permissions')">
+            <i class="pi pi-key action-icon"></i>
+            <div class="action-content">
+              <h4>Permissions</h4>
+              <p>Manage role permissions and access</p>
+            </div>
+            <i class="pi pi-arrow-right action-arrow"></i>
+          </div>
+        </div>
+      </p-card>
+    </div>
+  </div>
+</div>

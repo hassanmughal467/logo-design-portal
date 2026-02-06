@@ -1,0 +1,139 @@
+<div class="orders-page">
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">Orders Management</h1>
+      <p class="page-subtitle">View and manage all orders</p>
+    </div>
+    <div class="header-actions">
+      <p-button 
+        *ngIf="canCreateOrder()"
+        label="Create Order" 
+        icon="pi pi-plus" 
+        (onClick)="createOrder()"
+        styleClass="p-button-primary">
+      </p-button>
+    </div>
+  </div>
+
+  <p-card styleClass="orders-card">
+    <p-table 
+      [value]="orders" 
+      [loading]="loading"
+      [paginator]="true"
+      [rows]="rows"
+      [first]="first"
+      (onPage)="first = $event.first"
+      [globalFilterFields]="['title', 'status', 'priority']"
+      [rowsPerPageOptions]="[10, 25, 50]"
+      styleClass="p-datatable-striped"
+      [responsive]="true">
+      
+      <ng-template pTemplate="caption">
+        <div class="table-header">
+          <span class="p-input-icon-left">
+            <i class="pi pi-search"></i>
+            <input 
+              type="text" 
+              pInputText 
+              [(ngModel)]="globalFilter" 
+              placeholder="Search orders..." 
+              class="search-input" />
+          </span>
+          <p-dropdown 
+            [options]="statuses" 
+            [(ngModel)]="selectedStatus"
+            placeholder="Filter by Status"
+            [showClear]="true"
+            styleClass="status-filter">
+          </p-dropdown>
+        </div>
+      </ng-template>
+
+      <ng-template pTemplate="header">
+        <tr>
+          <th pSortableColumn="title">
+            Title <p-sortIcon field="title"></p-sortIcon>
+          </th>
+          <th pSortableColumn="status">
+            Status <p-sortIcon field="status"></p-sortIcon>
+          </th>
+          <th pSortableColumn="priority">
+            Priority <p-sortIcon field="priority"></p-sortIcon>
+          </th>
+          <th>Client</th>
+          <th>Designer</th>
+          <th pSortableColumn="createdAt">
+            Created <p-sortIcon field="createdAt"></p-sortIcon>
+          </th>
+          <th>Due Date</th>
+          <th>Actions</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-order>
+        <tr>
+          <td>
+            <div class="order-title-cell">
+              <i class="pi pi-file-edit"></i>
+              <span>{{ order.title }}</span>
+            </div>
+          </td>
+          <td>
+            <p-tag 
+              [value]="order.status" 
+              [severity]="getStatusSeverity(order.status)"
+              [rounded]="true">
+            </p-tag>
+          </td>
+          <td>
+            <p-tag 
+              [value]="order.priority" 
+              [severity]="getPrioritySeverity(order.priority)"
+              [rounded]="true">
+            </p-tag>
+          </td>
+          <td>
+            <span *ngIf="order.client">
+              {{ order.client.firstName }} {{ order.client.lastName }}
+            </span>
+            <span *ngIf="!order.client" class="text-muted">N/A</span>
+          </td>
+          <td>
+            <span *ngIf="order.designer">
+              {{ order.designer.firstName }} {{ order.designer.lastName }}
+            </span>
+            <span *ngIf="!order.designer" class="text-muted">Unassigned</span>
+          </td>
+          <td>{{ formatDate(order.createdAt) }}</td>
+          <td>
+            <span [class.overdue]="isOverdue(order.dueDate)">
+              {{ formatDate(order.dueDate) }}
+            </span>
+          </td>
+          <td>
+            <div class="action-buttons">
+              <p-button 
+                icon="pi pi-eye" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                (onClick)="viewOrder(order.id)"
+                pTooltip="View Details"
+                tooltipPosition="top">
+              </p-button>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="8" class="empty-message">
+            <div class="empty-state">
+              <i class="pi pi-shopping-cart empty-icon"></i>
+              <p>No orders found</p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-card>
+</div>

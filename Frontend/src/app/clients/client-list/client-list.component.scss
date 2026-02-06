@@ -1,0 +1,76 @@
+.clients-page {
+  padding: 0;
+
+  .page-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--surface-border);
+
+    .page-title {
+      margin: 0 0 0.5rem 0;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text-color);
+    }
+
+    .page-subtitle {
+      margin: 0;
+      color: var(--text-color-secondary);
+      font-size: 0.95rem;
+    }
+  }
+
+  .clients-card {
+    ::ng-deep .p-card-body {
+      padding: 0;
+    }
+  }
+
+  .table-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--surface-border);
+
+    .search-input {
+      width: 300px;
+    }
+  }
+
+  .client-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+
+    i {
+      color: var(--primary-color);
+    }
+  }
+
+  .currency-text {
+    font-weight: 600;
+    color: var(--success-color);
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .empty-message {
+    text-align: center;
+    padding: 3rem;
+
+    .empty-state {
+      .empty-icon {
+        font-size: 3rem;
+        color: var(--text-color-secondary);
+        opacity: 0.5;
+        margin-bottom: 1rem;
+      }
+
+      p {
+        color: var(--text-color-secondary);
+        margin: 0;
+      }
+    }
+  }
+}

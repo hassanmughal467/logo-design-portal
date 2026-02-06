@@ -88,9 +88,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins("http://localhost:4200", "https://localhost:4200")
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials(); // Allow credentials for cookies/auth
     });
 });
 
@@ -109,9 +110,14 @@ if (app.Environment.IsDevelopment())
 // Global Exception Handler
 app.UseMiddleware<ExceptionMiddleware>();
 
-app.UseHttpsRedirection();
-
+// CORS must be before HTTPS redirection to handle preflight requests
 app.UseCors("AllowAll");
+
+// Only redirect to HTTPS in production, not in development
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
