@@ -13,6 +13,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     public DbSet<User> Users { get; set; }
     public DbSet<Role> Roles { get; set; }
+    public DbSet<Permission> Permissions { get; set; }
+    public DbSet<RolePermission> RolePermissions { get; set; }
     public DbSet<ClientProfile> ClientProfiles { get; set; }
     public DbSet<DesignerProfile> DesignerProfiles { get; set; }
     public DbSet<LogoOrder> LogoOrders { get; set; }

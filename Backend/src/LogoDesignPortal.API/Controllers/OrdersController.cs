@@ -1,3 +1,4 @@
+using LogoDesignPortal.API.Attributes;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -83,8 +84,10 @@ public class OrdersController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize] // Must be authenticated
+    [RequirePermission("ViewAllOrders")] // Permission-based: SuperAdmin can grant to Admin
     [ProducesResponseType(typeof(List<OrderResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetAllOrders()
     {
         var userRole = User.FindFirstValue(ClaimTypes.Role);
@@ -93,9 +96,11 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPost("{id}/assign")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize] // Must be authenticated
+    [RequirePermission("AssignOrder")] // Permission-based: SuperAdmin can grant to Admin
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> AssignOrder(Guid id, [FromBody] AssignOrderRequestDto request)
     {
         try
