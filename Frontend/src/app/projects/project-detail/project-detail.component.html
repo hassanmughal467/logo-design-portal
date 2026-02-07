@@ -1,0 +1,259 @@
+<div class="project-detail-page">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-left">
+      <button 
+        pButton 
+        icon="pi pi-arrow-left" 
+        label="Back" 
+        (onClick)="goBack()"
+        styleClass="p-button-text">
+      </button>
+      <div class="header-content" *ngIf="project">
+        <h1 class="page-title">{{ project.title }}</h1>
+        <p class="page-subtitle">Project Details & Management</p>
+      </div>
+    </div>
+    <div class="header-actions" *ngIf="project">
+      <p-button 
+        label="Change Status" 
+        icon="pi pi-pencil"
+        (onClick)="openStatusDialog()"
+        styleClass="p-button-outlined">
+      </p-button>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading-container">
+    <p-progressSpinner></p-progressSpinner>
+    <p>Loading project details...</p>
+  </div>
+
+  <!-- Project Info Card -->
+  <div *ngIf="!loading && project" class="project-info-section">
+    <p-card styleClass="info-card">
+      <div class="project-info-grid">
+        <div class="info-item">
+          <label>Status</label>
+          <p-tag 
+            [value]="project.status" 
+            [severity]="getStatusSeverity(project.status)"
+            [rounded]="true">
+          </p-tag>
+        </div>
+        <div class="info-item">
+          <label>Revisions Left</label>
+          <p class="stat-value">{{ project.revisionsLeft }} / {{ project.maxRevisions }}</p>
+        </div>
+        <div class="info-item">
+          <label>Created</label>
+          <p>{{ formatDate(project.createdAt) }}</p>
+        </div>
+        <div class="info-item">
+          <label>Last Updated</label>
+          <p>{{ formatDate(project.updatedAt) }}</p>
+        </div>
+      </div>
+      <div class="description-section" *ngIf="project.description">
+        <label>Description</label>
+        <p>{{ project.description }}</p>
+      </div>
+    </p-card>
+  </div>
+
+  <!-- Tabs Section -->
+  <div *ngIf="!loading && project" class="tabs-section">
+    <p-card styleClass="tabs-card">
+      <p-tabView [(activeIndex)]="activeTab">
+        <!-- Files & Revisions Tab -->
+        <p-tabPanel header="Files & Revisions" leftIcon="pi pi-file">
+          <div class="tab-content">
+            <div class="tab-header">
+              <h3>Revisions & Files</h3>
+              <p class="subtitle">{{ revisions.length }} revisions</p>
+            </div>
+
+            <!-- Upload Section -->
+            <div class="upload-section">
+              <p-card styleClass="upload-card">
+                <h4>Upload New Revision</h4>
+                <div class="upload-form">
+                  <div class="form-group">
+                    <label>Files</label>
+                    <input 
+                      type="file" 
+                      multiple
+                      (change)="onFilesSelected($event)"
+                      accept=".jpg,.jpeg,.png,.pdf,.ai,.eps,.svg"
+                      class="file-input" />
+                    <small class="help-text">Accepted: JPG, PNG, PDF, AI, EPS, SVG (Max 10MB each)</small>
+                  </div>
+                  <div class="form-group">
+                    <label>Revision Notes</label>
+                    <textarea 
+                      pInputTextarea 
+                      [(ngModel)]="newRevisionNotes"
+                      [rows]="3"
+                      placeholder="Add notes about this revision..."
+                      class="full-width"></textarea>
+                  </div>
+                  <div class="form-actions">
+                    <p-button 
+                      label="Upload Files" 
+                      icon="pi pi-upload"
+                      (onClick)="uploadFiles()"
+                      [loading]="uploading"
+                      [disabled]="selectedFiles.length === 0"
+                      styleClass="p-button-primary">
+                    </p-button>
+                  </div>
+                </div>
+              </p-card>
+            </div>
+
+            <!-- Revisions List -->
+            <div *ngIf="revisionsLoading" class="loading-state">
+              <p-progressSpinner></p-progressSpinner>
+            </div>
+
+            <div *ngIf="!revisionsLoading" class="revisions-list">
+              <div class="revision-item" *ngFor="let revision of revisions; let i = index">
+                <div class="revision-header">
+                  <div class="revision-info">
+                    <h4>Revision {{ revision.version }}</h4>
+                    <span class="revision-date">{{ formatDate(revision.createdAt) }}</span>
+                  </div>
+                  <p-tag value="v{{ revision.version }}" severity="info" [rounded]="true"></p-tag>
+                </div>
+                <div class="revision-notes" *ngIf="revision.notes">
+                  <p>{{ revision.notes }}</p>
+                </div>
+                <div class="revision-files">
+                  <div class="file-item" *ngFor="let file of revision.files">
+                    <div class="file-icon">
+                      <i class="pi pi-file"></i>
+                    </div>
+                    <div class="file-info">
+                      <h5>{{ file.fileName || file.name }}</h5>
+                      <p>{{ formatDate(file.uploadedAt || file.createdAt) }}</p>
+                    </div>
+                    <p-button 
+                      icon="pi pi-download" 
+                      styleClass="p-button-text p-button-rounded"
+                      (onClick)="downloadFile(file.id)"
+                      pTooltip="Download">
+                    </p-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div *ngIf="!revisionsLoading && revisions.length === 0" class="empty-state">
+              <i class="pi pi-file empty-icon"></i>
+              <p>No revisions yet</p>
+              <p class="empty-subtext">Upload files to create the first revision</p>
+            </div>
+          </div>
+        </p-tabPanel>
+
+        <!-- Comments Tab -->
+        <p-tabPanel header="Comments" leftIcon="pi pi-comments">
+          <div class="tab-content">
+            <div class="tab-header">
+              <h3>Comments & Feedback</h3>
+              <p class="subtitle">{{ comments.length }} comments</p>
+            </div>
+
+            <!-- Add Comment Section -->
+            <div class="comment-form-section">
+              <p-card styleClass="comment-form-card">
+                <div class="form-group">
+                  <label>Add Comment</label>
+                  <textarea 
+                    pInputTextarea 
+                    [(ngModel)]="newComment"
+                    [rows]="4"
+                    placeholder="Write your comment or feedback..."
+                    class="full-width"></textarea>
+                </div>
+                <div class="form-actions">
+                  <p-button 
+                    label="Post Comment" 
+                    icon="pi pi-send"
+                    (onClick)="addComment()"
+                    [disabled]="!newComment.trim()"
+                    styleClass="p-button-primary">
+                  </p-button>
+                </div>
+              </p-card>
+            </div>
+
+            <!-- Comments List -->
+            <div *ngIf="commentsLoading" class="loading-state">
+              <p-progressSpinner></p-progressSpinner>
+            </div>
+
+            <div *ngIf="!commentsLoading" class="comments-list">
+              <div class="comment-item" *ngFor="let comment of comments">
+                <div class="comment-header">
+                  <div class="comment-author">
+                    <i class="pi pi-user"></i>
+                    <div>
+                      <h5>{{ comment.author }}</h5>
+                      <span class="author-role">{{ comment.authorRole }}</span>
+                    </div>
+                  </div>
+                  <span class="comment-date">{{ formatDate(comment.createdAt) }}</span>
+                </div>
+                <div class="comment-body">
+                  <p>{{ comment.content }}</p>
+                </div>
+              </div>
+            </div>
+
+            <div *ngIf="!commentsLoading && comments.length === 0" class="empty-state">
+              <i class="pi pi-comments empty-icon"></i>
+              <p>No comments yet</p>
+              <p class="empty-subtext">Start the conversation by adding a comment</p>
+            </div>
+          </div>
+        </p-tabPanel>
+      </p-tabView>
+    </p-card>
+  </div>
+
+  <!-- Change Status Dialog -->
+  <p-dialog 
+    [(visible)]="showStatusDialog" 
+    [modal]="true" 
+    [style]="{width: '450px'}"
+    header="Change Project Status"
+    [closable]="true">
+    <div class="dialog-content">
+      <div class="form-group">
+        <label>New Status</label>
+        <p-dropdown 
+          [options]="['Pending', 'InProgress', 'Review', 'Completed', 'Cancelled']"
+          [(ngModel)]="newStatus"
+          placeholder="Select status"
+          class="full-width">
+        </p-dropdown>
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button 
+        label="Cancel" 
+        icon="pi pi-times"
+        (onClick)="showStatusDialog = false"
+        styleClass="p-button-text">
+      </p-button>
+      <p-button 
+        label="Update Status" 
+        icon="pi pi-check"
+        (onClick)="changeStatus()"
+        styleClass="p-button-primary">
+      </p-button>
+    </ng-template>
+  </p-dialog>
+</div>

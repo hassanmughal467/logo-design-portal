@@ -32,6 +32,22 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   statuses = ['Paid', 'Unpaid', 'Overdue'];
 
+  // Generate invoice dialog
+  showGenerateDialog = false;
+  availableOrders: any[] = [];
+  selectedOrderId: string | null = null;
+
+  // Statistics
+  invoiceStats = {
+    total: 0,
+    paid: 0,
+    unpaid: 0,
+    overdue: 0,
+    totalAmount: 0,
+    paidAmount: 0,
+    pendingAmount: 0
+  };
+
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -56,12 +72,14 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (invoices) => {
           this.invoices = invoices;
+          this.calculateStats(invoices);
           this.loading = false;
         },
         error: (error) => {
           console.error('Error loading invoices:', error);
           // Create mock invoices from orders for demo
           this.createMockInvoices();
+          this.calculateStats(this.invoices);
           this.loading = false;
         }
       });
@@ -75,6 +93,60 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   downloadInvoice(invoiceId: string): void {
     // Download invoice PDF
     window.open(`http://localhost:5000/api/invoices/${invoiceId}/download`, '_blank');
+  }
+
+  openGenerateDialog(): void {
+    this.loadAvailableOrders();
+    this.selectedOrderId = null;
+    this.showGenerateDialog = true;
+  }
+
+  loadAvailableOrders(): void {
+    this.apiService.get<any[]>('orders')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (orders) => {
+          // Filter orders that don't have invoices yet
+          this.availableOrders = orders
+            .filter(o => o.status === 'Completed')
+            .map(o => ({ label: `${o.title} - $${o.price}`, value: o.id }));
+        },
+        error: () => {
+          this.availableOrders = [];
+        }
+      });
+  }
+
+  generateInvoice(): void {
+    if (!this.selectedOrderId) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Please select an order'
+      });
+      return;
+    }
+
+    this.apiService.post('invoices', { orderId: this.selectedOrderId })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Invoice generated successfully'
+          });
+          this.showGenerateDialog = false;
+          this.loadInvoices();
+        },
+        error: () => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to generate invoice'
+          });
+        }
+      });
   }
 
   sendInvoice(invoiceId: string): void {
@@ -126,5 +198,17 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   isOverdue(dueDate: Date | string | undefined): boolean {
     if (!dueDate) return false;
     return new Date(dueDate) < new Date() && new Date(dueDate).getTime() !== 0;
+  }
+
+  private calculateStats(invoices: Invoice[]): void {
+    this.invoiceStats = {
+      total: invoices.length,
+      paid: invoices.filter(i => i.status === 'Paid').length,
+      unpaid: invoices.filter(i => i.status === 'Unpaid').length,
+      overdue: invoices.filter(i => i.status === 'Overdue').length,
+      totalAmount: invoices.reduce((sum, i) => sum + i.amount, 0),
+      paidAmount: invoices.filter(i => i.status === 'Paid').reduce((sum, i) => sum + i.amount, 0),
+      pendingAmount: invoices.filter(i => i.status !== 'Paid').reduce((sum, i) => sum + i.amount, 0)
+    };
   }
 }

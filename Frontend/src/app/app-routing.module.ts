@@ -96,7 +96,14 @@ const routes: Routes = [
     loadChildren: () => import('./reviews/reviews.module').then(m => m.ReviewsModule),
     canActivate: [AuthGuard]
   },
-  
+
+  // Settings (lazy loaded)
+  {
+    path: 'settings',
+    loadChildren: () => import('./settings/settings.module').then(m => m.SettingsModule),
+    canActivate: [AuthGuard]
+  },
+
   // Wildcard route
   { path: '**', redirectTo: '/dashboard' }
 ];

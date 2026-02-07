@@ -342,6 +342,17 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
         this.sidebarVisible = false;
       }
     });
+
+    // Add Settings for all authenticated users
+    this.menuItems.push({
+      label: 'Settings',
+      icon: 'pi pi-cog',
+      routerLink: '/settings',
+      command: () => {
+        this.router.navigate(['/settings']);
+        this.sidebarVisible = false;
+      }
+    });
     
     console.log('Menu items built. Total:', this.menuItems.length, 'Items:', this.menuItems.map(m => m.label));
   }

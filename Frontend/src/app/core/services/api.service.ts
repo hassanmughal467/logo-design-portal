@@ -19,6 +19,7 @@ export class ApiService {
   }
 
   post<T>(endpoint: string, body: any): Observable<T> {
+    // FormData will be handled automatically by HttpClient (browser sets Content-Type with boundary)
     return this.http.post<T>(`${this.baseUrl}/${endpoint}`, body);
   }
 

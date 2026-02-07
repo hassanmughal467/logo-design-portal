@@ -8,8 +8,62 @@
       <p-button 
         label="Generate Invoice" 
         icon="pi pi-plus" 
+        (onClick)="openGenerateDialog()"
         styleClass="p-button-primary">
       </p-button>
+    </div>
+  </div>
+
+  <!-- Invoice Statistics Cards -->
+  <div class="stats-grid">
+    <div class="stat-card stat-primary">
+      <div class="stat-icon-wrapper">
+        <div class="stat-icon bg-primary">
+          <i class="pi pi-file-pdf"></i>
+        </div>
+      </div>
+      <div class="stat-content">
+        <h3 class="stat-value">{{ invoiceStats.total }}</h3>
+        <p class="stat-label">Total Invoices</p>
+      </div>
+    </div>
+
+    <div class="stat-card stat-success">
+      <div class="stat-icon-wrapper">
+        <div class="stat-icon bg-success">
+          <i class="pi pi-check-circle"></i>
+        </div>
+      </div>
+      <div class="stat-content">
+        <h3 class="stat-value">{{ invoiceStats.paid }}</h3>
+        <p class="stat-label">Paid</p>
+        <p class="stat-amount">{{ formatCurrency(invoiceStats.paidAmount) }}</p>
+      </div>
+    </div>
+
+    <div class="stat-card stat-warning">
+      <div class="stat-icon-wrapper">
+        <div class="stat-icon bg-warning">
+          <i class="pi pi-clock"></i>
+        </div>
+      </div>
+      <div class="stat-content">
+        <h3 class="stat-value">{{ invoiceStats.unpaid }}</h3>
+        <p class="stat-label">Unpaid</p>
+        <p class="stat-amount">{{ formatCurrency(invoiceStats.pendingAmount) }}</p>
+      </div>
+    </div>
+
+    <div class="stat-card stat-danger">
+      <div class="stat-icon-wrapper">
+        <div class="stat-icon bg-danger">
+          <i class="pi pi-exclamation-triangle"></i>
+        </div>
+      </div>
+      <div class="stat-content">
+        <h3 class="stat-value">{{ invoiceStats.overdue }}</h3>
+        <p class="stat-label">Overdue</p>
+      </div>
     </div>
   </div>
 
@@ -123,4 +177,42 @@
       </ng-template>
     </p-table>
   </p-card>
+
+  <!-- Generate Invoice Dialog -->
+  <p-dialog 
+    [(visible)]="showGenerateDialog" 
+    [modal]="true" 
+    [style]="{width: '450px'}"
+    header="Generate Invoice"
+    [closable]="true">
+    <div class="dialog-content">
+      <div class="form-group">
+        <label>Select Order</label>
+        <p-dropdown 
+          [options]="availableOrders"
+          [(ngModel)]="selectedOrderId"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select a completed order"
+          [filter]="true"
+          class="full-width">
+        </p-dropdown>
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button 
+        label="Cancel" 
+        icon="pi pi-times"
+        (onClick)="showGenerateDialog = false"
+        styleClass="p-button-text">
+      </p-button>
+      <p-button 
+        label="Generate Invoice" 
+        icon="pi pi-check"
+        (onClick)="generateInvoice()"
+        [disabled]="!selectedOrderId"
+        styleClass="p-button-primary">
+      </p-button>
+    </ng-template>
+  </p-dialog>
 </div>

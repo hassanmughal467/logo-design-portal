@@ -11,6 +11,7 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { InputTextModule } from 'primeng/inputtext';
 import { DropdownModule } from 'primeng/dropdown';
+import { DialogModule } from 'primeng/dialog';
 
 @NgModule({
   declarations: [OrderListComponent],
@@ -23,7 +24,8 @@ import { DropdownModule } from 'primeng/dropdown';
     TagModule,
     TooltipModule,
     InputTextModule,
-    DropdownModule
+    DropdownModule,
+    DialogModule
   ]
 })
 export class OrderListModule { }

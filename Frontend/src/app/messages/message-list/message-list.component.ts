@@ -7,11 +7,14 @@ import { takeUntil } from 'rxjs/operators';
 export interface Message {
   id: string;
   orderId?: string;
-  clientId: string;
-  clientName: string;
-  subject: string;
-  message: string;
+  senderId: string;
+  senderName: string;
+  senderRole?: string;
+  recipientId?: string;
+  recipientName?: string;
+  content: string;
   isRead: boolean;
+  readAt?: Date;
   createdAt: Date;
 }
 
@@ -51,8 +54,21 @@ export class MessageListComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (messages) => {
-          this.messages = messages;
-          this.unreadCount = messages.filter(m => !m.isRead).length;
+          // Map backend response to frontend interface
+          this.messages = messages.map((m: any) => ({
+            id: m.id,
+            orderId: m.orderId,
+            senderId: m.senderId,
+            senderName: m.senderName,
+            senderRole: m.senderRole,
+            recipientId: m.recipientId,
+            recipientName: m.recipientName,
+            content: m.content,
+            isRead: m.isRead,
+            readAt: m.readAt,
+            createdAt: m.createdAt
+          }));
+          this.unreadCount = this.messages.filter(m => !m.isRead).length;
           this.loading = false;
         },
         error: () => {

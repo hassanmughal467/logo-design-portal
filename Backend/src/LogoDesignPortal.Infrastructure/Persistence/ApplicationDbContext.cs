@@ -21,6 +21,9 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<LogoFile> LogoFiles { get; set; }
     public DbSet<OrderStatusHistory> OrderStatusHistories { get; set; }
     public DbSet<Invoice> Invoices { get; set; }
+    public DbSet<Message> Messages { get; set; }
+    public DbSet<Review> Reviews { get; set; }
+    public DbSet<Settings> Settings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

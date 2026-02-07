@@ -1,0 +1,279 @@
+<div class="client-detail-page">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-left">
+      <button 
+        pButton 
+        icon="pi pi-arrow-left" 
+        label="Back" 
+        (onClick)="goBack()"
+        styleClass="p-button-text">
+      </button>
+      <div class="header-content" *ngIf="client">
+        <h1 class="page-title">{{ client.firstName }} {{ client.lastName }}</h1>
+        <p class="page-subtitle">{{ client.email }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading-container">
+    <p-progressSpinner></p-progressSpinner>
+    <p>Loading client details...</p>
+  </div>
+
+  <!-- Client Info Card -->
+  <div *ngIf="!loading && client" class="client-info-section">
+    <p-card styleClass="info-card">
+      <div class="client-info-grid">
+        <div class="info-item">
+          <label>Company</label>
+          <p>{{ client.companyName || 'N/A' }}</p>
+        </div>
+        <div class="info-item">
+          <label>Phone</label>
+          <p>{{ client.phoneNumber || 'N/A' }}</p>
+        </div>
+        <div class="info-item">
+          <label>Total Orders</label>
+          <p class="stat-value">{{ client.totalOrders }}</p>
+        </div>
+        <div class="info-item">
+          <label>Total Spent</label>
+          <p class="stat-value currency">{{ formatCurrency(client.totalSpent) }}</p>
+        </div>
+        <div class="info-item">
+          <label>Member Since</label>
+          <p>{{ formatDate(client.createdAt) }}</p>
+        </div>
+        <div class="info-item">
+          <label>Last Order</label>
+          <p>{{ formatDate(client.lastOrderDate) }}</p>
+        </div>
+        <div class="info-item">
+          <label>Status</label>
+          <p-tag 
+            [value]="client.status || 'Active'"
+            severity="success"
+            [rounded]="true">
+          </p-tag>
+        </div>
+      </div>
+    </p-card>
+  </div>
+
+  <!-- Tabs Section -->
+  <div *ngIf="!loading && client" class="tabs-section">
+    <p-card styleClass="tabs-card">
+      <p-tabView [(activeIndex)]="activeTab">
+        <!-- Order History Tab -->
+        <p-tabPanel header="Order History" leftIcon="pi pi-shopping-cart">
+          <div class="tab-content">
+            <div class="tab-header">
+              <h3>Order History</h3>
+              <p class="subtitle">{{ orders.length }} total orders</p>
+            </div>
+
+            <div *ngIf="ordersLoading" class="loading-state">
+              <p-progressSpinner></p-progressSpinner>
+            </div>
+
+            <p-table 
+              *ngIf="!ordersLoading"
+              [value]="orders" 
+              [paginator]="true"
+              [rows]="10"
+              styleClass="p-datatable-striped"
+              [responsive]="true">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>Order ID</th>
+                  <th>Title</th>
+                  <th>Status</th>
+                  <th>Amount</th>
+                  <th>Created</th>
+                  <th>Due Date</th>
+                  <th>Actions</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-order>
+                <tr>
+                  <td>#{{ order.id.substring(0, 8) }}</td>
+                  <td>{{ order.title }}</td>
+                  <td>
+                    <p-tag 
+                      [value]="order.status" 
+                      [severity]="getStatusSeverity(order.status)"
+                      [rounded]="true">
+                    </p-tag>
+                  </td>
+                  <td>{{ formatCurrency(getOrderPrice(order)) }}</td>
+                  <td>{{ formatDate(order.createdAt) }}</td>
+                  <td>{{ formatDate(order.dueDate) }}</td>
+                  <td>
+                    <p-button 
+                      icon="pi pi-eye" 
+                      styleClass="p-button-text p-button-rounded p-button-sm"
+                      (onClick)="viewOrder(order.id)"
+                      pTooltip="View Order">
+                    </p-button>
+                  </td>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="emptymessage">
+                <tr>
+                  <td colspan="7" class="empty-message">
+                    <div class="empty-state">
+                      <i class="pi pi-shopping-cart empty-icon"></i>
+                      <p>No orders found</p>
+                    </div>
+                  </td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </div>
+        </p-tabPanel>
+
+        <!-- Invoices Tab -->
+        <p-tabPanel header="Invoices" leftIcon="pi pi-file-pdf">
+          <div class="tab-content">
+            <div class="tab-header">
+              <h3>Invoices</h3>
+              <p class="subtitle">{{ invoices.length }} total invoices</p>
+            </div>
+
+            <div *ngIf="invoicesLoading" class="loading-state">
+              <p-progressSpinner></p-progressSpinner>
+            </div>
+
+            <p-table 
+              *ngIf="!invoicesLoading"
+              [value]="invoices" 
+              [paginator]="true"
+              [rows]="10"
+              styleClass="p-datatable-striped"
+              [responsive]="true">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>Invoice #</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Due Date</th>
+                  <th>Paid Date</th>
+                  <th>Actions</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-invoice>
+                <tr>
+                  <td>{{ invoice.invoiceNumber || invoice.id }}</td>
+                  <td>{{ formatCurrency(invoice.amount) }}</td>
+                  <td>
+                    <p-tag 
+                      [value]="invoice.status" 
+                      [severity]="getStatusSeverity(invoice.status)"
+                      [rounded]="true">
+                    </p-tag>
+                  </td>
+                  <td>{{ formatDate(invoice.dueDate) }}</td>
+                  <td>{{ formatDate(invoice.paidDate) }}</td>
+                  <td>
+                    <p-button 
+                      icon="pi pi-eye" 
+                      styleClass="p-button-text p-button-rounded p-button-sm"
+                      (onClick)="viewInvoice(invoice.id)"
+                      pTooltip="View Invoice">
+                    </p-button>
+                  </td>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="emptymessage">
+                <tr>
+                  <td colspan="6" class="empty-message">
+                    <div class="empty-state">
+                      <i class="pi pi-file-pdf empty-icon"></i>
+                      <p>No invoices found</p>
+                    </div>
+                  </td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </div>
+        </p-tabPanel>
+
+        <!-- Files Tab -->
+        <p-tabPanel header="Files" leftIcon="pi pi-file">
+          <div class="tab-content">
+            <div class="tab-header">
+              <h3>Files & Deliverables</h3>
+              <p class="subtitle">{{ files.length }} total files</p>
+            </div>
+
+            <div *ngIf="filesLoading" class="loading-state">
+              <p-progressSpinner></p-progressSpinner>
+            </div>
+
+            <div *ngIf="!filesLoading" class="files-grid">
+              <div class="file-item" *ngFor="let file of files">
+                <div class="file-icon">
+                  <i class="pi pi-file"></i>
+                </div>
+                <div class="file-info">
+                  <h4>{{ file.fileName || file.name }}</h4>
+                  <p>{{ formatDate(file.uploadedAt || file.createdAt) }}</p>
+                </div>
+                <div class="file-actions">
+                  <p-button 
+                    icon="pi pi-download" 
+                    styleClass="p-button-text p-button-rounded"
+                    (onClick)="downloadFile(file.id)"
+                    pTooltip="Download">
+                  </p-button>
+                </div>
+              </div>
+            </div>
+
+            <div *ngIf="!filesLoading && files.length === 0" class="empty-state">
+              <i class="pi pi-file empty-icon"></i>
+              <p>No files found</p>
+            </div>
+          </div>
+        </p-tabPanel>
+
+        <!-- Messages Tab -->
+        <p-tabPanel header="Messages" leftIcon="pi pi-inbox">
+          <div class="tab-content">
+            <div class="tab-header">
+              <h3>Messages</h3>
+              <p class="subtitle">{{ messages.length }} total messages</p>
+            </div>
+
+            <div *ngIf="messagesLoading" class="loading-state">
+              <p-progressSpinner></p-progressSpinner>
+            </div>
+
+            <div *ngIf="!messagesLoading" class="messages-list">
+              <div class="message-item" *ngFor="let message of messages">
+                <div class="message-header">
+                  <div class="message-sender">
+                    <i class="pi pi-user"></i>
+                    <span>{{ message.senderName || 'User' }}</span>
+                    <span *ngIf="message.recipientName" class="text-muted"> → {{ message.recipientName }}</span>
+                  </div>
+                  <span class="message-date">{{ formatDate(message.createdAt) }}</span>
+                </div>
+                <div class="message-body">
+                  <p>{{ message.content }}</p>
+                </div>
+              </div>
+            </div>
+
+            <div *ngIf="!messagesLoading && messages.length === 0" class="empty-state">
+              <i class="pi pi-inbox empty-icon"></i>
+              <p>No messages found</p>
+            </div>
+          </div>
+        </p-tabPanel>
+      </p-tabView>
+    </p-card>
+  </div>
+</div>

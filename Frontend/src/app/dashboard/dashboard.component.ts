@@ -15,7 +15,7 @@ import { takeUntil } from 'rxjs/operators';
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   user: User | null = null;
-  dashboardData: DashboardData = {
+    dashboardData: DashboardData = {
     stats: {
       totalOrders: 0,
       pendingOrders: 0,
@@ -28,7 +28,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     },
     recentOrders: [],
     ordersByStatus: [],
-    ordersByMonth: []
+    ordersByMonth: [],
+    revenueByPackage: []
   };
   loading = true;
   private destroy$ = new Subject<void>();
@@ -38,6 +39,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   statusChartOptions: any;
   monthlyChartData: any;
   monthlyChartOptions: any;
+  revenueChartData: any;
+  revenueChartOptions: any;
 
   // Table columns
   recentOrdersColumns = [
@@ -102,7 +105,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
             },
             recentOrders: [],
             ordersByStatus: [],
-            ordersByMonth: []
+            ordersByMonth: [],
+            revenueByPackage: []
           };
           this.updateStats(this.dashboardData);
           this.loading = false;
@@ -292,6 +296,80 @@ export class DashboardComponent implements OnInit, OnDestroy {
           beginAtZero: true,
           ticks: {
             stepSize: 1
+          },
+          grid: {
+            color: '#e2e8f0'
+          }
+        },
+        x: {
+          grid: {
+            display: false
+          }
+        }
+      }
+    };
+
+    // Revenue by Package Chart (Bar Chart) - only if we have data
+    if (data.revenueByPackage && data.revenueByPackage.length > 0) {
+      const packageLabels = data.revenueByPackage.map(p => p.package);
+      const revenueValues = data.revenueByPackage.map(p => p.revenue);
+
+      this.revenueChartData = {
+        labels: packageLabels,
+        datasets: [{
+          label: 'Revenue',
+          data: revenueValues,
+          backgroundColor: [
+            '#6366f1',
+            '#8b5cf6',
+            '#10b981',
+            '#f59e0b',
+            '#ef4444',
+            '#06b6d4'
+          ],
+          borderColor: [
+            '#4f46e5',
+            '#7c3aed',
+            '#059669',
+            '#d97706',
+            '#dc2626',
+            '#0891b2'
+          ],
+          borderWidth: 2
+        }]
+      };
+    } else {
+      this.revenueChartData = null;
+    }
+
+    this.revenueChartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: '#ffffff',
+          titleColor: '#0f172a',
+          bodyColor: '#64748b',
+          borderColor: '#e2e8f0',
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: (context: any) => {
+              return `Revenue: $${context.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: (value: any) => {
+              return '$' + value.toLocaleString('en-US');
+            }
           },
           grid: {
             color: '#e2e8f0'

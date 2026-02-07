@@ -9,10 +9,9 @@ export interface Review {
   orderId: string;
   clientId: string;
   clientName: string;
-  designerId?: string;
-  designerName?: string;
   rating: number;
-  comment: string;
+  comment?: string;
+  isPublished: boolean;
   createdAt: Date;
 }
 
@@ -51,7 +50,17 @@ export class ReviewListComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (reviews) => {
-          this.reviews = reviews;
+          // Map backend response to frontend interface
+          this.reviews = reviews.map((r: any) => ({
+            id: r.id,
+            orderId: r.orderId,
+            clientId: r.clientId,
+            clientName: r.clientName,
+            rating: r.rating,
+            comment: r.comment,
+            isPublished: r.isPublished,
+            createdAt: r.createdAt
+          }));
           this.loading = false;
         },
         error: () => {

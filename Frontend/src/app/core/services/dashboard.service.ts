@@ -21,6 +21,7 @@ export interface DashboardData {
   recentOrders: Order[];
   ordersByStatus: { status: string; count: number }[];
   ordersByMonth: { month: string; count: number }[];
+  revenueByPackage: { package: string; revenue: number }[];
 }
 
 @Injectable({
@@ -161,11 +162,26 @@ export class DashboardService {
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6); // Last 6 months
 
+    // Revenue by package (from completed orders)
+    const packageRevenue = new Map<string, number>();
+    orders
+      .filter(o => o.status === OrderStatus.Completed)
+      .forEach(order => {
+        const packageName = (order as any).packageType || (order as any).package || 'Standard';
+        const price = (order as any).price || 0;
+        const current = packageRevenue.get(packageName) || 0;
+        packageRevenue.set(packageName, current + price);
+      });
+    const revenueByPackage = Array.from(packageRevenue.entries())
+      .map(([packageName, revenue]) => ({ package: packageName, revenue }))
+      .sort((a, b) => b.revenue - a.revenue);
+
     return {
       stats,
       recentOrders,
       ordersByStatus,
-      ordersByMonth
+      ordersByMonth,
+      revenueByPackage
     };
   }
 
@@ -183,7 +199,8 @@ export class DashboardService {
       },
       recentOrders: [],
       ordersByStatus: [],
-      ordersByMonth: []
+      ordersByMonth: [],
+      revenueByPackage: []
     };
   }
 }

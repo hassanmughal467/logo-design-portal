@@ -110,6 +110,20 @@
           </div>
         </p-card>
       </div>
+
+      <!-- Revenue by Package Chart -->
+      <div class="chart-card" *ngIf="dashboardData && dashboardData.revenueByPackage.length > 0 && (user?.role === 'SuperAdmin' || user?.role === 'Admin')">
+        <p-card header="Revenue by Package" styleClass="chart-card-content">
+          <div class="chart-container">
+            <p-chart 
+              type="bar" 
+              [data]="revenueChartData" 
+              [options]="revenueChartOptions"
+              [style]="{'height': '300px'}">
+            </p-chart>
+          </div>
+        </p-card>
+      </div>
     </div>
 
     <!-- Recent Orders Section -->

@@ -119,6 +119,36 @@
                 pTooltip="View Details"
                 tooltipPosition="top">
               </p-button>
+              <p-button 
+                *ngIf="canAssignDesigner()"
+                icon="pi pi-user-plus" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                (onClick)="openAssignDialog(order)"
+                pTooltip="Assign Designer"
+                tooltipPosition="top">
+              </p-button>
+              <p-button 
+                icon="pi pi-upload" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                (onClick)="openUploadDialog(order)"
+                pTooltip="Upload Files"
+                tooltipPosition="top">
+              </p-button>
+              <p-button 
+                icon="pi pi-pencil" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                (onClick)="openStatusDialog(order)"
+                pTooltip="Change Status"
+                tooltipPosition="top">
+              </p-button>
+              <p-button 
+                *ngIf="canGenerateInvoice()"
+                icon="pi pi-file-pdf" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                (onClick)="generateInvoice(order)"
+                pTooltip="Generate Invoice"
+                tooltipPosition="top">
+              </p-button>
             </div>
           </td>
         </tr>
@@ -136,4 +166,103 @@
       </ng-template>
     </p-table>
   </p-card>
+
+  <!-- Assign Designer Dialog -->
+  <p-dialog 
+    [(visible)]="showAssignDialog" 
+    [modal]="true" 
+    [style]="{width: '450px'}"
+    header="Assign Designer"
+    [closable]="true">
+    <div class="dialog-content">
+      <div class="form-group">
+        <label>Select Designer</label>
+        <p-dropdown 
+          [options]="availableDesigners"
+          [(ngModel)]="selectedDesignerId"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select a designer"
+          [filter]="true"
+          class="full-width">
+        </p-dropdown>
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button 
+        label="Cancel" 
+        icon="pi pi-times"
+        (onClick)="showAssignDialog = false"
+        styleClass="p-button-text">
+      </p-button>
+      <p-button 
+        label="Assign" 
+        icon="pi pi-check"
+        (onClick)="assignDesigner()"
+        styleClass="p-button-primary">
+      </p-button>
+    </ng-template>
+  </p-dialog>
+
+  <!-- Change Status Dialog -->
+  <p-dialog 
+    [(visible)]="showStatusDialog" 
+    [modal]="true" 
+    [style]="{width: '450px'}"
+    header="Change Order Status"
+    [closable]="true">
+    <div class="dialog-content">
+      <div class="form-group">
+        <label>New Status</label>
+        <p-dropdown 
+          [options]="statuses"
+          [(ngModel)]="newStatus"
+          placeholder="Select status"
+          class="full-width">
+        </p-dropdown>
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button 
+        label="Cancel" 
+        icon="pi pi-times"
+        (onClick)="showStatusDialog = false"
+        styleClass="p-button-text">
+      </p-button>
+      <p-button 
+        label="Update Status" 
+        icon="pi pi-check"
+        (onClick)="changeStatus()"
+        styleClass="p-button-primary">
+      </p-button>
+    </ng-template>
+  </p-dialog>
+
+  <!-- Upload File Dialog -->
+  <p-dialog 
+    [(visible)]="showUploadDialog" 
+    [modal]="true" 
+    [style]="{width: '450px'}"
+    header="Upload File"
+    [closable]="true">
+    <div class="dialog-content">
+      <div class="form-group">
+        <label>Select File</label>
+        <input 
+          type="file" 
+          (change)="uploadFile($event)"
+          class="file-input"
+          accept=".jpg,.jpeg,.png,.pdf,.ai,.eps,.svg" />
+        <small class="help-text">Accepted formats: JPG, PNG, PDF, AI, EPS, SVG (Max 10MB)</small>
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button 
+        label="Close" 
+        icon="pi pi-times"
+        (onClick)="showUploadDialog = false"
+        styleClass="p-button-text">
+      </p-button>
+    </ng-template>
+  </p-dialog>
 </div>

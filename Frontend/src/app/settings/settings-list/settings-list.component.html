@@ -1,0 +1,490 @@
+<div class="settings-page">
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">
+        <i class="pi pi-cog"></i>
+        Settings
+      </h1>
+      <p class="page-subtitle">Manage your business settings and preferences</p>
+    </div>
+  </div>
+
+  <p-card styleClass="settings-card">
+    <p-tabView [(activeIndex)]="activeTab">
+      <!-- Business Info Tab -->
+      <p-tabPanel header="Business Info" leftIcon="pi pi-building">
+        <div class="settings-section">
+          <h3 class="section-title">Business Information</h3>
+          <p class="section-description">Configure your business details that will appear on invoices and communications.</p>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="businessName">Business Name *</label>
+              <input 
+                id="businessName"
+                type="text" 
+                pInputText 
+                [(ngModel)]="businessSettings.businessName"
+                placeholder="Enter business name"
+                class="full-width" />
+            </div>
+
+            <div class="form-group">
+              <label for="businessEmail">Business Email *</label>
+              <input 
+                id="businessEmail"
+                type="email" 
+                pInputText 
+                [(ngModel)]="businessSettings.businessEmail"
+                placeholder="business@example.com"
+                class="full-width" />
+            </div>
+
+            <div class="form-group">
+              <label for="businessPhone">Business Phone *</label>
+              <input 
+                id="businessPhone"
+                type="text" 
+                pInputText 
+                [(ngModel)]="businessSettings.businessPhone"
+                placeholder="+1 (555) 123-4567"
+                class="full-width" />
+            </div>
+
+            <div class="form-group">
+              <label for="website">Website</label>
+              <input 
+                id="website"
+                type="url" 
+                pInputText 
+                [(ngModel)]="businessSettings.website"
+                placeholder="https://www.example.com"
+                class="full-width" />
+            </div>
+
+            <div class="form-group full-width">
+              <label for="businessAddress">Business Address *</label>
+              <textarea 
+                id="businessAddress"
+                pInputTextarea 
+                [(ngModel)]="businessSettings.businessAddress"
+                [rows]="3"
+                placeholder="Enter full business address"
+                class="full-width"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="taxId">Tax ID / VAT Number</label>
+              <input 
+                id="taxId"
+                type="text" 
+                pInputText 
+                [(ngModel)]="businessSettings.taxId"
+                placeholder="Enter tax ID"
+                class="full-width" />
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <p-button 
+              label="Save Business Info" 
+              icon="pi pi-save"
+              (onClick)="saveBusinessSettings()"
+              [loading]="saving"
+              styleClass="p-button-primary">
+            </p-button>
+          </div>
+        </div>
+      </p-tabPanel>
+
+      <!-- Brand Settings Tab -->
+      <p-tabPanel header="Brand & Colors" leftIcon="pi pi-palette">
+        <div class="settings-section">
+          <h3 class="section-title">Brand Identity</h3>
+          <p class="section-description">Customize your brand logo and color scheme.</p>
+
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label>Business Logo</label>
+              <div class="logo-upload-section">
+                <div class="logo-preview" *ngIf="logoPreview">
+                  <img [src]="logoPreview" alt="Logo Preview" />
+                  <button 
+                    pButton 
+                    icon="pi pi-times" 
+                    class="p-button-rounded p-button-danger p-button-sm remove-logo-btn"
+                    (click)="logoPreview = null; logoFile = null"
+                    pTooltip="Remove logo">
+                  </button>
+                </div>
+                <div class="logo-upload" *ngIf="!logoPreview">
+                  <i class="pi pi-image"></i>
+                  <p>No logo uploaded</p>
+                </div>
+                <div class="upload-controls">
+                  <input 
+                    type="file" 
+                    id="logoFile" 
+                    accept="image/*"
+                    (change)="onLogoSelected($event)"
+                    style="display: none;" />
+                  <label for="logoFile">
+                    <p-button 
+                      label="Choose Logo" 
+                      icon="pi pi-upload"
+                      styleClass="p-button-outlined">
+                    </p-button>
+                  </label>
+                  <p-button 
+                    *ngIf="logoFile"
+                    label="Upload Logo" 
+                    icon="pi pi-check"
+                    (onClick)="uploadLogo()"
+                    [loading]="saving"
+                    styleClass="p-button-primary">
+                  </p-button>
+                </div>
+                <small class="help-text">Recommended: PNG or SVG, max 5MB, transparent background</small>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="primaryColor">Primary Color</label>
+              <div class="color-input-group">
+                <input 
+                  id="primaryColor"
+                  type="color" 
+                  [(ngModel)]="brandSettings.primaryColor"
+                  class="color-picker" />
+                <input 
+                  type="text" 
+                  pInputText 
+                  [(ngModel)]="brandSettings.primaryColor"
+                  placeholder="#6366f1"
+                  class="color-text-input" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="secondaryColor">Secondary Color</label>
+              <div class="color-input-group">
+                <input 
+                  id="secondaryColor"
+                  type="color" 
+                  [(ngModel)]="brandSettings.secondaryColor"
+                  class="color-picker" />
+                <input 
+                  type="text" 
+                  pInputText 
+                  [(ngModel)]="brandSettings.secondaryColor"
+                  placeholder="#8b5cf6"
+                  class="color-text-input" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="accentColor">Accent Color</label>
+              <div class="color-input-group">
+                <input 
+                  id="accentColor"
+                  type="color" 
+                  [(ngModel)]="brandSettings.accentColor"
+                  class="color-picker" />
+                <input 
+                  type="text" 
+                  pInputText 
+                  [(ngModel)]="brandSettings.accentColor"
+                  placeholder="#10b981"
+                  class="color-text-input" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <p-button 
+              label="Save Brand Settings" 
+              icon="pi pi-save"
+              (onClick)="saveBrandSettings()"
+              [loading]="saving"
+              styleClass="p-button-primary">
+            </p-button>
+          </div>
+        </div>
+      </p-tabPanel>
+
+      <!-- Invoice Template Tab -->
+      <p-tabPanel header="Invoice Template" leftIcon="pi pi-file-pdf">
+        <div class="settings-section">
+          <h3 class="section-title">Invoice Template Settings</h3>
+          <p class="section-description">Customize how your invoices appear to clients.</p>
+
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label for="headerText">Header Text</label>
+              <input 
+                id="headerText"
+                type="text" 
+                pInputText 
+                [(ngModel)]="invoiceTemplate.headerText"
+                placeholder="Thank you for your business!"
+                class="full-width" />
+            </div>
+
+            <div class="form-group full-width">
+              <label for="footerText">Footer Text</label>
+              <input 
+                id="footerText"
+                type="text" 
+                pInputText 
+                [(ngModel)]="invoiceTemplate.footerText"
+                placeholder="Payment is due within 30 days."
+                class="full-width" />
+            </div>
+
+            <div class="form-group full-width">
+              <label for="termsAndConditions">Terms & Conditions</label>
+              <textarea 
+                id="termsAndConditions"
+                pInputTextarea 
+                [(ngModel)]="invoiceTemplate.termsAndConditions"
+                [rows]="5"
+                placeholder="Enter terms and conditions that will appear on invoices"
+                class="full-width"></textarea>
+            </div>
+
+            <div class="form-group">
+              <p-checkbox 
+                [(ngModel)]="invoiceTemplate.showLogo"
+                [binary]="true"
+                inputId="showLogo">
+              </p-checkbox>
+              <label for="showLogo" class="checkbox-label">Show logo on invoices</label>
+            </div>
+
+            <div class="form-group">
+              <p-checkbox 
+                [(ngModel)]="invoiceTemplate.showTaxId"
+                [binary]="true"
+                inputId="showTaxId">
+              </p-checkbox>
+              <label for="showTaxId" class="checkbox-label">Show Tax ID on invoices</label>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <p-button 
+              label="Save Invoice Template" 
+              icon="pi pi-save"
+              (onClick)="saveInvoiceTemplate()"
+              [loading]="saving"
+              styleClass="p-button-primary">
+            </p-button>
+          </div>
+        </div>
+      </p-tabPanel>
+
+      <!-- Payment Methods Tab -->
+      <p-tabPanel header="Payment Methods" leftIcon="pi pi-credit-card">
+        <div class="settings-section">
+          <div class="section-header">
+            <div>
+              <h3 class="section-title">Payment Methods</h3>
+              <p class="section-description">Configure payment methods available to clients.</p>
+            </div>
+            <p-button 
+              label="Add Payment Method" 
+              icon="pi pi-plus"
+              (onClick)="addPaymentMethod()"
+              styleClass="p-button-primary">
+            </p-button>
+          </div>
+
+          <div class="payment-methods-list" *ngIf="paymentMethods.length > 0">
+            <div class="payment-method-item" *ngFor="let method of paymentMethods; let i = index">
+              <div class="method-info">
+                <div class="method-header">
+                  <h4>{{ method.name }}</h4>
+                  <p-tag 
+                    [value]="getPaymentTypeLabel(method.type)"
+                    severity="info"
+                    [rounded]="true">
+                  </p-tag>
+                  <p-tag 
+                    [value]="method.isActive ? 'Active' : 'Inactive'"
+                    [severity]="method.isActive ? 'success' : 'secondary'"
+                    [rounded]="true">
+                  </p-tag>
+                </div>
+                <p class="method-details">{{ method.accountDetails }}</p>
+              </div>
+              <div class="method-actions">
+                <p-button 
+                  icon="pi pi-pencil" 
+                  styleClass="p-button-text p-button-rounded"
+                  (onClick)="editPaymentMethod(i)"
+                  pTooltip="Edit">
+                </p-button>
+                <p-button 
+                  icon="pi pi-trash" 
+                  styleClass="p-button-text p-button-rounded p-button-danger"
+                  (onClick)="deletePaymentMethod(i)"
+                  pTooltip="Delete">
+                </p-button>
+              </div>
+            </div>
+          </div>
+
+          <div class="empty-state" *ngIf="paymentMethods.length === 0">
+            <i class="pi pi-credit-card empty-icon"></i>
+            <p>No payment methods configured</p>
+            <p class="empty-subtext">Add a payment method to get started</p>
+          </div>
+        </div>
+      </p-tabPanel>
+
+      <!-- Notification Preferences Tab -->
+      <p-tabPanel header="Notifications" leftIcon="pi pi-bell">
+        <div class="settings-section">
+          <h3 class="section-title">Notification Preferences</h3>
+          <p class="section-description">Choose which notifications you want to receive.</p>
+
+          <div class="notification-list">
+            <div class="notification-item">
+              <div class="notification-info">
+                <h4>Email Notifications</h4>
+                <p>Receive notifications via email</p>
+              </div>
+              <p-inputSwitch 
+                [(ngModel)]="notificationPrefs.emailNotifications">
+              </p-inputSwitch>
+            </div>
+
+            <div class="notification-item">
+              <div class="notification-info">
+                <h4>Order Notifications</h4>
+                <p>Get notified when new orders are created or updated</p>
+              </div>
+              <p-inputSwitch 
+                [(ngModel)]="notificationPrefs.orderNotifications">
+              </p-inputSwitch>
+            </div>
+
+            <div class="notification-item">
+              <div class="notification-info">
+                <h4>Payment Notifications</h4>
+                <p>Get notified when payments are received</p>
+              </div>
+              <p-inputSwitch 
+                [(ngModel)]="notificationPrefs.paymentNotifications">
+              </p-inputSwitch>
+            </div>
+
+            <div class="notification-item">
+              <div class="notification-info">
+                <h4>Client Message Notifications</h4>
+                <p>Get notified when clients send messages</p>
+              </div>
+              <p-inputSwitch 
+                [(ngModel)]="notificationPrefs.clientMessageNotifications">
+              </p-inputSwitch>
+            </div>
+
+            <div class="notification-item">
+              <div class="notification-info">
+                <h4>Review Notifications</h4>
+                <p>Get notified when clients leave reviews</p>
+              </div>
+              <p-inputSwitch 
+                [(ngModel)]="notificationPrefs.reviewNotifications">
+              </p-inputSwitch>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <p-button 
+              label="Save Notification Preferences" 
+              icon="pi pi-save"
+              (onClick)="saveNotificationPreferences()"
+              [loading]="saving"
+              styleClass="p-button-primary">
+            </p-button>
+          </div>
+        </div>
+      </p-tabPanel>
+    </p-tabView>
+  </p-card>
+
+  <!-- Payment Method Dialog -->
+  <p-dialog 
+    [(visible)]="showPaymentDialog" 
+    [modal]="true" 
+    [style]="{width: '500px'}"
+    header="Payment Method"
+    [closable]="true">
+    <div class="dialog-content">
+      <div class="form-group">
+        <label for="paymentName">Payment Method Name *</label>
+        <input 
+          id="paymentName"
+          type="text" 
+          pInputText 
+          [(ngModel)]="newPaymentMethod.name"
+          placeholder="e.g., PayPal, Bank Transfer"
+          class="full-width" />
+      </div>
+
+      <div class="form-group">
+        <label for="paymentType">Payment Type *</label>
+        <p-dropdown 
+          id="paymentType"
+          [options]="[
+            {label: 'Bank Transfer', value: 'bank'},
+            {label: 'PayPal', value: 'paypal'},
+            {label: 'Stripe', value: 'stripe'},
+            {label: 'Other', value: 'other'}
+          ]"
+          [(ngModel)]="newPaymentMethod.type"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select payment type"
+          class="full-width">
+        </p-dropdown>
+      </div>
+
+      <div class="form-group">
+        <label for="accountDetails">Account Details *</label>
+        <textarea 
+          id="accountDetails"
+          pInputTextarea 
+          [(ngModel)]="newPaymentMethod.accountDetails"
+          [rows]="3"
+          placeholder="Enter account details (e.g., PayPal email, bank account number)"
+          class="full-width"></textarea>
+      </div>
+
+      <div class="form-group">
+        <p-checkbox 
+          [(ngModel)]="newPaymentMethod.isActive"
+          [binary]="true"
+          inputId="paymentActive">
+        </p-checkbox>
+        <label for="paymentActive" class="checkbox-label">Active</label>
+      </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <p-button 
+        label="Cancel" 
+        icon="pi pi-times"
+        (onClick)="showPaymentDialog = false"
+        styleClass="p-button-text">
+      </p-button>
+      <p-button 
+        label="Save" 
+        icon="pi pi-check"
+        (onClick)="savePaymentMethod()"
+        styleClass="p-button-primary">
+      </p-button>
+    </ng-template>
+  </p-dialog>
+</div>

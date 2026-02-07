@@ -17,7 +17,7 @@
       [rows]="rows"
       [first]="first"
       (onPage)="first = $event.first"
-      [globalFilterFields]="['subject', 'clientName', 'message']"
+      [globalFilterFields]="['senderName', 'recipientName', 'content']"
       [rowsPerPageOptions]="[10, 25, 50]"
       styleClass="p-datatable-striped"
       [responsive]="true">
@@ -40,7 +40,7 @@
         <tr>
           <th style="width: 3rem"></th>
           <th>From</th>
-          <th>Subject</th>
+          <th>To</th>
           <th>Message</th>
           <th pSortableColumn="createdAt">
             Date <p-sortIcon field="createdAt"></p-sortIcon>
@@ -54,12 +54,18 @@
           <td>
             <i class="pi pi-circle-fill" [class.text-primary]="!message.isRead" style="font-size: 0.5rem;" *ngIf="!message.isRead"></i>
           </td>
-          <td>{{ message.clientName }}</td>
           <td>
-            <strong>{{ message.subject }}</strong>
+            <div>
+              <strong>{{ message.senderName }}</strong>
+              <small *ngIf="message.senderRole" class="text-muted"> ({{ message.senderRole }})</small>
+            </div>
           </td>
           <td>
-            <span class="message-preview">{{ message.message.substring(0, 50) }}{{ message.message.length > 50 ? '...' : '' }}</span>
+            <span *ngIf="message.recipientName">{{ message.recipientName }}</span>
+            <span *ngIf="!message.recipientName" class="text-muted">All</span>
+          </td>
+          <td>
+            <span class="message-preview">{{ message.content.substring(0, 50) }}{{ message.content.length > 50 ? '...' : '' }}</span>
           </td>
           <td>{{ formatDate(message.createdAt) }}</td>
           <td>

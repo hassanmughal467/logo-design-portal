@@ -15,5 +15,8 @@ public interface IApplicationDbContext
     DbSet<LogoFile> LogoFiles { get; }
     DbSet<OrderStatusHistory> OrderStatusHistories { get; }
     DbSet<Invoice> Invoices { get; }
+    DbSet<Message> Messages { get; }
+    DbSet<Review> Reviews { get; }
+    DbSet<Settings> Settings { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
