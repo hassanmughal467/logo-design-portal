@@ -90,6 +90,22 @@ export class AuthService {
     return user ? roles.includes(user.role) : false;
   }
 
+  changePassword(data: { currentPassword: string; newPassword: string; confirmPassword: string }): Observable<any> {
+    return this.apiService.post('auth/change-password', data);
+  }
+
+  forgotPassword(email: string): Observable<any> {
+    return this.apiService.post('auth/forgot-password', { email });
+  }
+
+  resetPasswordWithToken(data: { email: string; token: string; newPassword: string; confirmPassword: string }): Observable<any> {
+    return this.apiService.post('auth/reset-password-with-token', data);
+  }
+
+  resetUserPassword(userId: string, newPassword: string): Observable<any> {
+    return this.apiService.post('auth/reset-password', { userId, newPassword });
+  }
+
   private setAuthData(response: LoginResponse): void {
     this.accessToken = response.token;  // Backend returns 'token' not 'accessToken'
     // Parse expiresAt DateTime string from backend

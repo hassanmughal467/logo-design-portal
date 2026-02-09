@@ -262,10 +262,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
           label: 'Orders',
           data: monthValues,
           fill: true,
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          borderColor: '#0d47a1',
+          backgroundColor: 'rgba(13, 71, 161, 0.1)',
           tension: 0.4,
-          pointBackgroundColor: '#6366f1',
+          pointBackgroundColor: '#0d47a1',
           pointBorderColor: '#ffffff',
           pointBorderWidth: 2,
           pointRadius: 5
@@ -320,18 +320,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
           label: 'Revenue',
           data: revenueValues,
           backgroundColor: [
-            '#6366f1',
-            '#8b5cf6',
-            '#10b981',
-            '#f59e0b',
-            '#ef4444',
-            '#06b6d4'
+            '#0d47a1',
+            '#1976d2',
+            '#4caf50',
+            '#ff9800',
+            '#f44336',
+            '#2196f3'
           ],
           borderColor: [
-            '#4f46e5',
-            '#7c3aed',
-            '#059669',
-            '#d97706',
+            '#0a3d91',
+            '#1565c0',
+            '#45a049',
+            '#f57c00',
+            '#d32f2f',
             '#dc2626',
             '#0891b2'
           ],
@@ -397,7 +398,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private getStatusColors(statuses: string[]): string[] {
     const colorMap: { [key: string]: string } = {
       'Pending': '#f59e0b',
-      'InProgress': '#6366f1',
+      'InProgress': '#0d47a1',
       'Review': '#8b5cf6',
       'Completed': '#10b981',
       'Cancelled': '#ef4444'

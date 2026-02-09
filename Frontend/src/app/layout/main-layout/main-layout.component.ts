@@ -214,7 +214,10 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
           routerLink: '/orders',
           command: () => {
             this.router.navigate(['/orders']);
-            this.sidebarVisible = false;
+            // Only close sidebar on mobile/small screens
+            if (window.innerWidth < 768) {
+              this.sidebarVisible = false;
+            }
           }
         },
         {
@@ -286,7 +289,10 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
           routerLink: '/orders',
           command: () => {
             this.router.navigate(['/orders']);
-            this.sidebarVisible = false;
+            // Only close sidebar on mobile/small screens
+            if (window.innerWidth < 768) {
+              this.sidebarVisible = false;
+            }
           }
         },
         {
@@ -318,7 +324,10 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
           routerLink: '/orders',
           command: () => {
             this.router.navigate(['/orders']);
-            this.sidebarVisible = false;
+            // Only close sidebar on mobile/small screens
+            if (window.innerWidth < 768) {
+              this.sidebarVisible = false;
+            }
           }
         },
         {

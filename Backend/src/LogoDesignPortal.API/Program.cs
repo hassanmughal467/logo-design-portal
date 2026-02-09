@@ -130,13 +130,15 @@ using (var scope = app.Services.CreateScope())
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     context.Database.EnsureCreated();
 
-    // Seed initial SuperAdmin user if not exists
-    if (!context.Users.Any(u => u.Email == "superadmin@logodesign.com"))
+    // Seed or reset SuperAdmin user
+    var superAdminRole = context.Roles.FirstOrDefault(r => r.Name == "SuperAdmin");
+    if (superAdminRole != null)
     {
-        var superAdminRole = context.Roles.FirstOrDefault(r => r.Name == "SuperAdmin");
-        if (superAdminRole != null)
+        var superAdmin = context.Users.FirstOrDefault(u => u.Email == "superadmin@logodesign.com");
+        if (superAdmin == null)
         {
-            var superAdmin = new User
+            // Create new SuperAdmin
+            superAdmin = new User
             {
                 Id = Guid.NewGuid(),
                 Email = "superadmin@logodesign.com",
@@ -149,6 +151,13 @@ using (var scope = app.Services.CreateScope())
             };
             context.Users.Add(superAdmin);
             context.SaveChanges();
+        }
+        else
+        {
+            // Reset SuperAdmin password to default if needed (uncomment to reset)
+            // superAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword("SuperAdmin@123");
+            // superAdmin.IsActive = true;
+            // context.SaveChanges();
         }
     }
 }

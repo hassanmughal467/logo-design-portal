@@ -66,7 +66,7 @@ export class SettingsListComponent implements OnInit, OnDestroy {
 
   // Brand Settings
   brandSettings: BrandSettings = {
-    primaryColor: '#6366f1',
+    primaryColor: '#0d47a1',
     secondaryColor: '#8b5cf6',
     accentColor: '#10b981'
   };
@@ -103,6 +103,14 @@ export class SettingsListComponent implements OnInit, OnDestroy {
     reviewNotifications: true
   };
 
+  // Password Change
+  passwordForm = {
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  };
+  changingPassword = false;
+
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -136,7 +144,7 @@ export class SettingsListComponent implements OnInit, OnDestroy {
             this.businessSettings.website = data.business['website'] || '';
           }
           if (data.brand) {
-            this.brandSettings.primaryColor = data.brand['primaryColor'] || '#6366f1';
+            this.brandSettings.primaryColor = data.brand['primaryColor'] || '#0d47a1';
             this.brandSettings.secondaryColor = data.brand['secondaryColor'] || '#8b5cf6';
             this.brandSettings.accentColor = data.brand['accentColor'] || '#10b981';
             if (data.brand['logoUrl']) {
@@ -430,5 +438,237 @@ export class SettingsListComponent implements OnInit, OnDestroy {
       'other': 'Other'
     };
     return labels[type] || type;
+  }
+
+  changePassword(event?: Event): void {
+    if (event) {
+      event.preventDefault();
+    }
+
+    // Get and trim all fields
+    const currentPassword = this.passwordForm.currentPassword ? String(this.passwordForm.currentPassword).trim() : '';
+    const newPassword = this.passwordForm.newPassword ? String(this.passwordForm.newPassword).trim() : '';
+    const confirmPassword = this.passwordForm.confirmPassword ? String(this.passwordForm.confirmPassword).trim() : '';
+
+    // Validate all fields are filled
+    if (!currentPassword) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Please enter your current password'
+      });
+      return;
+    }
+
+    if (!newPassword) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Please enter a new password'
+      });
+      return;
+    }
+
+    if (!confirmPassword) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Please confirm your new password'
+      });
+      return;
+    }
+
+    // Validate password length (relaxed to 8 characters minimum)
+    if (newPassword.length < 8) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'New password must be at least 8 characters long'
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'New password and confirmation password do not match'
+      });
+      return;
+    }
+
+    this.changingPassword = true;
+    
+    // Log the request for debugging
+    console.log('Changing password for user...');
+    console.log('New password length:', newPassword.length);
+    console.log('New password meets requirements:', {
+      hasUppercase: /[A-Z]/.test(newPassword),
+      hasLowercase: /[a-z]/.test(newPassword),
+      hasNumber: /\d/.test(newPassword),
+      hasSpecial: /[@$!%*?&#]/.test(newPassword),
+      minLength: newPassword.length >= 12
+    });
+    
+    this.apiService.post('auth/change-password', {
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+      confirmPassword: confirmPassword
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          console.log('Password change successful:', response);
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Password changed successfully'
+          });
+          // Clear form
+          this.passwordForm.currentPassword = '';
+          this.passwordForm.newPassword = '';
+          this.passwordForm.confirmPassword = '';
+          this.changingPassword = false;
+        },
+        error: (error) => {
+          console.error('Password change error - Full error object:', error);
+          console.error('Error status:', error?.status);
+          console.error('Error error:', error?.error);
+          
+          // Extract error message from different possible response formats
+          let errorMessage = 'Failed to change password';
+          
+          if (error?.error) {
+            if (typeof error.error === 'string') {
+              errorMessage = error.error;
+            } else if (error.error.error) {
+              errorMessage = error.error.error;
+            } else if (error.error.message) {
+              errorMessage = error.error.message;
+            } else if (Array.isArray(error.error) && error.error.length > 0) {
+              // Handle validation errors array
+              errorMessage = error.error.map((e: any) => e.message || e).join(', ');
+            } else if (error.error.title) {
+              // ASP.NET Core validation errors
+              errorMessage = error.error.title;
+              if (error.error.errors) {
+                const validationErrors = Object.values(error.error.errors).flat().join(', ');
+                if (validationErrors) {
+                  errorMessage += ': ' + validationErrors;
+                }
+              }
+            }
+          } else if (error?.message) {
+            errorMessage = error.message;
+          }
+          
+          // Check for specific error types
+          if (error?.status === 401) {
+            errorMessage = 'Current password is incorrect. Please verify and try again.';
+          } else if (error?.status === 400) {
+            // Keep the backend error message for 400 errors, but make it more user-friendly
+            if (!errorMessage || errorMessage === 'Failed to change password') {
+              errorMessage = 'Password validation failed. Please ensure your password meets all requirements.';
+            }
+          } else if (error?.status === 0) {
+            errorMessage = 'Unable to connect to the server. Please ensure the backend is running.';
+          }
+          
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Password Change Failed',
+            detail: errorMessage,
+            life: 7000
+          });
+          this.changingPassword = false;
+        }
+      });
+  }
+
+  checkPasswordStrength(password: string): { isStrong: boolean; message: string; strength: number } {
+    let strength = 0;
+    const issues: string[] = [];
+
+    // Length check (relaxed)
+    if (password.length >= 12) strength += 2;
+    else if (password.length >= 8) strength += 2; // Give full points for 8+
+    else issues.push('at least 8 characters');
+
+    // Uppercase check (optional - just adds strength)
+    if (/[A-Z]/.test(password)) strength += 1;
+
+    // Lowercase check (optional - just adds strength)
+    if (/[a-z]/.test(password)) strength += 1;
+
+    // Number check (optional - just adds strength)
+    if (/\d/.test(password)) strength += 1;
+
+    // Special character check (optional - just adds strength)
+    if (/[@$!%*?&#]/.test(password)) strength += 1;
+
+    // Always consider password strong if it meets minimum length
+    const isStrong = password.length >= 8;
+    const message = isStrong ? 'Password meets minimum requirements' : 'Password must be at least 8 characters';
+
+    return { isStrong, message, strength };
+  }
+
+  hasSequentialChars(str: string): boolean {
+    for (let i = 0; i < str.length - 3; i++) {
+      const seq = str.substring(i, i + 4).toLowerCase();
+      let isSeq = true;
+      for (let j = 1; j < seq.length; j++) {
+        const diff = seq.charCodeAt(j) - seq.charCodeAt(j - 1);
+        if (diff !== 1 && diff !== -1) {
+          isSeq = false;
+          break;
+        }
+      }
+      if (isSeq) return true;
+    }
+    return false;
+  }
+
+  getPasswordStrengthLabel(): string {
+    if (!this.passwordForm.newPassword) return '';
+    const strength = this.checkPasswordStrength(this.passwordForm.newPassword);
+    if (strength.strength <= 2) return 'Weak';
+    if (strength.strength <= 4) return 'Medium';
+    if (strength.strength <= 5) return 'Strong';
+    return 'Very Strong';
+  }
+
+  getPasswordStrengthColor(): string {
+    if (!this.passwordForm.newPassword) return '';
+    const strength = this.checkPasswordStrength(this.passwordForm.newPassword);
+    if (strength.strength <= 2) return '#ef4444'; // red
+    if (strength.strength <= 4) return '#f59e0b'; // orange
+    if (strength.strength <= 5) return '#10b981'; // green
+    return '#059669'; // dark green
+  }
+
+  hasSpecialChar(): boolean {
+    if (!this.passwordForm.newPassword) return false;
+    return /[@$!%*?&#]/.test(this.passwordForm.newPassword);
+  }
+
+  hasUppercase(): boolean {
+    if (!this.passwordForm.newPassword) return false;
+    return /[A-Z]/.test(this.passwordForm.newPassword);
+  }
+
+  hasLowercase(): boolean {
+    if (!this.passwordForm.newPassword) return false;
+    return /[a-z]/.test(this.passwordForm.newPassword);
+  }
+
+  hasNumber(): boolean {
+    if (!this.passwordForm.newPassword) return false;
+    return /\d/.test(this.passwordForm.newPassword);
+  }
+
+  hasMinLength(): boolean {
+    if (!this.passwordForm.newPassword) return false;
+    return this.passwordForm.newPassword.length >= 8;
   }
 }

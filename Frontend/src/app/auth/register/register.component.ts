@@ -12,6 +12,25 @@ import { MessageService } from 'primeng/api';
 export class RegisterComponent {
   registerForm: FormGroup;
   loading = false;
+  logoExists: boolean = true; // Set to false if logo file doesn't exist
+
+  countries = [
+    { label: 'United States', value: 'United States' },
+    { label: 'Canada', value: 'Canada' },
+    { label: 'United Kingdom', value: 'United Kingdom' },
+    { label: 'Australia', value: 'Australia' },
+    { label: 'Germany', value: 'Germany' },
+    { label: 'France', value: 'France' },
+    { label: 'Other', value: 'Other' }
+  ];
+
+  references = [
+    { label: 'Google Search', value: 'Google Search' },
+    { label: 'Social Media', value: 'Social Media' },
+    { label: 'Friend/Colleague', value: 'Friend/Colleague' },
+    { label: 'Advertisement', value: 'Advertisement' },
+    { label: 'Other', value: 'Other' }
+  ];
 
   constructor(
     private fb: FormBuilder,
@@ -20,29 +39,34 @@ export class RegisterComponent {
     private messageService: MessageService
   ) {
     this.registerForm = this.fb.group({
-      email: ['', [Validators.required, Validators.email]],
+      userName: ['', [Validators.required, Validators.minLength(3)]],
       password: ['', [Validators.required, Validators.minLength(6)]],
-      confirmPassword: ['', [Validators.required]],
-      firstName: ['', [Validators.required]],
-      lastName: ['', [Validators.required]],
+      confirmPassword: [''], // Optional - not in template
+      firstName: ['', [Validators.required, Validators.minLength(2)]],
+      lastName: ['', [Validators.required, Validators.minLength(2)]],
+      email: ['', [Validators.required, Validators.email]],
+      secondaryEmail: ['', [Validators.email]],
+      invoiceEmail: ['', [Validators.required, Validators.email]],
       companyName: ['', [Validators.required]],
-      phoneNumber: ['', [Validators.required]]
-    }, { validators: this.passwordMatchValidator });
+      contactName: ['', [Validators.required]],
+      phone: ['', [Validators.required]],
+      cell: [''],
+      fax: [''],
+      country: [''],
+      city: [''],
+      zipCode: [''],
+      state: [''],
+      address: [''],
+      website: [''],
+      reference: [''],
+      agreeToTerms: [false, [Validators.requiredTrue]]
+    });
   }
 
-  passwordMatchValidator(form: FormGroup) {
-    const password = form.get('password');
-    const confirmPassword = form.get('confirmPassword');
-    
-    if (password && confirmPassword && password.value !== confirmPassword.value) {
-      confirmPassword.setErrors({ passwordMismatch: true });
-      return { passwordMismatch: true };
-    }
-    return null;
-  }
 
   onSubmit(): void {
     if (this.registerForm.invalid) {
+      this.registerForm.markAllAsTouched();
       return;
     }
 
@@ -63,7 +87,7 @@ export class RegisterComponent {
         this.messageService.add({
           severity: 'error',
           summary: 'Registration Failed',
-          detail: error.error?.message || 'Registration failed. Please try again.'
+          detail: error.error?.error || error.error?.message || 'Registration failed. Please try again.'
         });
       }
     });

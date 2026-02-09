@@ -1,4 +1,4 @@
-# Logo Design Portal - Frontend
+# Hawk Merchandising Web Portal - Frontend
 
 Angular 17+ premium admin portal with PrimeNG UI framework.
 

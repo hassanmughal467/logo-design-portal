@@ -2,9 +2,12 @@ import { Component } from '@angular/core';
 
 @Component({
   selector: 'app-root',
-  template: '<router-outlet></router-outlet>',
+  template: `
+    <router-outlet></router-outlet>
+    <p-toast></p-toast>
+  `,
   styles: []
 })
 export class AppComponent {
-  title = 'Logo Design Portal';
+  title = 'Hawk Merchandising Web Portal';
 }

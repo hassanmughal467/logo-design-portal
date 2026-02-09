@@ -15,8 +15,10 @@ export class ErrorInterceptor implements HttpInterceptor {
   ) {}
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    console.log('HTTP Request intercepted:', request.method, request.url);
     return next.handle(request).pipe(
       catchError((error: HttpErrorResponse) => {
+        console.error('HTTP Error intercepted:', error.status, error.url, error.error);
         let errorMessage = 'An unknown error occurred';
 
         if (error.error instanceof ErrorEvent) {
@@ -27,12 +29,15 @@ export class ErrorInterceptor implements HttpInterceptor {
           switch (error.status) {
             case 401:
               // Unauthorized - token expired or invalid
-              this.authService.logout();
-              this.messageService.add({
-                severity: 'error',
-                summary: 'Session Expired',
-                detail: 'Please login again'
-              });
+              // Don't show session expired for login endpoint - let login component handle it
+              if (request.url && !request.url.includes('/auth/login')) {
+                this.authService.logout();
+                this.messageService.add({
+                  severity: 'error',
+                  summary: 'Session Expired',
+                  detail: 'Please login again'
+                });
+              }
               break;
 
             case 403:

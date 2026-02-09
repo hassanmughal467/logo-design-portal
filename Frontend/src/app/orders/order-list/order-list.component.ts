@@ -14,6 +14,7 @@ import { Order, OrderStatus, OrderPriority } from '@shared/models/order.model';
 })
 export class OrderListComponent implements OnInit, OnDestroy {
   orders: Order[] = [];
+  filteredOrders: Order[] = [];
   loading = false;
   selectedStatus: OrderStatus | null = null;
   globalFilter = '';
@@ -42,6 +43,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    console.log('OrderListComponent ngOnInit called');
+    this.filteredOrders = [];
     this.loadOrders();
   }
 
@@ -51,9 +54,18 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   loadOrders(): void {
+    console.log('loadOrders() called');
     this.loading = true;
     const user = this.authService.getCurrentUser();
-    if (!user) return;
+    console.log('Current user:', user);
+    
+    if (!user) {
+      console.warn('No user found, cannot load orders');
+      this.loading = false;
+      this.orders = [];
+      this.filteredOrders = [];
+      return;
+    }
 
     let endpoint = 'orders';
     if (user.role === 'Client') {
@@ -61,24 +73,125 @@ export class OrderListComponent implements OnInit, OnDestroy {
     } else if (user.role === 'Designer') {
       endpoint = 'orders/assigned-orders';
     }
+    
+    console.log('Loading orders from endpoint:', endpoint);
+    console.log('User role:', user.role);
 
-    this.apiService.get<Order[]>(endpoint)
+    this.apiService.get<any[]>(endpoint)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (orders) => {
-          this.orders = orders;
+          console.log('Raw orders from API:', orders);
+          // Handle case where orders might be null or undefined
+          if (!orders || !Array.isArray(orders)) {
+            console.warn('Orders is not an array:', orders);
+            this.orders = [];
+            this.filteredOrders = [];
+            this.loading = false;
+            return;
+          }
+          
+          // Transform backend response to frontend model
+          this.orders = orders.map(order => {
+            const transformed = this.transformOrder(order);
+            console.log('Transformed order:', transformed);
+            return transformed;
+          });
+          console.log('Final orders array:', this.orders);
+          this.applyFilters();
           this.loading = false;
         },
         error: (error) => {
           console.error('Error loading orders:', error);
+          console.error('Error details:', {
+            status: error.status,
+            statusText: error.statusText,
+            message: error.message,
+            error: error.error
+          });
+          
+          let errorMessage = 'Failed to load orders';
+          if (error.status === 403) {
+            errorMessage = 'You do not have permission to view orders';
+          } else if (error.status === 401) {
+            errorMessage = 'Please log in to view orders';
+          } else if (error.error?.error) {
+            errorMessage = error.error.error;
+          }
+          
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load orders'
+            detail: errorMessage
           });
           this.loading = false;
+          this.orders = [];
+          this.filteredOrders = [];
         }
       });
+  }
+
+  private transformOrder(backendOrder: any): Order {
+    // Map backend field names to frontend model
+    // Backend uses PascalCase (Status, Id, Deadline) and frontend uses camelCase
+    const status = this.mapStatus(backendOrder.status || backendOrder.Status);
+    
+    return {
+      id: backendOrder.id || backendOrder.Id,
+      clientId: backendOrder.clientId || backendOrder.ClientId || '',
+      designerId: backendOrder.designerId || backendOrder.DesignerId,
+      title: backendOrder.title || backendOrder.Title || '',
+      description: backendOrder.description || backendOrder.Description || '',
+      status: status,
+      priority: backendOrder.priority || backendOrder.Priority || OrderPriority.Medium, // Default if not provided
+      createdAt: backendOrder.createdAt ? new Date(backendOrder.createdAt) : (backendOrder.CreatedAt ? new Date(backendOrder.CreatedAt) : new Date()),
+      updatedAt: backendOrder.updatedAt ? new Date(backendOrder.updatedAt) : (backendOrder.UpdatedAt ? new Date(backendOrder.UpdatedAt) : undefined),
+      dueDate: backendOrder.dueDate ? new Date(backendOrder.dueDate) : (backendOrder.Deadline ? new Date(backendOrder.Deadline) : undefined),
+      client: backendOrder.client || backendOrder.Client,
+      designer: backendOrder.designer || backendOrder.Designer
+    };
+  }
+
+  private mapStatus(status: string): OrderStatus {
+    // Map backend status strings to frontend enum
+    if (!status) return OrderStatus.Pending;
+    
+    const statusStr = status.toString().trim();
+    switch (statusStr) {
+      case 'Pending':
+      case '1':
+        return OrderStatus.Pending;
+      case 'InProgress':
+      case 'In Progress':
+      case '2':
+        return OrderStatus.InProgress;
+      case 'Review':
+        return OrderStatus.Review;
+      case 'Completed':
+      case '3':
+        return OrderStatus.Completed;
+      case 'Cancelled':
+      case '4':
+        return OrderStatus.Cancelled;
+      default:
+        return OrderStatus.Pending;
+    }
+  }
+
+  applyFilters(): void {
+    let filtered = [...this.orders];
+    
+    // Apply status filter
+    if (this.selectedStatus) {
+      filtered = filtered.filter(order => order.status === this.selectedStatus);
+    }
+    
+    this.filteredOrders = filtered;
+  }
+
+  onStatusFilterChange(): void {
+    this.applyFilters();
+    this.first = 0; // Reset pagination
   }
 
   getStatusSeverity(status: OrderStatus): string {

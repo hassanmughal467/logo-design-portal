@@ -15,6 +15,20 @@
     </div>
   </div>
 
+  <!-- Loading State -->
+  <div *ngIf="loading" style="text-align: center; padding: 3rem;">
+    <i class="pi pi-spin pi-spinner" style="font-size: 2rem;"></i>
+    <p>Loading users...</p>
+  </div>
+
+  <!-- Debug info (remove in production) -->
+  <div *ngIf="users.length === 0 && !loading" style="padding: 1rem; background: #f0f0f0; margin: 1rem; border-radius: 4px;">
+    <p><strong>Debug Info:</strong></p>
+    <p>Users array length: {{ users.length }}</p>
+    <p>Loading: {{ loading }}</p>
+    <p>Check browser console for API response details</p>
+  </div>
+
   <p-card styleClass="users-card">
     <p-table 
       [value]="users" 
@@ -104,6 +118,14 @@
                 styleClass="p-button-text p-button-rounded p-button-sm"
                 pTooltip="Edit User"
                 tooltipPosition="top">
+              </p-button>
+              <p-button 
+                *ngIf="canResetPassword()"
+                icon="pi pi-key" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                pTooltip="Reset Password"
+                tooltipPosition="top"
+                (onClick)="openResetPasswordDialog(user)">
               </p-button>
             </div>
           </td>
@@ -223,6 +245,80 @@
         icon="pi pi-check" 
         (onClick)="createUser()"
         [disabled]="createUserForm.invalid"
+        styleClass="p-button-primary">
+      </p-button>
+    </ng-template>
+  </p-dialog>
+
+  <!-- Reset Password Dialog -->
+  <p-dialog 
+    [(visible)]="displayResetPasswordDialog" 
+    header="Reset Password" 
+    [modal]="true"
+    [style]="{width: '500px'}"
+    [closable]="true">
+    
+    <div *ngIf="selectedUserForReset">
+      <p>Reset password for <strong>{{ selectedUserForReset.firstName }} {{ selectedUserForReset.lastName }}</strong> ({{ selectedUserForReset.email }})</p>
+      
+      <form [formGroup]="resetPasswordForm" (ngSubmit)="resetUserPassword()">
+        <div class="form-field" style="margin-top: 1.5rem;">
+          <label for="resetNewPassword">New Password <span class="required">*</span></label>
+          <p-password 
+            id="resetNewPassword"
+            formControlName="newPassword" 
+            placeholder="Enter new password"
+            [toggleMask]="true"
+            [feedback]="true"
+            styleClass="w-100"
+            [inputStyleClass]="resetPasswordForm.get('newPassword')?.invalid && resetPasswordForm.get('newPassword')?.touched ? 'ng-invalid' : ''">
+          </p-password>
+          <small 
+            class="p-error" 
+            *ngIf="resetPasswordForm.get('newPassword')?.invalid && resetPasswordForm.get('newPassword')?.touched">
+            Password must be at least 8 characters
+          </small>
+        </div>
+
+        <div class="form-field" style="margin-top: 1rem;">
+          <label for="resetConfirmPassword">Confirm Password <span class="required">*</span></label>
+          <p-password 
+            id="resetConfirmPassword"
+            formControlName="confirmPassword" 
+            placeholder="Confirm new password"
+            [toggleMask]="true"
+            [feedback]="false"
+            styleClass="w-100"
+            [inputStyleClass]="resetPasswordForm.get('confirmPassword')?.invalid && resetPasswordForm.get('confirmPassword')?.touched ? 'ng-invalid' : ''">
+          </p-password>
+          <small 
+            class="p-error" 
+            *ngIf="resetPasswordForm.get('confirmPassword')?.hasError('required') && resetPasswordForm.get('confirmPassword')?.touched">
+            Please confirm your password
+          </small>
+          <small 
+            class="p-error" 
+            *ngIf="resetPasswordForm.get('confirmPassword')?.hasError('passwordMismatch') && resetPasswordForm.get('confirmPassword')?.touched && !resetPasswordForm.get('confirmPassword')?.hasError('required')">
+            Passwords do not match
+          </small>
+        </div>
+      </form>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <p-button 
+        label="Cancel" 
+        icon="pi pi-times" 
+        (onClick)="displayResetPasswordDialog = false"
+        styleClass="p-button-text"
+        [disabled]="resettingPassword">
+      </p-button>
+      <p-button 
+        label="Reset Password" 
+        icon="pi pi-check" 
+        (onClick)="resetUserPassword()"
+        [disabled]="resetPasswordForm.invalid || resettingPassword"
+        [loading]="resettingPassword"
         styleClass="p-button-primary">
       </p-button>
     </ng-template>

@@ -13,6 +13,8 @@ export class LoginComponent implements OnInit {
   loginForm: FormGroup;
   loading = false;
   returnUrl: string = '';
+  loginError: string = '';
+  logoExists: boolean = true; // Set to false if logo file doesn't exist
 
   constructor(
     private fb: FormBuilder,
@@ -35,9 +37,26 @@ export class LoginComponent implements OnInit {
     if (this.authService.isAuthenticated()) {
       this.router.navigate([this.returnUrl]);
     }
+    
+    // Clear login errors when user starts typing in password field
+    this.loginForm.get('password')?.valueChanges.subscribe(() => {
+      if (this.loginError) {
+        this.loginError = '';
+      }
+    });
+    
+    // Also clear when email changes
+    this.loginForm.get('email')?.valueChanges.subscribe(() => {
+      if (this.loginError) {
+        this.loginError = '';
+      }
+    });
   }
 
   onSubmit(): void {
+    // Clear previous login error
+    this.loginError = '';
+    
     // Mark all fields as touched to show validation errors
     if (this.loginForm.invalid) {
       Object.keys(this.loginForm.controls).forEach(key => {
@@ -54,6 +73,8 @@ export class LoginComponent implements OnInit {
     this.authService.login({ email, password }).subscribe({
       next: (response) => {
         console.log('Login successful:', response);
+        // Clear any errors on success
+        this.loginError = '';
         this.messageService.add({
           severity: 'success',
           summary: 'Success',
@@ -64,11 +85,34 @@ export class LoginComponent implements OnInit {
       error: (error) => {
         console.error('Login error:', error);
         this.loading = false;
+        
+        // Extract error message from backend response
+        // Backend returns { error: "message" } for 401 Unauthorized
+        let errorMessage = 'Invalid email or password';
+        
+        if (error?.error?.error) {
+          errorMessage = error.error.error;
+        } else if (error?.error?.message) {
+          errorMessage = error.error.message;
+        } else if (error?.message) {
+          errorMessage = error.message;
+        } else if (error?.status === 0 || error?.status === 500) {
+          errorMessage = 'Unable to connect to the server. Please ensure the backend is running.';
+        }
+        
+        // Set login error message (will show below password field)
+        this.loginError = errorMessage;
+        
+        // Show toast notification for login failure
         this.messageService.add({
           severity: 'error',
           summary: 'Login Failed',
-          detail: error.error?.message || error.message || 'Invalid email or password. Please check your credentials and ensure the backend is running.'
+          detail: errorMessage,
+          life: 5000
         });
+        
+        // Mark password field as touched to show red outline
+        this.loginForm.get('password')?.markAsTouched();
       }
     });
   }

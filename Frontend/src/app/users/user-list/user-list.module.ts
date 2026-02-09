@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { UserListComponent } from './user-list.component';
+import { UserListRoutingModule } from './user-list-routing.module';
 
 // PrimeNG
 import { TableModule } from 'primeng/table';
@@ -13,6 +14,8 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { CheckboxModule } from 'primeng/checkbox';
 import { CardModule } from 'primeng/card';
+import { PasswordModule } from 'primeng/password';
+import { MessageService } from 'primeng/api';
 
 @NgModule({
   declarations: [UserListComponent],
@@ -20,6 +23,7 @@ import { CardModule } from 'primeng/card';
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
+    UserListRoutingModule,
     TableModule,
     ButtonModule,
     DialogModule,
@@ -28,7 +32,9 @@ import { CardModule } from 'primeng/card';
     TagModule,
     TooltipModule,
     CheckboxModule,
-    CardModule
-  ]
+    CardModule,
+    PasswordModule
+  ],
+  providers: [MessageService]
 })
 export class UserListModule { }

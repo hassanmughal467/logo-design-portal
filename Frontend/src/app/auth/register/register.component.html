@@ -1,115 +1,341 @@
 <div class="register-container">
-  <h2>Register</h2>
-  <p class="subtitle">Create a new client account</p>
+  <div class="register-header">
+    <img src="assets/images/logo.png" alt="Hawk Merchandising Logo" class="logo" *ngIf="logoExists">
+    <h2>Create Account</h2>
+    <p class="subtitle">Fill in your details to create a new account</p>
+  </div>
 
-  <form [formGroup]="registerForm" (ngSubmit)="onSubmit()">
+  <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" class="premium-form">
+    <!-- Row 1: User Name, Password, First Name -->
     <div class="form-row">
       <div class="form-group">
-        <label for="firstName">First Name</label>
-        <input 
-          pInputText 
-          id="firstName" 
-          formControlName="firstName" 
-          placeholder="First Name"
-          [class.ng-invalid]="registerForm.get('firstName')?.invalid && registerForm.get('firstName')?.touched">
+        <label for="userName">User Name <span class="required">*</span></label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-user"></i>
+          <input 
+            pInputText 
+            id="userName" 
+            formControlName="userName" 
+            placeholder="Enter username"
+            [class.ng-invalid]="registerForm.get('userName')?.invalid && registerForm.get('userName')?.touched">
+        </span>
+        <small class="p-error" *ngIf="registerForm.get('userName')?.invalid && registerForm.get('userName')?.touched">
+          Username is required (min 3 characters)
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password <span class="required">*</span></label>
+        <span class="p-input-icon-left password-wrapper">
+          <i class="pi pi-lock"></i>
+          <p-password 
+            id="password" 
+            formControlName="password" 
+            placeholder="Enter password"
+            [toggleMask]="true"
+            [feedback]="true"
+            styleClass="w-100"
+            [inputStyleClass]="registerForm.get('password')?.invalid && registerForm.get('password')?.touched ? 'ng-invalid' : ''">
+          </p-password>
+        </span>
+        <small class="p-error" *ngIf="registerForm.get('password')?.invalid && registerForm.get('password')?.touched">
+          Password is required (min 6 characters)
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="firstName">First Name <span class="required">*</span></label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-id-card"></i>
+          <input 
+            pInputText 
+            id="firstName" 
+            formControlName="firstName" 
+            placeholder="First Name"
+            [class.ng-invalid]="registerForm.get('firstName')?.invalid && registerForm.get('firstName')?.touched">
+        </span>
         <small class="p-error" *ngIf="registerForm.get('firstName')?.invalid && registerForm.get('firstName')?.touched">
           First name is required
         </small>
       </div>
+    </div>
 
+    <!-- Row 2: Last Name, Email, Secondary Email -->
+    <div class="form-row">
       <div class="form-group">
-        <label for="lastName">Last Name</label>
-        <input 
-          pInputText 
-          id="lastName" 
-          formControlName="lastName" 
-          placeholder="Last Name"
-          [class.ng-invalid]="registerForm.get('lastName')?.invalid && registerForm.get('lastName')?.touched">
+        <label for="lastName">Last Name <span class="required">*</span></label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-id-card"></i>
+          <input 
+            pInputText 
+            id="lastName" 
+            formControlName="lastName" 
+            placeholder="Last Name"
+            [class.ng-invalid]="registerForm.get('lastName')?.invalid && registerForm.get('lastName')?.touched">
+        </span>
         <small class="p-error" *ngIf="registerForm.get('lastName')?.invalid && registerForm.get('lastName')?.touched">
           Last name is required
         </small>
       </div>
+
+      <div class="form-group">
+        <label for="email">E-mail <span class="required">*</span></label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-envelope"></i>
+          <input 
+            pInputText 
+            id="email" 
+            formControlName="email" 
+            type="email"
+            placeholder="Enter your email"
+            [class.ng-invalid]="registerForm.get('email')?.invalid && registerForm.get('email')?.touched">
+        </span>
+        <small class="p-error" *ngIf="registerForm.get('email')?.invalid && registerForm.get('email')?.touched">
+          Valid email is required
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="secondaryEmail">E-Mail (Optional)</label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-envelope"></i>
+          <input 
+            pInputText 
+            id="secondaryEmail" 
+            formControlName="secondaryEmail" 
+            type="email"
+            placeholder="Secondary email (optional)"
+            [class.ng-invalid]="registerForm.get('secondaryEmail')?.invalid && registerForm.get('secondaryEmail')?.touched">
+        </span>
+        <small class="p-error" *ngIf="registerForm.get('secondaryEmail')?.hasError('email') && registerForm.get('secondaryEmail')?.touched">
+          Invalid email format
+        </small>
+      </div>
     </div>
 
-    <div class="form-group">
-      <label for="email">Email</label>
-      <input 
-        pInputText 
-        id="email" 
-        formControlName="email" 
-        type="email" 
-        placeholder="Enter your email"
-        [class.ng-invalid]="registerForm.get('email')?.invalid && registerForm.get('email')?.touched">
-      <small class="p-error" *ngIf="registerForm.get('email')?.invalid && registerForm.get('email')?.touched">
-        Valid email is required
+    <!-- Row 3: Invoice Email, Company Name, Contact Name -->
+    <div class="form-row">
+      <div class="form-group">
+        <label for="invoiceEmail">Invoice Email <span class="required">*</span></label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-file"></i>
+          <input 
+            pInputText 
+            id="invoiceEmail" 
+            formControlName="invoiceEmail" 
+            type="email"
+            placeholder="Invoice email"
+            [class.ng-invalid]="registerForm.get('invoiceEmail')?.invalid && registerForm.get('invoiceEmail')?.touched">
+        </span>
+        <small class="p-error" *ngIf="registerForm.get('invoiceEmail')?.invalid && registerForm.get('invoiceEmail')?.touched">
+          Invoice email is required
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="companyName">Company Name <span class="required">*</span></label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-building"></i>
+          <input 
+            pInputText 
+            id="companyName" 
+            formControlName="companyName" 
+            placeholder="Company Name"
+            [class.ng-invalid]="registerForm.get('companyName')?.invalid && registerForm.get('companyName')?.touched">
+        </span>
+        <small class="p-error" *ngIf="registerForm.get('companyName')?.invalid && registerForm.get('companyName')?.touched">
+          Company name is required
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="contactName">Contact Name <span class="required">*</span></label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-user-edit"></i>
+          <input 
+            pInputText 
+            id="contactName" 
+            formControlName="contactName" 
+            placeholder="Contact Name"
+            [class.ng-invalid]="registerForm.get('contactName')?.invalid && registerForm.get('contactName')?.touched">
+        </span>
+        <small class="p-error" *ngIf="registerForm.get('contactName')?.invalid && registerForm.get('contactName')?.touched">
+          Contact name is required
+        </small>
+      </div>
+    </div>
+
+    <!-- Row 4: Phone, Cell, Fax -->
+    <div class="form-row">
+      <div class="form-group">
+        <label for="phone">Phone <span class="required">*</span></label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-phone"></i>
+          <input 
+            pInputText 
+            id="phone" 
+            formControlName="phone" 
+            placeholder="Phone Number"
+            [class.ng-invalid]="registerForm.get('phone')?.invalid && registerForm.get('phone')?.touched">
+        </span>
+        <small class="p-error" *ngIf="registerForm.get('phone')?.invalid && registerForm.get('phone')?.touched">
+          Phone is required
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="cell">Cell</label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-mobile"></i>
+          <input 
+            pInputText 
+            id="cell" 
+            formControlName="cell" 
+            placeholder="Cell Number">
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label for="fax">Fax</label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-print"></i>
+          <input 
+            pInputText 
+            id="fax" 
+            formControlName="fax" 
+            placeholder="Fax Number">
+        </span>
+      </div>
+    </div>
+
+    <!-- Row 5: Country, City, Zip Code -->
+    <div class="form-row">
+      <div class="form-group">
+        <label for="country">Country</label>
+        <p-dropdown 
+          id="country"
+          [options]="countries" 
+          formControlName="country"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select Country"
+          styleClass="w-100 dropdown-field"
+          [appendTo]="'body'">
+        </p-dropdown>
+      </div>
+
+      <div class="form-group">
+        <label for="city">City</label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-map-marker"></i>
+          <input 
+            pInputText 
+            id="city" 
+            formControlName="city" 
+            placeholder="City">
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label for="zipCode">Zip Code</label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-map"></i>
+          <input 
+            pInputText 
+            id="zipCode" 
+            formControlName="zipCode" 
+            placeholder="Zip Code">
+        </span>
+      </div>
+    </div>
+
+    <!-- Row 6: Reference, Website, State -->
+    <div class="form-row">
+      <div class="form-group">
+        <label for="reference">Select Reference</label>
+        <p-dropdown 
+          id="reference"
+          [options]="references" 
+          formControlName="reference"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="How did you hear about us?"
+          styleClass="w-100 dropdown-field"
+          [appendTo]="'body'">
+        </p-dropdown>
+      </div>
+
+      <div class="form-group">
+        <label for="website">Website</label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-link"></i>
+          <input 
+            pInputText 
+            id="website" 
+            formControlName="website" 
+            placeholder="Website URL">
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label for="state">State</label>
+        <span class="p-input-icon-left w-100">
+          <i class="pi pi-map"></i>
+          <input 
+            pInputText 
+            id="state" 
+            formControlName="state" 
+            placeholder="State">
+        </span>
+      </div>
+    </div>
+
+    <!-- Row 7: Address (Full Width) -->
+    <div class="form-row">
+      <div class="form-group full-width">
+        <label for="address">Enter Address</label>
+        <span class="p-input-icon-left w-100 address-textarea">
+          <i class="pi pi-home"></i>
+          <textarea 
+            pInputTextarea 
+            id="address" 
+            formControlName="address" 
+            placeholder="Enter your full address"
+            [rows]="3"
+            styleClass="w-100">
+          </textarea>
+        </span>
+      </div>
+    </div>
+
+    <!-- Terms and Conditions -->
+    <div class="form-group checkbox-group">
+      <p-checkbox 
+        formControlName="agreeToTerms" 
+        inputId="agreeToTerms"
+        [binary]="true">
+      </p-checkbox>
+      <label for="agreeToTerms" class="checkbox-label">
+        I agree to <a href="#" class="terms-link">Terms and Conditions</a>
+      </label>
+      <small class="p-error" *ngIf="registerForm.get('agreeToTerms')?.invalid && registerForm.get('agreeToTerms')?.touched" style="display: block; margin-top: 0.5rem;">
+        You must agree to the terms and conditions
       </small>
     </div>
 
-    <div class="form-group">
-      <label for="companyName">Company Name</label>
-      <input 
-        pInputText 
-        id="companyName" 
-        formControlName="companyName" 
-        placeholder="Company Name"
-        [class.ng-invalid]="registerForm.get('companyName')?.invalid && registerForm.get('companyName')?.touched">
-      <small class="p-error" *ngIf="registerForm.get('companyName')?.invalid && registerForm.get('companyName')?.touched">
-        Company name is required
-      </small>
-    </div>
-
-    <div class="form-group">
-      <label for="phoneNumber">Phone Number</label>
-      <input 
-        pInputText 
-        id="phoneNumber" 
-        formControlName="phoneNumber" 
-        placeholder="Phone Number"
-        [class.ng-invalid]="registerForm.get('phoneNumber')?.invalid && registerForm.get('phoneNumber')?.touched">
-      <small class="p-error" *ngIf="registerForm.get('phoneNumber')?.invalid && registerForm.get('phoneNumber')?.touched">
-        Phone number is required
-      </small>
-    </div>
-
-    <div class="form-group">
-      <label for="password">Password</label>
-      <input 
-        pInputText 
-        id="password" 
-        formControlName="password" 
-        type="password" 
-        placeholder="Enter your password"
-        [class.ng-invalid]="registerForm.get('password')?.invalid && registerForm.get('password')?.touched">
-      <small class="p-error" *ngIf="registerForm.get('password')?.invalid && registerForm.get('password')?.touched">
-        Password is required (min 6 characters)
-      </small>
-    </div>
-
-    <div class="form-group">
-      <label for="confirmPassword">Confirm Password</label>
-      <input 
-        pInputText 
-        id="confirmPassword" 
-        formControlName="confirmPassword" 
-        type="password" 
-        placeholder="Confirm your password"
-        [class.ng-invalid]="registerForm.get('confirmPassword')?.invalid && registerForm.get('confirmPassword')?.touched">
-      <small class="p-error" *ngIf="registerForm.get('confirmPassword')?.errors?.['passwordMismatch'] && registerForm.get('confirmPassword')?.touched">
-        Passwords do not match
-      </small>
-    </div>
-
+    <!-- Submit Button -->
     <button 
       pButton 
       type="submit" 
-      label="Register" 
       [loading]="loading"
-      [disabled]="registerForm.invalid"
-      class="p-button-primary w-100">
+      [disabled]="registerForm.invalid || loading"
+      class="p-button-primary submit-button">
+      <i class="pi pi-check" style="margin-right: 0.5rem;"></i>
+      <span>Submit</span>
     </button>
   </form>
 
   <div class="auth-footer">
-    <p>Already have an account? <a routerLink="/login">Login here</a></p>
+    <p>Already have an account? <a routerLink="/auth/login">Login Now</a></p>
   </div>
 </div>

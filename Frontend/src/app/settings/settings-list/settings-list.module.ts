@@ -15,6 +15,7 @@ import { DialogModule } from 'primeng/dialog';
 import { TagModule } from 'primeng/tag';
 import { InputSwitchModule } from 'primeng/inputswitch';
 import { TooltipModule } from 'primeng/tooltip';
+import { PasswordModule } from 'primeng/password';
 
 @NgModule({
   declarations: [SettingsListComponent],
@@ -31,7 +32,8 @@ import { TooltipModule } from 'primeng/tooltip';
     DialogModule,
     TagModule,
     InputSwitchModule,
-    TooltipModule
+    TooltipModule,
+    PasswordModule
   ],
   exports: [SettingsListComponent]
 })

@@ -9,6 +9,8 @@ public class User : BaseEntity
     public bool IsActive { get; set; } = true;
     public string? RefreshToken { get; set; }
     public DateTime? RefreshTokenExpiryTime { get; set; }
+    public string? PasswordResetToken { get; set; }
+    public DateTime? PasswordResetTokenExpiryTime { get; set; }
 
     // Navigation properties
     public Guid RoleId { get; set; }

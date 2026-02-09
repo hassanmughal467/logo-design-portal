@@ -1,6 +1,8 @@
+using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Authentication;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Infrastructure.Authentication;
+using LogoDesignPortal.Infrastructure.Email;
 using LogoDesignPortal.Infrastructure.Persistence;
 using LogoDesignPortal.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +32,9 @@ public static class DependencyInjection
 
         // Authentication
         services.AddScoped<IJwtTokenService, JwtTokenService>();
+
+        // Email
+        services.AddScoped<IEmailService, EmailService>();
 
         return services;
     }

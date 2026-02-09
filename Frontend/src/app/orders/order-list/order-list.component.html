@@ -3,6 +3,7 @@
     <div class="header-content">
       <h1 class="page-title">Orders Management</h1>
       <p class="page-subtitle">View and manage all orders</p>
+      <p *ngIf="orders.length > 0" class="page-info">Total: {{ orders.length }} order(s)</p>
     </div>
     <div class="header-actions">
       <p-button 
@@ -15,18 +16,34 @@
     </div>
   </div>
 
+  <!-- Loading State -->
+  <div *ngIf="loading" style="text-align: center; padding: 3rem;">
+    <i class="pi pi-spin pi-spinner" style="font-size: 2rem;"></i>
+    <p>Loading orders...</p>
+  </div>
+
+  <!-- Debug info (remove in production) -->
+  <div *ngIf="orders.length === 0 && !loading" style="padding: 1rem; background: #f0f0f0; margin: 1rem; border-radius: 4px;">
+    <p><strong>Debug Info:</strong></p>
+    <p>Orders array length: {{ orders.length }}</p>
+    <p>Filtered orders length: {{ filteredOrders.length }}</p>
+    <p>Loading: {{ loading }}</p>
+    <p>Check browser console for API response details</p>
+  </div>
+
   <p-card styleClass="orders-card">
     <p-table 
-      [value]="orders" 
+      [value]="selectedStatus ? filteredOrders : orders" 
       [loading]="loading"
-      [paginator]="true"
+      [paginator]="orders.length > 0"
       [rows]="rows"
       [first]="first"
       (onPage)="first = $event.first"
       [globalFilterFields]="['title', 'status', 'priority']"
       [rowsPerPageOptions]="[10, 25, 50]"
       styleClass="p-datatable-striped"
-      [responsive]="true">
+      [responsive]="true"
+      [lazy]="false">
       
       <ng-template pTemplate="caption">
         <div class="table-header">
@@ -42,6 +59,7 @@
           <p-dropdown 
             [options]="statuses" 
             [(ngModel)]="selectedStatus"
+            (onChange)="onStatusFilterChange()"
             placeholder="Filter by Status"
             [showClear]="true"
             styleClass="status-filter">

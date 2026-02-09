@@ -3,35 +3,41 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  background: linear-gradient(135deg, #0d47a1 0%, #1976d2 50%, #42a5f5 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 15s ease infinite;
   padding: 2rem;
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+  }
 }
 
-.auth-container {
-  width: 100%;
-  max-width: 450px;
-  background: var(--surface-card);
-  border-radius: var(--border-radius);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  padding: 2.5rem;
-}
-
-.auth-header {
-  text-align: center;
-  margin-bottom: 2rem;
-  
-  h1 {
-    color: var(--primary-color);
-    margin-bottom: 0.5rem;
-    font-size: 2rem;
-  }
-  
-  p {
-    color: var(--text-color-secondary);
-    margin: 0;
-  }
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 .auth-content {
   width: 100%;
+  max-width: 1200px;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
 }

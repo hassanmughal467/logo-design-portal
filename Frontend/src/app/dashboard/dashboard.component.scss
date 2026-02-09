@@ -1,13 +1,13 @@
 .dashboard {
-  padding: 1.5rem;
+  padding: 0;
 
   // Header Section
   .dashboard-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 2rem;
-    padding-bottom: 1.5rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
     border-bottom: 1px solid var(--surface-border);
 
     .header-content {
@@ -106,7 +106,7 @@
       transition: transform 0.3s ease;
 
       &.bg-primary {
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        background: linear-gradient(135deg, #0d47a1 0%, #1976d2 100%);
       }
 
       &.bg-warning {
@@ -114,7 +114,7 @@
       }
 
       &.bg-info {
-        background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+        background: linear-gradient(135deg, #0d47a1 0%, #1976d2 100%);
       }
 
       &.bg-success {

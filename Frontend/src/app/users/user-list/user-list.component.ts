@@ -16,7 +16,11 @@ export class UserListComponent implements OnInit, OnDestroy {
   users: User[] = [];
   loading = false;
   displayCreateDialog = false;
+  displayResetPasswordDialog = false;
   createUserForm: FormGroup;
+  resetPasswordForm: FormGroup;
+  selectedUserForReset: User | null = null;
+  resettingPassword = false;
   selectedUsers: User[] = [];
   roles = Object.values(UserRole);
   
@@ -40,9 +44,30 @@ export class UserListComponent implements OnInit, OnDestroy {
       lastName: ['', Validators.required],
       role: ['', Validators.required]
     });
+
+    this.resetPasswordForm = this.fb.group({
+      newPassword: ['', [Validators.required, Validators.minLength(8)]],
+      confirmPassword: ['', [Validators.required]]
+    }, { validators: this.passwordMatchValidator });
+  }
+
+  passwordMatchValidator(form: FormGroup) {
+    const newPassword = form.get('newPassword');
+    const confirmPassword = form.get('confirmPassword');
+    
+    if (newPassword && confirmPassword && newPassword.value !== confirmPassword.value) {
+      confirmPassword.setErrors({ passwordMismatch: true });
+      return { passwordMismatch: true };
+    } else {
+      if (confirmPassword?.hasError('passwordMismatch')) {
+        confirmPassword.setErrors(null);
+      }
+      return null;
+    }
   }
 
   ngOnInit(): void {
+    console.log('UserListComponent ngOnInit called');
     this.loadUsers();
   }
 
@@ -52,22 +77,52 @@ export class UserListComponent implements OnInit, OnDestroy {
   }
 
   loadUsers(): void {
+    console.log('loadUsers() called');
     this.loading = true;
+    const user = this.authService.getCurrentUser();
+    console.log('Current user:', user);
+    console.log('Loading users from endpoint: users');
+    
     this.apiService.get<User[]>('users')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (users) => {
+          console.log('Raw users from API:', users);
+          if (!users || !Array.isArray(users)) {
+            console.warn('Users is not an array:', users);
+            this.users = [];
+            this.loading = false;
+            return;
+          }
           this.users = users;
+          console.log('Final users array:', this.users);
           this.loading = false;
         },
         error: (error) => {
           console.error('Error loading users:', error);
+          console.error('Error details:', {
+            status: error.status,
+            statusText: error.statusText,
+            message: error.message,
+            error: error.error
+          });
+          
+          let errorMessage = 'Failed to load users';
+          if (error.status === 403) {
+            errorMessage = 'You do not have permission to view users';
+          } else if (error.status === 401) {
+            errorMessage = 'Please log in to view users';
+          } else if (error.error?.error) {
+            errorMessage = error.error.error;
+          }
+          
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load users'
+            detail: errorMessage
           });
           this.loading = false;
+          this.users = [];
         }
       });
   }
@@ -127,6 +182,47 @@ export class UserListComponent implements OnInit, OnDestroy {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
+    });
+  }
+
+  canResetPassword(): boolean {
+    return this.authService.hasAnyRole(['SuperAdmin', 'Admin']);
+  }
+
+  openResetPasswordDialog(user: User): void {
+    this.selectedUserForReset = user;
+    this.resetPasswordForm.reset();
+    this.displayResetPasswordDialog = true;
+  }
+
+  resetUserPassword(): void {
+    if (this.resetPasswordForm.invalid || !this.selectedUserForReset) {
+      this.resetPasswordForm.markAllAsTouched();
+      return;
+    }
+
+    this.resettingPassword = true;
+    const newPassword = this.resetPasswordForm.get('newPassword')?.value;
+
+    this.authService.resetUserPassword(this.selectedUserForReset.id, newPassword).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: `Password has been reset for ${this.selectedUserForReset?.email}`
+        });
+        this.displayResetPasswordDialog = false;
+        this.selectedUserForReset = null;
+        this.resettingPassword = false;
+      },
+      error: (error) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: error.error?.error || 'Failed to reset password'
+        });
+        this.resettingPassword = false;
+      }
     });
   }
 }

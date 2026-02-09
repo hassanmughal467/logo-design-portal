@@ -160,7 +160,7 @@
                   type="text" 
                   pInputText 
                   [(ngModel)]="brandSettings.primaryColor"
-                  placeholder="#6366f1"
+                  placeholder="#0d47a1"
                   class="color-text-input" />
               </div>
             </div>
@@ -339,6 +339,89 @@
             <p>No payment methods configured</p>
             <p class="empty-subtext">Add a payment method to get started</p>
           </div>
+        </div>
+      </p-tabPanel>
+
+      <!-- Change Password Tab -->
+      <p-tabPanel header="Change Password" leftIcon="pi pi-key">
+        <div class="settings-section">
+          <h3 class="section-title">Change Your Password</h3>
+          <p class="section-description">Update your account password. Use a strong password with at least 8 characters. Including uppercase, lowercase, numbers, and special characters will make it more secure.</p>
+
+          <form autocomplete="off" (ngSubmit)="changePassword()">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label for="currentPassword">Current Password *</label>
+              <p-password 
+                id="currentPassword"
+                name="currentPassword"
+                [(ngModel)]="passwordForm.currentPassword"
+                placeholder="Enter current password"
+                [toggleMask]="true"
+                [feedback]="false"
+                styleClass="w-100"
+                [inputStyleClass]="'full-width'"
+                required>
+              </p-password>
+            </div>
+
+            <div class="form-group full-width">
+              <label for="newPassword">New Password *</label>
+              <p-password 
+                id="newPassword"
+                name="newPassword"
+                [(ngModel)]="passwordForm.newPassword"
+                placeholder="Enter new password (min 8 characters)"
+                [toggleMask]="true"
+                [feedback]="true"
+                styleClass="w-100"
+                [inputStyleClass]="'full-width'"
+                required>
+              </p-password>
+              <small class="password-requirements" *ngIf="passwordForm.newPassword">
+                <div class="password-strength" *ngIf="passwordForm.newPassword">
+                  <span>Password Strength: </span>
+                  <strong [style.color]="getPasswordStrengthColor()">{{ getPasswordStrengthLabel() }}</strong>
+                </div>
+                <div class="requirements-list">
+                  <p><strong>Requirements:</strong></p>
+                  <ul>
+                    <li [class.valid]="hasMinLength()">At least 8 characters (required)</li>
+                    <li [class.valid]="hasUppercase()">One uppercase letter (recommended)</li>
+                    <li [class.valid]="hasLowercase()">One lowercase letter (recommended)</li>
+                    <li [class.valid]="hasNumber()">One number (recommended)</li>
+                    <li [class.valid]="hasSpecialChar()">One special character (recommended)</li>
+                  </ul>
+                </div>
+              </small>
+            </div>
+
+            <div class="form-group full-width">
+              <label for="confirmPassword">Confirm New Password *</label>
+              <p-password 
+                id="confirmPassword"
+                name="confirmPassword"
+                [(ngModel)]="passwordForm.confirmPassword"
+                placeholder="Confirm new password"
+                [toggleMask]="true"
+                [feedback]="false"
+                styleClass="w-100"
+                [inputStyleClass]="'full-width'"
+                required>
+              </p-password>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <p-button 
+              type="submit"
+              label="Change Password" 
+              icon="pi pi-save"
+              [loading]="changingPassword"
+              styleClass="p-button-primary">
+            </p-button>
+          </div>
+          </form>
         </div>
       </p-tabPanel>
 

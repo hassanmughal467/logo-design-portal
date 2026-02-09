@@ -15,7 +15,9 @@ export class ApiService {
   get<T>(endpoint: string): Observable<T> {
     // Remove leading slash from endpoint if present to avoid double slashes
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
-    return this.http.get<T>(`${this.baseUrl}/${cleanEndpoint}`);
+    const fullUrl = `${this.baseUrl}/${cleanEndpoint}`;
+    console.log('API GET request:', fullUrl);
+    return this.http.get<T>(fullUrl);
   }
 
   post<T>(endpoint: string, body: any): Observable<T> {

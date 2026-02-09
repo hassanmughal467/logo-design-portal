@@ -1,8 +1,15 @@
 <div class="login-container">
-  <h2>Login</h2>
-  <p class="subtitle">Sign in to your account</p>
+  <div class="login-header">
+    <img src="assets/images/logo.png" alt="Hawk Merchandising Logo" class="logo" *ngIf="logoExists">
+    <h1>Hawk Merchandising Web Portal</h1>
+    <p class="tagline">Embroidery Digitizing & Vector Services</p>
+  </div>
+  
+  <div class="login-form-wrapper">
+    <h2>Login</h2>
+    <p class="subtitle">Sign in to your account</p>
 
-  <form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" autocomplete="off">
     <div class="form-group">
       <label for="email">Email</label>
       <input 
@@ -10,10 +17,16 @@
         id="email" 
         formControlName="email" 
         type="email" 
+        autocomplete="username"
+        spellcheck="false"
+        data-lpignore="true"
         placeholder="Enter your email"
         [class.ng-invalid]="loginForm.get('email')?.invalid && loginForm.get('email')?.touched">
-      <small class="p-error" *ngIf="loginForm.get('email')?.invalid && loginForm.get('email')?.touched">
-        Valid email is required
+      <small class="p-error" *ngIf="loginForm.get('email')?.hasError('required') && loginForm.get('email')?.touched">
+        Email is required
+      </small>
+      <small class="p-error" *ngIf="loginForm.get('email')?.hasError('email') && loginForm.get('email')?.touched && !loginForm.get('email')?.hasError('required')">
+        Invalid email format
       </small>
     </div>
 
@@ -26,11 +39,20 @@
         [toggleMask]="true"
         [feedback]="false"
         styleClass="w-100"
-        [inputStyleClass]="loginForm.get('password')?.invalid && loginForm.get('password')?.touched ? 'ng-invalid' : ''">
+        [inputStyleClass]="(loginForm.get('password')?.invalid && loginForm.get('password')?.touched) || loginError ? 'ng-invalid' : ''">
       </p-password>
-      <small class="p-error" *ngIf="loginForm.get('password')?.invalid && loginForm.get('password')?.touched">
-        Password is required (min 6 characters)
+      <input type="hidden" autocomplete="username" [value]="loginForm.get('email')?.value">
+      <small class="p-error" *ngIf="loginForm.get('password')?.hasError('required') && loginForm.get('password')?.touched">
+        Password is required
       </small>
+      <small class="p-error" *ngIf="loginForm.get('password')?.hasError('minlength') && loginForm.get('password')?.touched && !loginForm.get('password')?.hasError('required')">
+        Password must be at least 6 characters
+      </small>
+    </div>
+
+    <!-- Show login error below password field, above login button -->
+    <div class="form-group" *ngIf="loginError">
+      <small class="p-error" style="display: block; margin-bottom: 15px;">{{ loginError }}</small>
     </div>
 
     <button 
@@ -38,12 +60,14 @@
       type="submit" 
       label="Login" 
       [loading]="loading"
-      [disabled]="loginForm.invalid"
+      [disabled]="loading"
       class="p-button-primary w-100">
     </button>
-  </form>
+    </form>
 
-  <div class="auth-footer">
+    <div class="auth-footer">
     <p>Don't have an account? <a routerLink="/register">Register here</a></p>
+    <p><a routerLink="/forgot-password" class="forgot-password-link">Forgot your password?</a></p>
+  </div>
   </div>
 </div>
