@@ -162,29 +162,34 @@
     [(visible)]="displayCreateDialog" 
     header="Create New User" 
     [modal]="true"
-    [style]="{width: '550px'}"
+    [style]="{width: '700px', maxHeight: '90vh'}"
     [closable]="true"
     [draggable]="false"
-    [resizable]="false">
+    [resizable]="false"
+    [styleClass]="'create-user-dialog'">
     
     <div class="create-user-content">
       <!-- Header Section -->
-      <div class="create-user-header">
-        <div class="create-user-icon">
+      <div class="edit-user-header">
+        <div class="edit-user-avatar">
           <i class="pi pi-user-plus"></i>
         </div>
-        <div class="create-user-info">
-          <div class="create-user-title">Add New User</div>
-          <div class="create-user-subtitle">Fill in the details to create a new user account</div>
+        <div class="edit-user-info">
+          <div class="edit-user-name">Add New User</div>
+          <div class="edit-user-email">
+            <i class="pi pi-info-circle"></i>
+            Fill in the details to create a new user account
+          </div>
         </div>
       </div>
 
       <div class="divider"></div>
 
       <!-- Create Form -->
-      <form [formGroup]="createUserForm" (ngSubmit)="createUser()" class="create-user-form" autocomplete="off">
-        <div class="create-form-fields">
-          <div class="form-field">
+      <form [formGroup]="createUserForm" (ngSubmit)="createUser()" class="edit-user-form" autocomplete="off">
+        <div class="edit-form-fields">
+          <!-- Email (full width) -->
+          <div class="form-field full-width">
             <label for="email">
               <i class="pi pi-envelope"></i>
               Email <span class="required">*</span>
@@ -205,28 +210,7 @@
             </small>
           </div>
 
-          <div class="form-field">
-            <label for="password">
-              <i class="pi pi-lock"></i>
-              Password <span class="required">*</span>
-            </label>
-            <p-password 
-              id="password"
-              formControlName="password"
-              placeholder="Enter password"
-              [toggleMask]="true"
-              [feedback]="true"
-              styleClass="w-100 password-input"
-              [inputStyleClass]="createUserForm.get('password')?.invalid && createUserForm.get('password')?.touched ? 'ng-invalid' : ''">
-            </p-password>
-            <small 
-              class="p-error" 
-              *ngIf="createUserForm.get('password')?.invalid && createUserForm.get('password')?.touched">
-              <i class="pi pi-exclamation-circle"></i>
-              Password must be at least 6 characters
-            </small>
-          </div>
-
+          <!-- First Name and Last Name (side by side) -->
           <div class="form-field">
             <label for="firstName">
               <i class="pi pi-user"></i>
@@ -269,7 +253,31 @@
             </small>
           </div>
 
-          <div class="form-field">
+          <!-- Password (full width) -->
+          <div class="form-field full-width">
+            <label for="password">
+              <i class="pi pi-lock"></i>
+              Password <span class="required">*</span>
+            </label>
+            <p-password 
+              id="password"
+              formControlName="password"
+              placeholder="Enter password"
+              [toggleMask]="true"
+              [feedback]="true"
+              styleClass="w-100 password-input"
+              [inputStyleClass]="createUserForm.get('password')?.invalid && createUserForm.get('password')?.touched ? 'ng-invalid' : ''">
+            </p-password>
+            <small 
+              class="p-error" 
+              *ngIf="createUserForm.get('password')?.invalid && createUserForm.get('password')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              Password must be at least 6 characters
+            </small>
+          </div>
+
+          <!-- Role Field (full width) -->
+          <div class="form-field full-width">
             <label for="role">
               <i class="pi pi-shield"></i>
               Role <span class="required">*</span>
@@ -292,6 +300,304 @@
               Role is required
             </small>
           </div>
+
+          <!-- Additional User Fields -->
+          <div class="form-field">
+            <label for="secondaryEmail">
+              <i class="pi pi-envelope"></i>
+              Secondary Email
+            </label>
+            <input 
+              id="secondaryEmail"
+              type="email" 
+              pInputText 
+              formControlName="secondaryEmail"
+              placeholder="Enter secondary email (optional)"
+              autocomplete="off" />
+          </div>
+
+          <div class="form-field" *ngIf="isClientRole()">
+            <label for="invoiceEmail">
+              <i class="pi pi-envelope"></i>
+              Invoice Email <span class="required">*</span>
+            </label>
+            <input 
+              id="invoiceEmail"
+              type="email" 
+              pInputText 
+              formControlName="invoiceEmail"
+              placeholder="Enter invoice email"
+              autocomplete="off"
+              [class.ng-invalid]="createUserForm.get('invoiceEmail')?.invalid && createUserForm.get('invoiceEmail')?.touched" />
+            <small 
+              class="p-error" 
+              *ngIf="createUserForm.get('invoiceEmail')?.invalid && createUserForm.get('invoiceEmail')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              Invoice email is required for Client role
+            </small>
+          </div>
+
+          <!-- Client Profile Fields (shown when Client role is selected) -->
+          <ng-container *ngIf="isClientRole()">
+            <div class="form-section-divider">
+              <span>Client Information</span>
+            </div>
+
+            <div class="form-field">
+              <label for="companyName">
+                <i class="pi pi-building"></i>
+                Company Name <span class="required">*</span>
+              </label>
+              <input 
+                id="companyName"
+                type="text" 
+                pInputText 
+                formControlName="companyName"
+                placeholder="Enter company name"
+                autocomplete="off"
+                [class.ng-invalid]="createUserForm.get('companyName')?.invalid && createUserForm.get('companyName')?.touched" />
+              <small 
+                class="p-error" 
+                *ngIf="createUserForm.get('companyName')?.invalid && createUserForm.get('companyName')?.touched">
+                <i class="pi pi-exclamation-circle"></i>
+                Company name is required
+              </small>
+            </div>
+
+            <div class="form-field">
+              <label for="contactName">
+                <i class="pi pi-user"></i>
+                Contact Name <span class="required">*</span>
+              </label>
+              <input 
+                id="contactName"
+                type="text" 
+                pInputText 
+                formControlName="contactName"
+                placeholder="Enter contact name"
+                autocomplete="off"
+                [class.ng-invalid]="createUserForm.get('contactName')?.invalid && createUserForm.get('contactName')?.touched" />
+              <small 
+                class="p-error" 
+                *ngIf="createUserForm.get('contactName')?.invalid && createUserForm.get('contactName')?.touched">
+                <i class="pi pi-exclamation-circle"></i>
+                Contact name is required
+              </small>
+            </div>
+
+            <div class="form-field">
+              <label for="phoneNumber">
+                <i class="pi pi-phone"></i>
+                Phone Number <span class="required">*</span>
+              </label>
+              <input 
+                id="phoneNumber"
+                type="tel" 
+                pInputText 
+                formControlName="phoneNumber"
+                placeholder="Enter phone number"
+                autocomplete="off"
+                [class.ng-invalid]="createUserForm.get('phoneNumber')?.invalid && createUserForm.get('phoneNumber')?.touched" />
+              <small 
+                class="p-error" 
+                *ngIf="createUserForm.get('phoneNumber')?.invalid && createUserForm.get('phoneNumber')?.touched">
+                <i class="pi pi-exclamation-circle"></i>
+                Phone number is required
+              </small>
+            </div>
+
+            <div class="form-field">
+              <label for="cell">
+                <i class="pi pi-mobile"></i>
+                Cell
+              </label>
+              <input 
+                id="cell"
+                type="tel" 
+                pInputText 
+                formControlName="cell"
+                placeholder="Enter cell number"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="fax">
+                <i class="pi pi-print"></i>
+                Fax
+              </label>
+              <input 
+                id="fax"
+                type="tel" 
+                pInputText 
+                formControlName="fax"
+                placeholder="Enter fax number"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="address">
+                <i class="pi pi-map-marker"></i>
+                Address
+              </label>
+              <textarea 
+                id="address"
+                pInputTextarea 
+                formControlName="address"
+                placeholder="Enter address"
+                rows="2"
+                autocomplete="off"></textarea>
+            </div>
+
+            <div class="form-field">
+              <label for="city">
+                <i class="pi pi-map"></i>
+                City
+              </label>
+              <input 
+                id="city"
+                type="text" 
+                pInputText 
+                formControlName="city"
+                placeholder="Enter city"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="state">
+                <i class="pi pi-map"></i>
+                State
+              </label>
+              <input 
+                id="state"
+                type="text" 
+                pInputText 
+                formControlName="state"
+                placeholder="Enter state"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="country">
+                <i class="pi pi-globe"></i>
+                Country
+              </label>
+              <input 
+                id="country"
+                type="text" 
+                pInputText 
+                formControlName="country"
+                placeholder="Enter country"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="postalCode">
+                <i class="pi pi-map-marker"></i>
+                Postal Code
+              </label>
+              <input 
+                id="postalCode"
+                type="text" 
+                pInputText 
+                formControlName="postalCode"
+                placeholder="Enter postal code"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="website">
+                <i class="pi pi-link"></i>
+                Website
+              </label>
+              <input 
+                id="website"
+                type="url" 
+                pInputText 
+                formControlName="website"
+                placeholder="Enter website URL"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="reference">
+                <i class="pi pi-info-circle"></i>
+                Reference
+              </label>
+              <input 
+                id="reference"
+                type="text" 
+                pInputText 
+                formControlName="reference"
+                placeholder="How did you hear about us?"
+                autocomplete="off" />
+            </div>
+          </ng-container>
+
+          <!-- Designer Profile Fields (shown when Designer role is selected) -->
+          <ng-container *ngIf="isDesignerRole()">
+            <div class="form-section-divider">
+              <span>Designer Information</span>
+            </div>
+
+            <div class="form-field">
+              <label for="specialization">
+                <i class="pi pi-briefcase"></i>
+                Specialization
+              </label>
+              <input 
+                id="specialization"
+                type="text" 
+                pInputText 
+                formControlName="specialization"
+                placeholder="Enter specialization"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="bio">
+                <i class="pi pi-file-edit"></i>
+                Bio
+              </label>
+              <textarea 
+                id="bio"
+                pInputTextarea 
+                formControlName="bio"
+                placeholder="Enter bio"
+                rows="4"
+                autocomplete="off"></textarea>
+            </div>
+
+            <div class="form-field">
+              <label for="hourlyRate">
+                <i class="pi pi-dollar"></i>
+                Hourly Rate
+              </label>
+              <p-inputNumber 
+                id="hourlyRate"
+                formControlName="hourlyRate"
+                placeholder="Enter hourly rate"
+                [min]="0"
+                [maxFractionDigits]="2"
+                mode="decimal"
+                [showButtons]="false"
+                styleClass="w-100">
+              </p-inputNumber>
+            </div>
+
+            <div class="form-field">
+              <div class="checkbox-field-enhanced">
+                <p-checkbox 
+                  formControlName="isAvailable"
+                  [binary]="true"
+                  inputId="isAvailable">
+                </p-checkbox>
+                <label for="isAvailable">
+                  <i class="pi pi-check-circle"></i>
+                  Available for Projects
+                </label>
+              </div>
+            </div>
+          </ng-container>
         </div>
       </form>
     </div>
@@ -473,12 +779,17 @@
     [(visible)]="displayViewDialog" 
     header="User Details" 
     [modal]="true"
-    [style]="{width: '650px'}"
+    [style]="{width: '700px', maxHeight: '90vh'}"
     [closable]="true"
     [draggable]="false"
     [resizable]="false">
     
-    <div *ngIf="selectedUserForView" class="view-user-content">
+    <div *ngIf="loadingUserDetails" class="loading-state" style="text-align: center; padding: 3rem;">
+      <i class="pi pi-spin pi-spinner" style="font-size: 2rem;"></i>
+      <p>Loading user details...</p>
+    </div>
+    
+    <div *ngIf="!loadingUserDetails && selectedUserForView" class="view-user-content">
       <!-- User Header Section -->
       <div class="user-header-section">
         <div class="user-avatar">
@@ -527,6 +838,26 @@
           </div>
         </div>
 
+        <div class="detail-item" *ngIf="getSecondaryEmail()">
+          <div class="detail-icon">
+            <i class="pi pi-envelope"></i>
+          </div>
+          <div class="detail-content">
+            <div class="detail-label">Secondary Email</div>
+            <div class="detail-value">{{ getSecondaryEmail() }}</div>
+          </div>
+        </div>
+
+        <div class="detail-item" *ngIf="getInvoiceEmail()">
+          <div class="detail-icon">
+            <i class="pi pi-envelope"></i>
+          </div>
+          <div class="detail-content">
+            <div class="detail-label">Invoice Email</div>
+            <div class="detail-value">{{ getInvoiceEmail() }}</div>
+          </div>
+        </div>
+
         <div class="detail-item">
           <div class="detail-icon">
             <i class="pi pi-shield"></i>
@@ -542,6 +873,190 @@
             </div>
           </div>
         </div>
+
+        <!-- Client Profile Information -->
+        <ng-container *ngIf="shouldShowClientSection()">
+          <div class="detail-section-divider">
+            <span>Client Information</span>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.companyName">
+            <div class="detail-icon">
+              <i class="pi pi-building"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Company Name</div>
+              <div class="detail-value">{{ getClientProfile()?.companyName }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.contactName">
+            <div class="detail-icon">
+              <i class="pi pi-user"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Contact Name</div>
+              <div class="detail-value">{{ getClientProfile()?.contactName }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.phoneNumber">
+            <div class="detail-icon">
+              <i class="pi pi-phone"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Phone Number</div>
+              <div class="detail-value">{{ getClientProfile()?.phoneNumber }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.cell">
+            <div class="detail-icon">
+              <i class="pi pi-mobile"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Cell</div>
+              <div class="detail-value">{{ getClientProfile()?.cell }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.fax">
+            <div class="detail-icon">
+              <i class="pi pi-print"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Fax</div>
+              <div class="detail-value">{{ getClientProfile()?.fax }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.address">
+            <div class="detail-icon">
+              <i class="pi pi-map-marker"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Address</div>
+              <div class="detail-value">{{ getClientProfile()?.address }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.city">
+            <div class="detail-icon">
+              <i class="pi pi-map"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">City</div>
+              <div class="detail-value">{{ getClientProfile()?.city }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.state">
+            <div class="detail-icon">
+              <i class="pi pi-map"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">State</div>
+              <div class="detail-value">{{ getClientProfile()?.state }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.country">
+            <div class="detail-icon">
+              <i class="pi pi-globe"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Country</div>
+              <div class="detail-value">{{ getClientProfile()?.country }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.postalCode">
+            <div class="detail-icon">
+              <i class="pi pi-map-marker"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Postal Code</div>
+              <div class="detail-value">{{ getClientProfile()?.postalCode }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.website">
+            <div class="detail-icon">
+              <i class="pi pi-link"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Website</div>
+              <div class="detail-value">
+                <a [href]="getClientProfile()?.website" target="_blank" rel="noopener noreferrer">
+                  {{ getClientProfile()?.website }}
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.reference">
+            <div class="detail-icon">
+              <i class="pi pi-info-circle"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Reference</div>
+              <div class="detail-value">{{ getClientProfile()?.reference }}</div>
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- Designer Profile Information -->
+        <ng-container *ngIf="shouldShowDesignerSection()">
+          <div class="detail-section-divider">
+            <span>Designer Information</span>
+          </div>
+
+          <div class="detail-item" *ngIf="getDesignerProfile()?.specialization">
+            <div class="detail-icon">
+              <i class="pi pi-briefcase"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Specialization</div>
+              <div class="detail-value">{{ getDesignerProfile()?.specialization }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getDesignerProfile()?.bio">
+            <div class="detail-icon">
+              <i class="pi pi-file-edit"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Bio</div>
+              <div class="detail-value">{{ getDesignerProfile()?.bio }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getDesignerHourlyRate() !== null">
+            <div class="detail-icon">
+              <i class="pi pi-dollar"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Hourly Rate</div>
+              <div class="detail-value">${{ (getDesignerHourlyRate() || 0) | number:'1.2-2' }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <div class="detail-icon">
+              <i class="pi pi-check-circle"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Available for Projects</div>
+              <div class="detail-value">
+                <p-tag 
+                  [value]="getDesignerIsAvailable() ? 'Yes' : 'No'" 
+                  [severity]="getDesignerIsAvailable() ? 'success' : 'danger'"
+                  [rounded]="true">
+                </p-tag>
+              </div>
+            </div>
+          </div>
+        </ng-container>
 
         <div class="detail-item">
           <div class="detail-icon">
@@ -588,10 +1103,11 @@
     [(visible)]="displayEditDialog" 
     header="Edit User" 
     [modal]="true"
-    [style]="{width: '550px'}"
+    [style]="{width: '700px', maxHeight: '90vh'}"
     [closable]="true"
     [draggable]="false"
     [resizable]="false"
+    [styleClass]="'edit-user-dialog'"
     (onShow)="onEditDialogShow()">
     
     <div *ngIf="loadingUserDetails" class="loading-state">
@@ -719,6 +1235,276 @@
               </label>
             </div>
           </div>
+
+          <!-- Additional User Fields -->
+          <div class="form-field">
+            <label for="editSecondaryEmail">
+              <i class="pi pi-envelope"></i>
+              Secondary Email
+            </label>
+            <input 
+              id="editSecondaryEmail"
+              type="email" 
+              pInputText 
+              formControlName="secondaryEmail"
+              placeholder="Enter secondary email (optional)"
+              autocomplete="off" />
+          </div>
+
+          <div class="form-field" *ngIf="isEditClientRole()">
+            <label for="editInvoiceEmail">
+              <i class="pi pi-envelope"></i>
+              Invoice Email
+            </label>
+            <input 
+              id="editInvoiceEmail"
+              type="email" 
+              pInputText 
+              formControlName="invoiceEmail"
+              placeholder="Enter invoice email"
+              autocomplete="off" />
+          </div>
+
+          <!-- Client Profile Fields -->
+          <ng-container *ngIf="isEditClientRole()">
+            <div class="form-section-divider">
+              <span>Client Information</span>
+            </div>
+
+            <div class="form-field">
+              <label for="editCompanyName">
+                <i class="pi pi-building"></i>
+                Company Name
+              </label>
+              <input 
+                id="editCompanyName"
+                type="text" 
+                pInputText 
+                formControlName="companyName"
+                placeholder="Enter company name"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editContactName">
+                <i class="pi pi-user"></i>
+                Contact Name
+              </label>
+              <input 
+                id="editContactName"
+                type="text" 
+                pInputText 
+                formControlName="contactName"
+                placeholder="Enter contact name"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editPhoneNumber">
+                <i class="pi pi-phone"></i>
+                Phone Number
+              </label>
+              <input 
+                id="editPhoneNumber"
+                type="tel" 
+                pInputText 
+                formControlName="phoneNumber"
+                placeholder="Enter phone number"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editCell">
+                <i class="pi pi-mobile"></i>
+                Cell
+              </label>
+              <input 
+                id="editCell"
+                type="tel" 
+                pInputText 
+                formControlName="cell"
+                placeholder="Enter cell number"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editFax">
+                <i class="pi pi-print"></i>
+                Fax
+              </label>
+              <input 
+                id="editFax"
+                type="tel" 
+                pInputText 
+                formControlName="fax"
+                placeholder="Enter fax number"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editAddress">
+                <i class="pi pi-map-marker"></i>
+                Address
+              </label>
+              <textarea 
+                id="editAddress"
+                pInputTextarea 
+                formControlName="address"
+                placeholder="Enter address"
+                rows="2"
+                autocomplete="off"></textarea>
+            </div>
+
+            <div class="form-field">
+              <label for="editCity">
+                <i class="pi pi-map"></i>
+                City
+              </label>
+              <input 
+                id="editCity"
+                type="text" 
+                pInputText 
+                formControlName="city"
+                placeholder="Enter city"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editState">
+                <i class="pi pi-map"></i>
+                State
+              </label>
+              <input 
+                id="editState"
+                type="text" 
+                pInputText 
+                formControlName="state"
+                placeholder="Enter state"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editCountry">
+                <i class="pi pi-globe"></i>
+                Country
+              </label>
+              <input 
+                id="editCountry"
+                type="text" 
+                pInputText 
+                formControlName="country"
+                placeholder="Enter country"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editPostalCode">
+                <i class="pi pi-map-marker"></i>
+                Postal Code
+              </label>
+              <input 
+                id="editPostalCode"
+                type="text" 
+                pInputText 
+                formControlName="postalCode"
+                placeholder="Enter postal code"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editWebsite">
+                <i class="pi pi-link"></i>
+                Website
+              </label>
+              <input 
+                id="editWebsite"
+                type="url" 
+                pInputText 
+                formControlName="website"
+                placeholder="Enter website URL"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editReference">
+                <i class="pi pi-info-circle"></i>
+                Reference
+              </label>
+              <input 
+                id="editReference"
+                type="text" 
+                pInputText 
+                formControlName="reference"
+                placeholder="How did you hear about us?"
+                autocomplete="off" />
+            </div>
+          </ng-container>
+
+          <!-- Designer Profile Fields -->
+          <ng-container *ngIf="isEditDesignerRole()">
+            <div class="form-section-divider">
+              <span>Designer Information</span>
+            </div>
+
+            <div class="form-field">
+              <label for="editSpecialization">
+                <i class="pi pi-briefcase"></i>
+                Specialization
+              </label>
+              <input 
+                id="editSpecialization"
+                type="text" 
+                pInputText 
+                formControlName="specialization"
+                placeholder="Enter specialization"
+                autocomplete="off" />
+            </div>
+
+            <div class="form-field">
+              <label for="editBio">
+                <i class="pi pi-file-edit"></i>
+                Bio
+              </label>
+              <textarea 
+                id="editBio"
+                pInputTextarea 
+                formControlName="bio"
+                placeholder="Enter bio"
+                rows="4"
+                autocomplete="off"></textarea>
+            </div>
+
+            <div class="form-field">
+              <label for="editHourlyRate">
+                <i class="pi pi-dollar"></i>
+                Hourly Rate
+              </label>
+              <p-inputNumber 
+                id="editHourlyRate"
+                formControlName="hourlyRate"
+                placeholder="Enter hourly rate"
+                [min]="0"
+                [maxFractionDigits]="2"
+                mode="decimal"
+                [showButtons]="false"
+                styleClass="w-100">
+              </p-inputNumber>
+            </div>
+
+            <div class="form-field">
+              <div class="checkbox-field-enhanced">
+                <p-checkbox 
+                  formControlName="isAvailable"
+                  [binary]="true"
+                  inputId="editIsAvailable">
+                </p-checkbox>
+                <label for="editIsAvailable">
+                  <i class="pi pi-check-circle"></i>
+                  Available for Projects
+                </label>
+              </div>
+            </div>
+          </ng-container>
         </div>
       </form>
     </div>

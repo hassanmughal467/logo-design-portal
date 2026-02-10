@@ -61,10 +61,53 @@ export class UserListComponent implements OnInit, OnDestroy {
   ) {
     this.createUserForm = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(6)]],
       firstName: ['', Validators.required],
       lastName: ['', Validators.required],
-      role: ['', Validators.required]
+      password: ['', [Validators.required, Validators.minLength(6)]],
+      role: ['', Validators.required],
+      // Additional user fields
+      secondaryEmail: ['', [Validators.email]],
+      invoiceEmail: ['', [Validators.email]],
+      // Client profile fields
+      companyName: [''],
+      contactName: [''],
+      phoneNumber: [''],
+      cell: [''],
+      fax: [''],
+      address: [''],
+      city: [''],
+      state: [''],
+      country: [''],
+      postalCode: [''],
+      website: [''],
+      reference: [''],
+      // Designer profile fields
+      specialization: [''],
+      bio: [''],
+      hourlyRate: [null],
+      isAvailable: [true]
+    });
+
+    // Update validators when role changes
+    this.createUserForm.get('role')?.valueChanges.subscribe(role => {
+      if (role === 'Client') {
+        // Make Client mandatory fields required
+        this.createUserForm.get('invoiceEmail')?.setValidators([Validators.required, Validators.email]);
+        this.createUserForm.get('companyName')?.setValidators([Validators.required]);
+        this.createUserForm.get('contactName')?.setValidators([Validators.required]);
+        this.createUserForm.get('phoneNumber')?.setValidators([Validators.required]);
+      } else {
+        // Remove required validators for non-Client roles
+        this.createUserForm.get('invoiceEmail')?.setValidators([Validators.email]);
+        this.createUserForm.get('companyName')?.clearValidators();
+        this.createUserForm.get('contactName')?.clearValidators();
+        this.createUserForm.get('phoneNumber')?.clearValidators();
+      }
+      // Update validity
+      this.createUserForm.get('invoiceEmail')?.updateValueAndValidity({ emitEvent: false });
+      this.createUserForm.get('companyName')?.updateValueAndValidity({ emitEvent: false });
+      this.createUserForm.get('contactName')?.updateValueAndValidity({ emitEvent: false });
+      this.createUserForm.get('phoneNumber')?.updateValueAndValidity({ emitEvent: false });
     });
 
     this.resetPasswordForm = this.fb.group({
@@ -77,7 +120,50 @@ export class UserListComponent implements OnInit, OnDestroy {
       firstName: ['', Validators.required],
       lastName: ['', Validators.required],
       role: ['', Validators.required],
-      isActive: [true]
+      isActive: [true],
+      // Additional user fields
+      secondaryEmail: ['', [Validators.email]],
+      invoiceEmail: ['', [Validators.email]],
+      // Client profile fields
+      companyName: [''],
+      contactName: [''],
+      phoneNumber: [''],
+      cell: [''],
+      fax: [''],
+      address: [''],
+      city: [''],
+      state: [''],
+      country: [''],
+      postalCode: [''],
+      website: [''],
+      reference: [''],
+      // Designer profile fields
+      specialization: [''],
+      bio: [''],
+      hourlyRate: [null],
+      isAvailable: [true]
+    });
+
+    // Update validators when role changes in edit form
+    this.editUserForm.get('role')?.valueChanges.subscribe(role => {
+      if (role === 'Client') {
+        // Make Client mandatory fields required
+        this.editUserForm.get('invoiceEmail')?.setValidators([Validators.required, Validators.email]);
+        this.editUserForm.get('companyName')?.setValidators([Validators.required]);
+        this.editUserForm.get('contactName')?.setValidators([Validators.required]);
+        this.editUserForm.get('phoneNumber')?.setValidators([Validators.required]);
+      } else {
+        // Remove required validators for non-Client roles
+        this.editUserForm.get('invoiceEmail')?.setValidators([Validators.email]);
+        this.editUserForm.get('companyName')?.clearValidators();
+        this.editUserForm.get('contactName')?.clearValidators();
+        this.editUserForm.get('phoneNumber')?.clearValidators();
+      }
+      // Update validity
+      this.editUserForm.get('invoiceEmail')?.updateValueAndValidity({ emitEvent: false });
+      this.editUserForm.get('companyName')?.updateValueAndValidity({ emitEvent: false });
+      this.editUserForm.get('contactName')?.updateValueAndValidity({ emitEvent: false });
+      this.editUserForm.get('phoneNumber')?.updateValueAndValidity({ emitEvent: false });
     });
   }
 
@@ -161,16 +247,35 @@ export class UserListComponent implements OnInit, OnDestroy {
     // Reset form and clear all values
     this.createUserForm.reset({
       email: '',
-      password: '',
       firstName: '',
       lastName: '',
-      role: ''
+      password: '',
+      role: '',
+      secondaryEmail: '',
+      invoiceEmail: '',
+      companyName: '',
+      contactName: '',
+      phoneNumber: '',
+      cell: '',
+      fax: '',
+      address: '',
+      city: '',
+      state: '',
+      country: '',
+      postalCode: '',
+      website: '',
+      reference: '',
+      specialization: '',
+      bio: '',
+      hourlyRate: null,
+      isAvailable: true
     });
     // Mark all fields as untouched to clear validation states
     Object.keys(this.createUserForm.controls).forEach(key => {
       const control = this.createUserForm.get(key);
       if (control) {
-        control.setValue('', { emitEvent: false });
+        const defaultValue = key === 'isAvailable' ? true : (key === 'hourlyRate' ? null : '');
+        control.setValue(defaultValue, { emitEvent: false });
         control.markAsUntouched();
         control.markAsPristine();
         control.updateValueAndValidity({ emitEvent: false });
@@ -179,32 +284,71 @@ export class UserListComponent implements OnInit, OnDestroy {
     // Force change detection
     this.cdr.detectChanges();
     this.displayCreateDialog = true;
-    
-    // Additional reset after dialog is visible to prevent browser autofill
-    setTimeout(() => {
-      this.createUserForm.patchValue({
-        email: '',
-        password: '',
-        firstName: '',
-        lastName: '',
-        role: ''
-      }, { emitEvent: false });
-      // Clear email field explicitly to prevent autofill
-      const emailControl = this.createUserForm.get('email');
-      if (emailControl) {
-        emailControl.setValue('', { emitEvent: false });
-      }
-      this.cdr.detectChanges();
-    }, 100);
-    
-    // One more reset after a longer delay to catch any late autofill
-    setTimeout(() => {
-      const emailControl = this.createUserForm.get('email');
-      if (emailControl && emailControl.value) {
-        emailControl.setValue('', { emitEvent: false });
-        this.cdr.detectChanges();
-      }
-    }, 300);
+  }
+
+  isClientRole(): boolean {
+    const role = this.createUserForm.get('role')?.value;
+    return role === 'Client';
+  }
+
+  isDesignerRole(): boolean {
+    const role = this.createUserForm.get('role')?.value;
+    return role === 'Designer';
+  }
+
+  getDesignerHourlyRate(): number | null {
+    if (!this.selectedUserForView) return null;
+    const profile = (this.selectedUserForView as any).designerProfile;
+    return profile?.hourlyRate || null;
+  }
+
+  getDesignerIsAvailable(): boolean {
+    if (!this.selectedUserForView) return false;
+    const profile = (this.selectedUserForView as any).designerProfile;
+    return profile?.isAvailable ?? false;
+  }
+
+  isEditClientRole(): boolean {
+    const role = this.editUserForm.get('role')?.value;
+    return role === 'Client';
+  }
+
+  isEditDesignerRole(): boolean {
+    const role = this.editUserForm.get('role')?.value;
+    return role === 'Designer';
+  }
+
+  getSecondaryEmail(): string | null {
+    if (!this.selectedUserForView) return null;
+    return (this.selectedUserForView as any).secondaryEmail || null;
+  }
+
+  getInvoiceEmail(): string | null {
+    if (!this.selectedUserForView) return null;
+    return (this.selectedUserForView as any).invoiceEmail || null;
+  }
+
+  getClientProfile(): any {
+    if (!this.selectedUserForView) return null;
+    return (this.selectedUserForView as any).clientProfile || null;
+  }
+
+  getDesignerProfile(): any {
+    if (!this.selectedUserForView) return null;
+    return (this.selectedUserForView as any).designerProfile || null;
+  }
+
+  getCurrentUserRole(): string {
+    if (!this.selectedUserForView) return '';
+    return (this.selectedUserForView.roleName || (this.selectedUserForView as any).role || '').trim();
+  }
+
+  shouldShowClientSection(): boolean {
+    return this.getCurrentUserRole() === 'Client' && this.getClientProfile() !== null;
+  }
+
+  shouldShowDesignerSection(): boolean {
+    return this.getCurrentUserRole() === 'Designer' && this.getDesignerProfile() !== null;
   }
 
   createUser(): void {
@@ -229,13 +373,45 @@ export class UserListComponent implements OnInit, OnDestroy {
     }
 
     // Prepare request with RoleId instead of role
-    const createRequest = {
+    const createRequest: any = {
       email: formValue.email,
       firstName: formValue.firstName,
       lastName: formValue.lastName,
       password: formValue.password,
       roleId: roleId
     };
+
+    // Add optional user fields
+    if (formValue.secondaryEmail) {
+      createRequest.secondaryEmail = formValue.secondaryEmail;
+    }
+    if (formValue.invoiceEmail) {
+      createRequest.invoiceEmail = formValue.invoiceEmail;
+    }
+
+    // Add profile fields based on role
+    if (roleName === 'Client') {
+      // Mandatory fields for Client
+      createRequest.companyName = formValue.companyName || '';
+      createRequest.contactName = formValue.contactName || '';
+      createRequest.phoneNumber = formValue.phoneNumber || '';
+      // Optional fields
+      if (formValue.cell) createRequest.cell = formValue.cell;
+      if (formValue.fax) createRequest.fax = formValue.fax;
+      if (formValue.address) createRequest.address = formValue.address;
+      if (formValue.city) createRequest.city = formValue.city;
+      if (formValue.state) createRequest.state = formValue.state;
+      if (formValue.country) createRequest.country = formValue.country;
+      if (formValue.postalCode) createRequest.postalCode = formValue.postalCode;
+      if (formValue.website) createRequest.website = formValue.website;
+      if (formValue.reference) createRequest.reference = formValue.reference;
+    } else if (roleName === 'Designer') {
+      // Optional fields for Designer
+      if (formValue.specialization) createRequest.specialization = formValue.specialization;
+      if (formValue.bio) createRequest.bio = formValue.bio;
+      if (formValue.hourlyRate) createRequest.hourlyRate = parseFloat(formValue.hourlyRate);
+      if (formValue.isAvailable !== undefined) createRequest.isAvailable = formValue.isAvailable;
+    }
 
     this.apiService.post<User>('users', createRequest)
       .pipe(takeUntil(this.destroy$))
@@ -291,7 +467,29 @@ export class UserListComponent implements OnInit, OnDestroy {
 
   viewUser(user: User): void {
     this.selectedUserForView = user;
-    this.displayViewDialog = true;
+    this.loadingUserDetails = true;
+    
+    // Fetch full user details from API to get profile information
+    this.apiService.get<User>(`users/${user.id}`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (fullUser) => {
+          this.selectedUserForView = fullUser;
+          this.loadingUserDetails = false;
+          this.displayViewDialog = true;
+        },
+        error: (error) => {
+          console.error('Error loading user details:', error);
+          // Still show the dialog with basic info if API fails
+          this.loadingUserDetails = false;
+          this.displayViewDialog = true;
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Could not load full user details. Showing basic information only.'
+          });
+        }
+      });
   }
 
   editUser(user: User): void {
@@ -324,13 +522,33 @@ export class UserListComponent implements OnInit, OnDestroy {
           
           this.loadingUserDetails = false;
           
-          // Set all form values at once
+          // Set all form values including profile information
           this.editUserForm.patchValue({
             email: fullUser.email || '',
             firstName: fullUser.firstName || '',
             lastName: fullUser.lastName || '',
             role: selectedRole || null,
-            isActive: fullUser.isActive !== undefined ? fullUser.isActive : true
+            isActive: fullUser.isActive !== undefined ? fullUser.isActive : true,
+            secondaryEmail: (fullUser as any).secondaryEmail || '',
+            invoiceEmail: (fullUser as any).invoiceEmail || '',
+            // Client profile fields
+            companyName: (fullUser as any).clientProfile?.companyName || '',
+            contactName: (fullUser as any).clientProfile?.contactName || '',
+            phoneNumber: (fullUser as any).clientProfile?.phoneNumber || '',
+            cell: (fullUser as any).clientProfile?.cell || '',
+            fax: (fullUser as any).clientProfile?.fax || '',
+            address: (fullUser as any).clientProfile?.address || '',
+            city: (fullUser as any).clientProfile?.city || '',
+            state: (fullUser as any).clientProfile?.state || '',
+            country: (fullUser as any).clientProfile?.country || '',
+            postalCode: (fullUser as any).clientProfile?.postalCode || '',
+            website: (fullUser as any).clientProfile?.website || '',
+            reference: (fullUser as any).clientProfile?.reference || '',
+            // Designer profile fields
+            specialization: (fullUser as any).designerProfile?.specialization || '',
+            bio: (fullUser as any).designerProfile?.bio || '',
+            hourlyRate: (fullUser as any).designerProfile?.hourlyRate || null,
+            isAvailable: (fullUser as any).designerProfile?.isAvailable !== undefined ? (fullUser as any).designerProfile.isAvailable : true
           });
           
           // Open dialog
@@ -386,8 +604,40 @@ export class UserListComponent implements OnInit, OnDestroy {
     this.updatingUser = true;
     const formValue = this.editUserForm.value;
     
+    // Prepare update request with all fields
+    const updateRequest: any = {
+      email: formValue.email,
+      firstName: formValue.firstName,
+      lastName: formValue.lastName,
+      role: formValue.role,
+      isActive: formValue.isActive,
+      secondaryEmail: formValue.secondaryEmail || null,
+      invoiceEmail: formValue.invoiceEmail || null
+    };
+
+    // Add profile fields based on role
+    if (formValue.role === 'Client') {
+      updateRequest.companyName = formValue.companyName || null;
+      updateRequest.contactName = formValue.contactName || null;
+      updateRequest.phoneNumber = formValue.phoneNumber || null;
+      updateRequest.cell = formValue.cell || null;
+      updateRequest.fax = formValue.fax || null;
+      updateRequest.address = formValue.address || null;
+      updateRequest.city = formValue.city || null;
+      updateRequest.state = formValue.state || null;
+      updateRequest.country = formValue.country || null;
+      updateRequest.postalCode = formValue.postalCode || null;
+      updateRequest.website = formValue.website || null;
+      updateRequest.reference = formValue.reference || null;
+    } else if (formValue.role === 'Designer') {
+      updateRequest.specialization = formValue.specialization || null;
+      updateRequest.bio = formValue.bio || null;
+      updateRequest.hourlyRate = formValue.hourlyRate || null;
+      updateRequest.isAvailable = formValue.isAvailable !== undefined ? formValue.isAvailable : true;
+    }
+    
     // Note: Update endpoint may not exist yet, so we'll try PUT first
-    this.apiService.put<User>(`users/${this.selectedUserForEdit.id}`, formValue)
+    this.apiService.put<User>(`users/${this.selectedUserForEdit.id}`, updateRequest)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (updatedUser) => {
