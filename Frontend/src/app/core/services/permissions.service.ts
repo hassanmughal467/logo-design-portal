@@ -16,9 +16,13 @@ export class PermissionsService {
     private apiService: ApiService,
     private authService: AuthService
   ) {
-    // Load permissions when service initializes (if user is authenticated)
+    // Load permissions when service initializes (only for SuperAdmin users)
+    // Other roles don't have access to the permissions endpoint
     if (this.authService.isAuthenticated()) {
-      this.loadPermissions().subscribe();
+      const user = this.authService.getCurrentUser();
+      if (user && (user.role === 'SuperAdmin' || user.roleName === 'SuperAdmin')) {
+        this.loadPermissions().subscribe();
+      }
     }
   }
 

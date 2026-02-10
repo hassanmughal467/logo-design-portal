@@ -23,7 +23,7 @@ public class UserService : IUserService
 
         if (emailExists)
         {
-            throw new InvalidOperationException("Email already exists.");
+            throw new InvalidOperationException("User already exist");
         }
 
         // Verify role exists
@@ -66,7 +66,7 @@ public class UserService : IUserService
     {
         var user = await _context.Users
             .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Id == id);
+            .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
 
         if (user == null)
         {
@@ -89,6 +89,7 @@ public class UserService : IUserService
     {
         var users = await _context.Users
             .Include(u => u.Role)
+            .Where(u => !u.IsDeleted)
             .ToListAsync();
 
         return users.Select(user => new UserResponseDto
@@ -101,6 +102,94 @@ public class UserService : IUserService
             IsActive = user.IsActive,
             CreatedAt = user.CreatedAt
         }).ToList();
+    }
+
+    public async Task<UserResponseDto> UpdateUserAsync(Guid id, UpdateUserRequestDto request)
+    {
+        var user = await _context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == id);
+
+        if (user == null)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        // Check if email is being changed and if new email already exists
+        if (user.Email != request.Email)
+        {
+            var emailExists = await _context.Users
+                .AnyAsync(u => u.Email == request.Email && u.Id != id);
+
+            if (emailExists)
+            {
+                throw new InvalidOperationException("User already exist");
+            }
+        }
+
+        // Find role by name
+        var role = await _context.Roles
+            .FirstOrDefaultAsync(r => r.Name == request.Role);
+
+        if (role == null)
+        {
+            throw new InvalidOperationException($"Invalid role specified: {request.Role}");
+        }
+
+        // Update user properties
+        user.Email = request.Email;
+        user.FirstName = request.FirstName;
+        user.LastName = request.LastName;
+        user.RoleId = role.Id;
+        user.IsActive = request.IsActive;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        // Use the role we already loaded
+        return new UserResponseDto
+        {
+            Id = user.Id,
+            Email = user.Email,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            RoleName = role.Name,
+            IsActive = user.IsActive,
+            CreatedAt = user.CreatedAt
+        };
+    }
+
+    public async Task<bool> DeleteUserAsync(Guid id, Guid deletedBy)
+    {
+        var user = await _context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
+
+        if (user == null)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        // Prevent deleting SuperAdmin users
+        if (user.Role?.Name == "SuperAdmin")
+        {
+            throw new InvalidOperationException("Cannot delete SuperAdmin users.");
+        }
+
+        // Prevent users from deleting themselves
+        if (user.Id == deletedBy)
+        {
+            throw new InvalidOperationException("Cannot delete your own account.");
+        }
+
+        // Soft delete
+        user.IsDeleted = true;
+        user.DeletedAt = DateTime.UtcNow;
+        user.DeletedBy = deletedBy;
+        user.IsActive = false; // Also deactivate the user
+
+        await _context.SaveChangesAsync();
+        return true;
     }
 
     public async Task<DesignerProfileResponseDto> CreateDesignerProfileAsync(CreateDesignerProfileRequestDto request)

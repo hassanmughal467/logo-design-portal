@@ -7,6 +7,7 @@ using LogoDesignPortal.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
@@ -124,42 +125,69 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Ensure database is created and seeded
-using (var scope = app.Services.CreateScope())
+// Ensure database is created and seeded (async to avoid blocking startup)
+_ = Task.Run(async () =>
 {
-    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    context.Database.EnsureCreated();
-
-    // Seed or reset SuperAdmin user
-    var superAdminRole = context.Roles.FirstOrDefault(r => r.Name == "SuperAdmin");
-    if (superAdminRole != null)
+    try
     {
-        var superAdmin = context.Users.FirstOrDefault(u => u.Email == "superadmin@logodesign.com");
-        if (superAdmin == null)
+        using (var scope = app.Services.CreateScope())
         {
-            // Create new SuperAdmin
-            superAdmin = new User
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            
+            logger.LogInformation("Initializing database...");
+            
+            // Use async method and add timeout
+            var canConnect = await context.Database.CanConnectAsync();
+            if (!canConnect)
             {
-                Id = Guid.NewGuid(),
-                Email = "superadmin@logodesign.com",
-                FirstName = "Super",
-                LastName = "Admin",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("SuperAdmin@123"),
-                RoleId = superAdminRole.Id,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
-            context.Users.Add(superAdmin);
-            context.SaveChanges();
-        }
-        else
-        {
-            // Reset SuperAdmin password to default if needed (uncomment to reset)
-            // superAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword("SuperAdmin@123");
-            // superAdmin.IsActive = true;
-            // context.SaveChanges();
+                logger.LogInformation("Database does not exist. Creating database...");
+                await context.Database.EnsureCreatedAsync();
+                logger.LogInformation("Database created successfully.");
+            }
+            else
+            {
+                logger.LogInformation("Database connection verified.");
+            }
+
+            // Seed or reset SuperAdmin user
+            var superAdminRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
+            if (superAdminRole != null)
+            {
+                var superAdmin = await context.Users.FirstOrDefaultAsync(u => u.Email == "superadmin@logodesign.com");
+                if (superAdmin == null)
+                {
+                    // Create new SuperAdmin
+                    superAdmin = new User
+                    {
+                        Id = Guid.NewGuid(),
+                        Email = "superadmin@logodesign.com",
+                        FirstName = "Super",
+                        LastName = "Admin",
+                        PasswordHash = BCrypt.Net.BCrypt.HashPassword("SuperAdmin@123"),
+                        RoleId = superAdminRole.Id,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    context.Users.Add(superAdmin);
+                    await context.SaveChangesAsync();
+                    logger.LogInformation("SuperAdmin user created.");
+                }
+            }
+            
+            logger.LogInformation("Database initialization completed.");
         }
     }
-}
+    catch (Exception ex)
+    {
+        // Log error but don't crash the application
+        var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+        var logger = loggerFactory.CreateLogger<Program>();
+        logger.LogError(ex, "Error initializing database. The application will continue, but database operations may fail.");
+        logger.LogWarning("Make sure SQL Server (LocalDB or full instance) is running.");
+        logger.LogWarning("For LocalDB, run: sqllocaldb start MSSQLLocalDB");
+        logger.LogWarning("Or update connection string in appsettings.json to use a full SQL Server instance.");
+    }
+});
 
 app.Run();

@@ -82,12 +82,16 @@ export class AuthService {
 
   hasRole(role: string): boolean {
     const user = this.currentUserSubject.value;
-    return user?.role === role;
+    if (!user) return false;
+    const userRole = user.roleName || user.role;
+    return userRole === role;
   }
 
   hasAnyRole(roles: string[]): boolean {
     const user = this.currentUserSubject.value;
-    return user ? roles.includes(user.role) : false;
+    if (!user) return false;
+    const userRole = user.roleName || user.role;
+    return userRole ? roles.includes(userRole) : false;
   }
 
   changePassword(data: { currentPassword: string; newPassword: string; confirmPassword: string }): Observable<any> {

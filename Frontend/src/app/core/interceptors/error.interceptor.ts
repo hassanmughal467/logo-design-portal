@@ -43,11 +43,30 @@ export class ErrorInterceptor implements HttpInterceptor {
             case 403:
               // Forbidden - user doesn't have permission
               errorMessage = 'You do not have permission to perform this action';
-              this.messageService.add({
-                severity: 'error',
-                summary: 'Access Denied',
-                detail: errorMessage
-              });
+              // Don't show alert for certain endpoints where 403 is expected for some roles
+              // These services handle the errors gracefully
+              const requestUrl = (request.url || '').toLowerCase();
+              const errorUrl = (error.url || '').toLowerCase();
+              
+              // Endpoints where 403 errors are expected and handled gracefully:
+              // - /permissions: Only SuperAdmin has access
+              // - /orders: Admin users may not have ViewAllOrders permission yet
+              // - /invoices: May not be accessible to all roles
+              const isExpected403Endpoint = 
+                requestUrl.includes('/permissions') || errorUrl.includes('/permissions') ||
+                requestUrl.includes('/orders') || errorUrl.includes('/orders') ||
+                requestUrl.includes('/invoices') || errorUrl.includes('/invoices');
+              
+              if (!isExpected403Endpoint) {
+                this.messageService.add({
+                  severity: 'error',
+                  summary: 'Access Denied',
+                  detail: errorMessage
+                });
+              } else {
+                // Silently handle expected 403 errors - these are handled gracefully by the services
+                console.log('403 error on endpoint - silently handled (expected for some user roles):', requestUrl || errorUrl);
+              }
               break;
 
             case 404:
@@ -64,7 +83,8 @@ export class ErrorInterceptor implements HttpInterceptor {
               break;
 
             default:
-              errorMessage = error.error?.message || `Error Code: ${error.status}`;
+              // Check for error message in common locations
+              errorMessage = error.error?.error || error.error?.message || `Error Code: ${error.status}`;
               if (error.status >= 400 && error.status < 500) {
                 this.messageService.add({
                   severity: 'warn',

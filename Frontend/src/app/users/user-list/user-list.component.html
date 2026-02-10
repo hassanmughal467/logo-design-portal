@@ -31,13 +31,14 @@
 
   <p-card styleClass="users-card">
     <p-table 
+      #dt
       [value]="users" 
       [loading]="loading"
       [paginator]="true"
       [rows]="rows"
       [first]="first"
-      (onPage)="first = $event.first"
-      [globalFilterFields]="['firstName', 'lastName', 'email', 'role']"
+      (onPage)="onPageChange($event)"
+      [globalFilterFields]="['firstName', 'lastName', 'email', 'roleName']"
       [rowsPerPageOptions]="[10, 25, 50]"
       styleClass="p-datatable-striped p-datatable-sm"
       [responsive]="true">
@@ -50,6 +51,7 @@
               type="text" 
               pInputText 
               [(ngModel)]="globalFilter" 
+              (input)="dt.filterGlobal(globalFilter, 'contains')"
               placeholder="Search users..." 
               class="search-input" />
           </span>
@@ -65,8 +67,8 @@
           <th pSortableColumn="email">
             Email <p-sortIcon field="email"></p-sortIcon>
           </th>
-          <th pSortableColumn="role">
-            Role <p-sortIcon field="role"></p-sortIcon>
+          <th pSortableColumn="roleName">
+            Role <p-sortIcon field="roleName"></p-sortIcon>
           </th>
           <th pSortableColumn="isActive">
             Status <p-sortIcon field="isActive"></p-sortIcon>
@@ -92,8 +94,8 @@
           <td>{{ user.email }}</td>
           <td>
             <p-tag 
-              [value]="user.role" 
-              [severity]="getRoleSeverity(user.role)"
+              [value]="user.roleName" 
+              [severity]="getRoleSeverity(user.roleName)"
               [rounded]="true">
             </p-tag>
           </td>
@@ -111,13 +113,15 @@
                 icon="pi pi-eye" 
                 styleClass="p-button-text p-button-rounded p-button-sm"
                 pTooltip="View Details"
-                tooltipPosition="top">
+                tooltipPosition="top"
+                (onClick)="viewUser(user)">
               </p-button>
               <p-button 
                 icon="pi pi-pencil" 
                 styleClass="p-button-text p-button-rounded p-button-sm"
                 pTooltip="Edit User"
-                tooltipPosition="top">
+                tooltipPosition="top"
+                (onClick)="editUser(user)">
               </p-button>
               <p-button 
                 *ngIf="canResetPassword()"
@@ -126,6 +130,14 @@
                 pTooltip="Reset Password"
                 tooltipPosition="top"
                 (onClick)="openResetPasswordDialog(user)">
+              </p-button>
+              <p-button 
+                *ngIf="canDeleteUser()"
+                icon="pi pi-trash" 
+                styleClass="p-button-text p-button-rounded p-button-sm p-button-danger"
+                pTooltip="Delete User"
+                tooltipPosition="top"
+                (onClick)="openDeleteDialog(user)">
               </p-button>
             </div>
           </td>
@@ -150,155 +162,236 @@
     [(visible)]="displayCreateDialog" 
     header="Create New User" 
     [modal]="true"
-    [style]="{width: '500px'}"
-    [closable]="true">
+    [style]="{width: '550px'}"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false">
     
-    <form [formGroup]="createUserForm" (ngSubmit)="createUser()">
-      <div class="form-grid">
-        <div class="form-field">
-          <label for="email">Email <span class="required">*</span></label>
-          <input 
-            id="email"
-            type="email" 
-            pInputText 
-            formControlName="email"
-            [class.ng-invalid]="createUserForm.get('email')?.invalid && createUserForm.get('email')?.touched" />
-          <small 
-            class="p-error" 
-            *ngIf="createUserForm.get('email')?.invalid && createUserForm.get('email')?.touched">
-            Valid email is required
-          </small>
+    <div class="create-user-content">
+      <!-- Header Section -->
+      <div class="create-user-header">
+        <div class="create-user-icon">
+          <i class="pi pi-user-plus"></i>
         </div>
-
-        <div class="form-field">
-          <label for="password">Password <span class="required">*</span></label>
-          <input 
-            id="password"
-            type="password" 
-            pInputText 
-            formControlName="password"
-            [class.ng-invalid]="createUserForm.get('password')?.invalid && createUserForm.get('password')?.touched" />
-          <small 
-            class="p-error" 
-            *ngIf="createUserForm.get('password')?.invalid && createUserForm.get('password')?.touched">
-            Password must be at least 6 characters
-          </small>
-        </div>
-
-        <div class="form-field">
-          <label for="firstName">First Name <span class="required">*</span></label>
-          <input 
-            id="firstName"
-            type="text" 
-            pInputText 
-            formControlName="firstName"
-            [class.ng-invalid]="createUserForm.get('firstName')?.invalid && createUserForm.get('firstName')?.touched" />
-          <small 
-            class="p-error" 
-            *ngIf="createUserForm.get('firstName')?.invalid && createUserForm.get('firstName')?.touched">
-            First name is required
-          </small>
-        </div>
-
-        <div class="form-field">
-          <label for="lastName">Last Name <span class="required">*</span></label>
-          <input 
-            id="lastName"
-            type="text" 
-            pInputText 
-            formControlName="lastName"
-            [class.ng-invalid]="createUserForm.get('lastName')?.invalid && createUserForm.get('lastName')?.touched" />
-          <small 
-            class="p-error" 
-            *ngIf="createUserForm.get('lastName')?.invalid && createUserForm.get('lastName')?.touched">
-            Last name is required
-          </small>
-        </div>
-
-        <div class="form-field full-width">
-          <label for="role">Role <span class="required">*</span></label>
-          <p-dropdown 
-            id="role"
-            [options]="roles" 
-            formControlName="role"
-            placeholder="Select Role"
-            [class.ng-invalid]="createUserForm.get('role')?.invalid && createUserForm.get('role')?.touched">
-          </p-dropdown>
-          <small 
-            class="p-error" 
-            *ngIf="createUserForm.get('role')?.invalid && createUserForm.get('role')?.touched">
-            Role is required
-          </small>
+        <div class="create-user-info">
+          <div class="create-user-title">Add New User</div>
+          <div class="create-user-subtitle">Fill in the details to create a new user account</div>
         </div>
       </div>
-    </form>
+
+      <div class="divider"></div>
+
+      <!-- Create Form -->
+      <form [formGroup]="createUserForm" (ngSubmit)="createUser()" class="create-user-form" autocomplete="off">
+        <div class="create-form-fields">
+          <div class="form-field">
+            <label for="email">
+              <i class="pi pi-envelope"></i>
+              Email <span class="required">*</span>
+            </label>
+            <input 
+              id="email"
+              type="email" 
+              pInputText 
+              formControlName="email"
+              placeholder="Enter email address"
+              autocomplete="off"
+              [class.ng-invalid]="createUserForm.get('email')?.invalid && createUserForm.get('email')?.touched" />
+            <small 
+              class="p-error" 
+              *ngIf="createUserForm.get('email')?.invalid && createUserForm.get('email')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              Valid email is required
+            </small>
+          </div>
+
+          <div class="form-field">
+            <label for="password">
+              <i class="pi pi-lock"></i>
+              Password <span class="required">*</span>
+            </label>
+            <p-password 
+              id="password"
+              formControlName="password"
+              placeholder="Enter password"
+              [toggleMask]="true"
+              [feedback]="true"
+              styleClass="w-100 password-input"
+              [inputStyleClass]="createUserForm.get('password')?.invalid && createUserForm.get('password')?.touched ? 'ng-invalid' : ''">
+            </p-password>
+            <small 
+              class="p-error" 
+              *ngIf="createUserForm.get('password')?.invalid && createUserForm.get('password')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              Password must be at least 6 characters
+            </small>
+          </div>
+
+          <div class="form-field">
+            <label for="firstName">
+              <i class="pi pi-user"></i>
+              First Name <span class="required">*</span>
+            </label>
+            <input 
+              id="firstName"
+              type="text" 
+              pInputText 
+              formControlName="firstName"
+              placeholder="Enter first name"
+              autocomplete="off"
+              [class.ng-invalid]="createUserForm.get('firstName')?.invalid && createUserForm.get('firstName')?.touched" />
+            <small 
+              class="p-error" 
+              *ngIf="createUserForm.get('firstName')?.invalid && createUserForm.get('firstName')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              First name is required
+            </small>
+          </div>
+
+          <div class="form-field">
+            <label for="lastName">
+              <i class="pi pi-user"></i>
+              Last Name <span class="required">*</span>
+            </label>
+            <input 
+              id="lastName"
+              type="text" 
+              pInputText 
+              formControlName="lastName"
+              placeholder="Enter last name"
+              autocomplete="off"
+              [class.ng-invalid]="createUserForm.get('lastName')?.invalid && createUserForm.get('lastName')?.touched" />
+            <small 
+              class="p-error" 
+              *ngIf="createUserForm.get('lastName')?.invalid && createUserForm.get('lastName')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              Last name is required
+            </small>
+          </div>
+
+          <div class="form-field">
+            <label for="role">
+              <i class="pi pi-shield"></i>
+              Role <span class="required">*</span>
+            </label>
+            <p-dropdown 
+              id="role"
+              [options]="roles" 
+              formControlName="role"
+              placeholder="Select Role"
+              [filter]="false"
+              [showClear]="false"
+              appendTo="body"
+              [overlayOptions]="{ baseZIndex: 10000, autoZIndex: true }"
+              [class.ng-invalid]="createUserForm.get('role')?.invalid && createUserForm.get('role')?.touched">
+            </p-dropdown>
+            <small 
+              class="p-error" 
+              *ngIf="createUserForm.get('role')?.invalid && createUserForm.get('role')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              Role is required
+            </small>
+          </div>
+        </div>
+      </form>
+    </div>
 
     <ng-template pTemplate="footer">
-      <p-button 
-        label="Cancel" 
-        icon="pi pi-times" 
-        (onClick)="displayCreateDialog = false"
-        styleClass="p-button-text">
-      </p-button>
-      <p-button 
-        label="Create" 
-        icon="pi pi-check" 
-        (onClick)="createUser()"
-        [disabled]="createUserForm.invalid"
-        styleClass="p-button-primary">
-      </p-button>
+      <div class="dialog-footer">
+        <p-button 
+          label="Cancel" 
+          icon="pi pi-times" 
+          (onClick)="displayCreateDialog = false"
+          styleClass="p-button-text p-button-lg">
+        </p-button>
+        <p-button 
+          label="Create User" 
+          icon="pi pi-plus" 
+          (onClick)="createUser()"
+          [disabled]="createUserForm.invalid"
+          styleClass="p-button-primary p-button-lg">
+        </p-button>
+      </div>
     </ng-template>
   </p-dialog>
 
   <!-- Reset Password Dialog -->
   <p-dialog 
     [(visible)]="displayResetPasswordDialog" 
-    header="Reset Password" 
+    header="Reset Password"
     [modal]="true"
-    [style]="{width: '500px'}"
-    [closable]="true">
+    [style]="{width: '550px'}"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false">
     
-    <div *ngIf="selectedUserForReset">
-      <p>Reset password for <strong>{{ selectedUserForReset.firstName }} {{ selectedUserForReset.lastName }}</strong> ({{ selectedUserForReset.email }})</p>
-      
-      <form [formGroup]="resetPasswordForm" (ngSubmit)="resetUserPassword()">
-        <div class="form-field" style="margin-top: 1.5rem;">
-          <label for="resetNewPassword">New Password <span class="required">*</span></label>
+    <div *ngIf="selectedUserForReset" class="reset-password-content">
+      <!-- User Info Section -->
+      <div class="user-info-section">
+        <div class="user-info-icon">
+          <i class="pi pi-user"></i>
+        </div>
+        <div class="user-info-details">
+          <div class="user-name">
+            {{ selectedUserForReset.firstName }} {{ selectedUserForReset.lastName }}
+          </div>
+          <div class="user-email">
+            <i class="pi pi-envelope"></i>
+            {{ selectedUserForReset.email }}
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Password Form Section -->
+      <form [formGroup]="resetPasswordForm" (ngSubmit)="resetUserPassword()" class="reset-password-form">
+        <div class="form-field">
+          <label for="resetNewPassword">
+            <i class="pi pi-lock"></i>
+            New Password <span class="required">*</span>
+          </label>
           <p-password 
             id="resetNewPassword"
             formControlName="newPassword" 
             placeholder="Enter new password"
             [toggleMask]="true"
             [feedback]="true"
-            styleClass="w-100"
+            styleClass="w-100 password-input"
             [inputStyleClass]="resetPasswordForm.get('newPassword')?.invalid && resetPasswordForm.get('newPassword')?.touched ? 'ng-invalid' : ''">
           </p-password>
           <small 
             class="p-error" 
             *ngIf="resetPasswordForm.get('newPassword')?.invalid && resetPasswordForm.get('newPassword')?.touched">
+            <i class="pi pi-exclamation-circle"></i>
             Password must be at least 8 characters
           </small>
         </div>
 
-        <div class="form-field" style="margin-top: 1rem;">
-          <label for="resetConfirmPassword">Confirm Password <span class="required">*</span></label>
+        <div class="form-field">
+          <label for="resetConfirmPassword">
+            <i class="pi pi-lock"></i>
+            Confirm Password <span class="required">*</span>
+          </label>
           <p-password 
             id="resetConfirmPassword"
             formControlName="confirmPassword" 
             placeholder="Confirm new password"
             [toggleMask]="true"
             [feedback]="false"
-            styleClass="w-100"
+            styleClass="w-100 password-input"
             [inputStyleClass]="resetPasswordForm.get('confirmPassword')?.invalid && resetPasswordForm.get('confirmPassword')?.touched ? 'ng-invalid' : ''">
           </p-password>
           <small 
             class="p-error" 
             *ngIf="resetPasswordForm.get('confirmPassword')?.hasError('required') && resetPasswordForm.get('confirmPassword')?.touched">
+            <i class="pi pi-exclamation-circle"></i>
             Please confirm your password
           </small>
           <small 
             class="p-error" 
             *ngIf="resetPasswordForm.get('confirmPassword')?.hasError('passwordMismatch') && resetPasswordForm.get('confirmPassword')?.touched && !resetPasswordForm.get('confirmPassword')?.hasError('required')">
+            <i class="pi pi-exclamation-circle"></i>
             Passwords do not match
           </small>
         </div>
@@ -306,21 +399,348 @@
     </div>
 
     <ng-template pTemplate="footer">
-      <p-button 
-        label="Cancel" 
-        icon="pi pi-times" 
-        (onClick)="displayResetPasswordDialog = false"
-        styleClass="p-button-text"
-        [disabled]="resettingPassword">
-      </p-button>
-      <p-button 
-        label="Reset Password" 
-        icon="pi pi-check" 
-        (onClick)="resetUserPassword()"
-        [disabled]="resetPasswordForm.invalid || resettingPassword"
-        [loading]="resettingPassword"
-        styleClass="p-button-primary">
-      </p-button>
+      <div class="dialog-footer">
+        <p-button 
+          label="Cancel" 
+          icon="pi pi-times"
+          (onClick)="displayResetPasswordDialog = false"
+          styleClass="p-button-text p-button-lg"
+          [disabled]="resettingPassword">
+        </p-button>
+        <p-button 
+          label="Reset Password" 
+          icon="pi pi-key"
+          (onClick)="resetUserPassword()"
+          [disabled]="resetPasswordForm.invalid || resettingPassword"
+          [loading]="resettingPassword"
+          styleClass="p-button-primary p-button-lg">
+        </p-button>
+      </div>
+    </ng-template>
+  </p-dialog>
+
+  <!-- Delete User Confirmation Dialog -->
+  <p-dialog 
+    [(visible)]="displayDeleteDialog" 
+    header="Delete User" 
+    [modal]="true"
+    [style]="{width: '450px'}"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false">
+    
+    <div *ngIf="selectedUserForDelete" class="delete-user-content">
+      <div class="delete-warning-section">
+        <div class="warning-icon">
+          <i class="pi pi-exclamation-triangle"></i>
+        </div>
+        <div class="warning-message">
+          <h3>Are you sure?</h3>
+          <p>You are about to delete the user account for:</p>
+          <div class="user-to-delete">
+            <strong>{{ selectedUserForDelete.firstName }} {{ selectedUserForDelete.lastName }}</strong>
+            <span class="user-email">{{ selectedUserForDelete.email }}</span>
+            <span class="user-role">{{ selectedUserForDelete.roleName || selectedUserForDelete.role }}</span>
+          </div>
+          <p class="warning-text">This action cannot be undone. The user will be permanently removed from the system.</p>
+        </div>
+      </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <div class="dialog-footer">
+        <p-button 
+          label="Cancel" 
+          icon="pi pi-times"
+          (onClick)="displayDeleteDialog = false"
+          styleClass="p-button-text p-button-lg"
+          [disabled]="deletingUser">
+        </p-button>
+        <p-button 
+          label="Delete User" 
+          icon="pi pi-trash"
+          (onClick)="deleteUser()"
+          [disabled]="deletingUser"
+          [loading]="deletingUser"
+          styleClass="p-button-danger p-button-lg">
+        </p-button>
+      </div>
+    </ng-template>
+  </p-dialog>
+
+  <!-- View User Details Dialog -->
+  <p-dialog 
+    [(visible)]="displayViewDialog" 
+    header="User Details" 
+    [modal]="true"
+    [style]="{width: '650px'}"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false">
+    
+    <div *ngIf="selectedUserForView" class="view-user-content">
+      <!-- User Header Section -->
+      <div class="user-header-section">
+        <div class="user-avatar">
+          <i class="pi pi-user"></i>
+        </div>
+        <div class="user-header-info">
+          <div class="user-header-name">
+            {{ selectedUserForView.firstName }} {{ selectedUserForView.lastName }}
+          </div>
+          <div class="user-header-email">
+            <i class="pi pi-envelope"></i>
+            {{ selectedUserForView.email }}
+          </div>
+        </div>
+        <div class="user-header-status">
+          <p-tag 
+            [value]="selectedUserForView.isActive ? 'Active' : 'Inactive'" 
+            [severity]="selectedUserForView.isActive ? 'success' : 'danger'"
+            [rounded]="true"
+            [icon]="selectedUserForView.isActive ? 'pi pi-check-circle' : 'pi pi-times-circle'">
+          </p-tag>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- User Details Section -->
+      <div class="user-details-section">
+        <div class="detail-item">
+          <div class="detail-icon">
+            <i class="pi pi-id-card"></i>
+          </div>
+          <div class="detail-content">
+            <div class="detail-label">Full Name</div>
+            <div class="detail-value">{{ selectedUserForView.firstName }} {{ selectedUserForView.lastName }}</div>
+          </div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-icon">
+            <i class="pi pi-envelope"></i>
+          </div>
+          <div class="detail-content">
+            <div class="detail-label">Email Address</div>
+            <div class="detail-value">{{ selectedUserForView.email }}</div>
+          </div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-icon">
+            <i class="pi pi-shield"></i>
+          </div>
+          <div class="detail-content">
+            <div class="detail-label">Role</div>
+            <div class="detail-value">
+              <p-tag 
+                [value]="(selectedUserForView.roleName || selectedUserForView.role || '')" 
+                [severity]="getRoleSeverity(selectedUserForView.roleName || selectedUserForView.role || '')"
+                [rounded]="true">
+              </p-tag>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-icon">
+            <i class="pi pi-calendar"></i>
+          </div>
+          <div class="detail-content">
+            <div class="detail-label">Created At</div>
+            <div class="detail-value">
+              <i class="pi pi-clock"></i>
+              {{ formatDate(selectedUserForView.createdAt) }}
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-item" *ngIf="selectedUserForView.updatedAt">
+          <div class="detail-icon">
+            <i class="pi pi-sync"></i>
+          </div>
+          <div class="detail-content">
+            <div class="detail-label">Last Updated</div>
+            <div class="detail-value">
+              <i class="pi pi-clock"></i>
+              {{ formatDate(selectedUserForView.updatedAt) }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <div class="dialog-footer">
+        <p-button 
+          label="Close" 
+          icon="pi pi-times" 
+          (onClick)="displayViewDialog = false"
+          styleClass="p-button-text p-button-lg">
+        </p-button>
+      </div>
+    </ng-template>
+  </p-dialog>
+
+  <!-- Edit User Dialog -->
+  <p-dialog 
+    [(visible)]="displayEditDialog" 
+    header="Edit User" 
+    [modal]="true"
+    [style]="{width: '550px'}"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false"
+    (onShow)="onEditDialogShow()">
+    
+    <div *ngIf="loadingUserDetails" class="loading-state">
+      <i class="pi pi-spin pi-spinner"></i>
+      <p>Loading user details...</p>
+    </div>
+
+    <div *ngIf="!loadingUserDetails && selectedUserForEdit" class="edit-user-content">
+      <!-- User Info Header -->
+      <div class="edit-user-header">
+        <div class="edit-user-avatar">
+          <i class="pi pi-user"></i>
+        </div>
+        <div class="edit-user-info">
+          <div class="edit-user-name">
+            {{ selectedUserForEdit.firstName }} {{ selectedUserForEdit.lastName }}
+          </div>
+          <div class="edit-user-email">
+            <i class="pi pi-envelope"></i>
+            {{ selectedUserForEdit.email }}
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Edit Form -->
+      <form [formGroup]="editUserForm" class="edit-user-form">
+        <div class="edit-form-fields">
+          <div class="form-field full-width">
+            <label for="editEmail">
+              <i class="pi pi-envelope"></i>
+              Email <span class="required">*</span>
+            </label>
+            <input 
+              id="editEmail"
+              type="email" 
+              pInputText 
+              formControlName="email"
+              placeholder="Enter email address"
+              [class.ng-invalid]="editUserForm.get('email')?.invalid && editUserForm.get('email')?.touched" />
+            <small 
+              class="p-error" 
+              *ngIf="editUserForm.get('email')?.invalid && editUserForm.get('email')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              Valid email is required
+            </small>
+          </div>
+
+          <div class="form-field">
+            <label for="editFirstName">
+              <i class="pi pi-user"></i>
+              First Name <span class="required">*</span>
+            </label>
+            <input 
+              id="editFirstName"
+              type="text" 
+              pInputText 
+              formControlName="firstName"
+              placeholder="Enter first name"
+              [class.ng-invalid]="editUserForm.get('firstName')?.invalid && editUserForm.get('firstName')?.touched" />
+            <small 
+              class="p-error" 
+              *ngIf="editUserForm.get('firstName')?.invalid && editUserForm.get('firstName')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              First name is required
+            </small>
+          </div>
+
+          <div class="form-field">
+            <label for="editLastName">
+              <i class="pi pi-user"></i>
+              Last Name <span class="required">*</span>
+            </label>
+            <input 
+              id="editLastName"
+              type="text" 
+              pInputText 
+              formControlName="lastName"
+              placeholder="Enter last name"
+              [class.ng-invalid]="editUserForm.get('lastName')?.invalid && editUserForm.get('lastName')?.touched" />
+            <small 
+              class="p-error" 
+              *ngIf="editUserForm.get('lastName')?.invalid && editUserForm.get('lastName')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              Last name is required
+            </small>
+          </div>
+
+          <div class="form-field full-width">
+            <label for="editRole">
+              <i class="pi pi-shield"></i>
+              Role <span class="required">*</span>
+            </label>
+            <p-dropdown 
+              #editRoleDropdown
+              id="editRole"
+              [options]="roles" 
+              formControlName="role"
+              placeholder="Select Role"
+              [filter]="false"
+              [showClear]="false"
+              appendTo="body"
+              [overlayOptions]="{ baseZIndex: 10000, autoZIndex: true }"
+              [class.ng-invalid]="editUserForm.get('role')?.invalid && editUserForm.get('role')?.touched">
+            </p-dropdown>
+            <small 
+              class="p-error" 
+              *ngIf="editUserForm.get('role')?.invalid && editUserForm.get('role')?.touched">
+              <i class="pi pi-exclamation-circle"></i>
+              Role is required
+            </small>
+          </div>
+
+          <div class="form-field full-width">
+            <div class="checkbox-field-enhanced">
+              <p-checkbox 
+                formControlName="isActive"
+                [binary]="true"
+                inputId="editIsActive">
+              </p-checkbox>
+              <label for="editIsActive">
+                <i class="pi pi-check-circle"></i>
+                Active User
+              </label>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <div class="dialog-footer">
+        <p-button 
+          label="Cancel" 
+          icon="pi pi-times" 
+          (onClick)="displayEditDialog = false"
+          styleClass="p-button-text p-button-lg"
+          [disabled]="updatingUser">
+        </p-button>
+        <p-button 
+          label="Update User" 
+          icon="pi pi-save" 
+          (onClick)="updateUser()"
+          [disabled]="editUserForm.invalid || updatingUser"
+          [loading]="updatingUser"
+          styleClass="p-button-primary p-button-lg">
+        </p-button>
+      </div>
     </ng-template>
   </p-dialog>
 </div>

@@ -3,7 +3,8 @@ export interface User {
   email: string;
   firstName: string;
   lastName: string;
-  role: UserRole;
+  role?: UserRole;
+  roleName?: string; // From API response
   isActive: boolean;
   createdAt: Date;
   updatedAt?: Date;

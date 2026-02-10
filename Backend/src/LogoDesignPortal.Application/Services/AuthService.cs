@@ -75,7 +75,7 @@ public class AuthService : IAuthService
 
         if (emailExists)
         {
-            throw new InvalidOperationException("Email already exists.");
+            throw new InvalidOperationException("User already exist");
         }
 
         // Get Client role

@@ -3,6 +3,7 @@ using LogoDesignPortal.Application.DTOs.Users;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace LogoDesignPortal.API.Controllers;
 
@@ -62,6 +63,26 @@ public class UsersController : ControllerBase
         return Ok(users);
     }
 
+    [HttpPut("{id}")]
+    [Authorize(Roles = "SuperAdmin")]
+    [ProducesResponseType(typeof(UserResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequestDto request)
+    {
+        try
+        {
+            var user = await _userService.UpdateUserAsync(id, request);
+            return Ok(user);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPost("designer-profiles")]
     [Authorize] // Must be authenticated
     [RequirePermission("CreateDesignerProfile")] // Permission-based: SuperAdmin can grant to Admin
@@ -107,5 +128,26 @@ public class UsersController : ControllerBase
     {
         var profiles = await _userService.GetAllDesignerProfilesAsync();
         return Ok(profiles);
+    }
+
+    [HttpDelete("{id}")]
+    [Authorize(Roles = "SuperAdmin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DeleteUser(Guid id)
+    {
+        try
+        {
+            var deletedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var result = await _userService.DeleteUserAsync(id, deletedBy);
+            return Ok(new { message = "User deleted successfully." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 }
