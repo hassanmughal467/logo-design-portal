@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '@environments/environment';
 
@@ -21,8 +21,18 @@ export class ApiService {
   }
 
   post<T>(endpoint: string, body: any): Observable<T> {
-    // FormData will be handled automatically by HttpClient (browser sets Content-Type with boundary)
-    return this.http.post<T>(`${this.baseUrl}/${endpoint}`, body);
+    // Check if body is FormData - if so, let browser set Content-Type with boundary
+    // Otherwise, explicitly set Content-Type to application/json
+    if (body instanceof FormData) {
+      // FormData will be handled automatically by HttpClient (browser sets Content-Type with boundary)
+      return this.http.post<T>(`${this.baseUrl}/${endpoint}`, body);
+    } else {
+      // For JSON, explicitly set Content-Type header
+      const headers = new HttpHeaders({
+        'Content-Type': 'application/json'
+      });
+      return this.http.post<T>(`${this.baseUrl}/${endpoint}`, body, { headers });
+    }
   }
 
   put<T>(endpoint: string, body: any): Observable<T> {
@@ -35,5 +45,12 @@ export class ApiService {
 
   patch<T>(endpoint: string, body: any): Observable<T> {
     return this.http.patch<T>(`${this.baseUrl}/${endpoint}`, body);
+  }
+
+  // Download file as blob (for file downloads with authentication)
+  getBlob(endpoint: string): Observable<Blob> {
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+    const fullUrl = `${this.baseUrl}/${cleanEndpoint}`;
+    return this.http.get(fullUrl, { responseType: 'blob' });
   }
 }

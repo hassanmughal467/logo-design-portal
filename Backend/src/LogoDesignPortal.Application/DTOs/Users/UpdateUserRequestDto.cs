@@ -21,4 +21,31 @@ public class UpdateUserRequestDto
 
     [Required]
     public bool IsActive { get; set; }
+
+    // Additional User fields (optional)
+    [EmailAddress]
+    public string? SecondaryEmail { get; set; }
+
+    [EmailAddress]
+    public string? InvoiceEmail { get; set; }
+
+    // Client Profile fields (optional, used when Role is Client)
+    public string? CompanyName { get; set; }
+    public string? ContactName { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? Cell { get; set; }
+    public string? Fax { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? Country { get; set; }
+    public string? PostalCode { get; set; }
+    public string? Website { get; set; }
+    public string? Reference { get; set; }
+
+    // Designer Profile fields (optional, used when Role is Designer)
+    public string? Specialization { get; set; }
+    public string? Bio { get; set; }
+    public decimal? HourlyRate { get; set; }
+    public bool? IsAvailable { get; set; }
 }

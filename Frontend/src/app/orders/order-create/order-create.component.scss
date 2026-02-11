@@ -1,0 +1,150 @@
+::ng-deep .order-create-dialog {
+  .p-dialog-content {
+    padding: 1.5rem;
+    overflow-y: auto;
+    max-height: calc(90vh - 100px);
+  }
+}
+
+.order-create-container {
+  padding: 0;
+  max-width: 100%;
+  margin: 0;
+
+  .card {
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+
+    h2 {
+      display: none; // Hide since dialog header shows it
+    }
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+
+      &.full-width {
+        grid-column: 1 / -1;
+      }
+
+      label {
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: #555;
+
+        .required {
+          color: #e74c3c;
+        }
+      }
+
+      .p-error {
+        margin-top: 0.25rem;
+        font-size: 0.875rem;
+      }
+
+      .p-help {
+        margin-top: 0.25rem;
+        font-size: 0.875rem;
+        color: #666;
+      }
+    }
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #e0e0e0;
+  }
+
+  .selected-files {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem;
+      margin-bottom: 0.5rem;
+      background: white;
+      border-radius: 4px;
+      border: 1px solid #dee2e6;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+
+      .file-name {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: #495057;
+
+        i {
+          color: #6c757d;
+        }
+      }
+
+      .file-size {
+        font-size: 0.75rem;
+        color: #6c757d;
+        font-weight: 500;
+      }
+
+      .remove-file-btn {
+        padding: 0.5rem;
+        min-width: 2rem;
+        height: 2rem;
+        border: none;
+        background: #dc3545;
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.2s;
+        flex-shrink: 0;
+
+        &:hover {
+          background: #c82333;
+        }
+
+        &:active {
+          background: #bd2130;
+        }
+
+        i {
+          font-size: 0.875rem;
+        }
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .order-create-container {
+    padding: 1rem;
+
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+}

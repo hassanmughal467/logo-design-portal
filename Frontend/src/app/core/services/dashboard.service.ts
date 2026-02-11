@@ -124,7 +124,7 @@ export class DashboardService {
     // Calculate statistics
     const stats: DashboardStats = {
       totalOrders: orders.length,
-      pendingOrders: orders.filter(o => o.status === OrderStatus.Pending).length,
+      pendingOrders: orders.filter(o => o.status === OrderStatus.WaitingForAdminApproval).length,
       inProgressOrders: orders.filter(o => o.status === OrderStatus.InProgress).length,
       completedOrders: orders.filter(o => o.status === OrderStatus.Completed).length,
       totalClients: clients.length,

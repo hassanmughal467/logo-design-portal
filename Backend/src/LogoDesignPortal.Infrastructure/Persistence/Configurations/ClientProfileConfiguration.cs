@@ -14,7 +14,16 @@ public class ClientProfileConfiguration : IEntityTypeConfiguration<ClientProfile
             .IsRequired()
             .HasMaxLength(200);
 
+        builder.Property(e => e.ContactName)
+            .HasMaxLength(200);
+
         builder.Property(e => e.PhoneNumber)
+            .HasMaxLength(20);
+
+        builder.Property(e => e.Cell)
+            .HasMaxLength(20);
+
+        builder.Property(e => e.Fax)
             .HasMaxLength(20);
 
         builder.Property(e => e.Address)
@@ -23,11 +32,20 @@ public class ClientProfileConfiguration : IEntityTypeConfiguration<ClientProfile
         builder.Property(e => e.City)
             .HasMaxLength(100);
 
+        builder.Property(e => e.State)
+            .HasMaxLength(100);
+
         builder.Property(e => e.Country)
             .HasMaxLength(100);
 
         builder.Property(e => e.PostalCode)
             .HasMaxLength(20);
+
+        builder.Property(e => e.Website)
+            .HasMaxLength(500);
+
+        builder.Property(e => e.Reference)
+            .HasMaxLength(200);
 
         builder.HasOne(e => e.User)
             .WithOne(u => u.ClientProfile)

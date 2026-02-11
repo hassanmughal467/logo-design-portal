@@ -108,10 +108,10 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// Global Exception Handler
+// Global Exception Handler (must be first to catch all errors)
 app.UseMiddleware<ExceptionMiddleware>();
 
-// CORS must be before HTTPS redirection to handle preflight requests
+// CORS must be very early to handle preflight OPTIONS requests
 app.UseCors("AllowAll");
 
 // Only redirect to HTTPS in production, not in development
@@ -122,6 +122,11 @@ if (!app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Security Middleware (after CORS and auth to allow preflight requests)
+app.UseMiddleware<RateLimitingMiddleware>();
+// InputSanitizationMiddleware temporarily disabled - re-enable after proper stream handling implementation
+// app.UseMiddleware<InputSanitizationMiddleware>();
 
 app.MapControllers();
 

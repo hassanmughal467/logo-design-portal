@@ -1,19 +1,25 @@
+using LogoDesignPortal.Domain.Enums;
+
 namespace LogoDesignPortal.Domain.Entities;
 
 public class Invoice : BaseEntity
 {
-    public Guid OrderId { get; set; }
+    public Guid ClientId { get; set; }
     public string InvoiceNumber { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal TotalAmount { get; set; }
+    public InvoiceStatus Status { get; set; } = InvoiceStatus.Pending;
+    public BillingType BillingType { get; set; } = BillingType.PerLogo; // Default for backward compatibility
     public DateTime IssueDate { get; set; } = DateTime.UtcNow;
     public DateTime? DueDate { get; set; }
     public DateTime? PaidDate { get; set; }
-    public bool IsPaid { get; set; } = false;
     public string? PaymentMethod { get; set; }
     public string? Notes { get; set; }
 
     // Navigation properties
-    public LogoOrder Order { get; set; } = null!;
+    public ClientProfile Client { get; set; } = null!;
+    public ICollection<InvoiceOrder> InvoiceOrders { get; set; } = new List<InvoiceOrder>(); // Support multiple orders per invoice
+    public ICollection<InvoiceLog> InvoiceLogs { get; set; } = new List<InvoiceLog>();
 }
+

@@ -1,4 +1,5 @@
 using LogoDesignPortal.Domain.Entities;
+using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -29,6 +30,11 @@ public class LogoFileConfiguration : IEntityTypeConfiguration<LogoFile>
         builder.Property(e => e.FileSize)
             .IsRequired();
 
+        builder.Property(e => e.FileType)
+            .IsRequired()
+            .HasConversion<int>()
+            .HasDefaultValue(FileType.Reference);
+
         builder.Property(e => e.Description)
             .HasMaxLength(1000);
 
@@ -36,5 +42,10 @@ public class LogoFileConfiguration : IEntityTypeConfiguration<LogoFile>
             .WithMany(o => o.Files)
             .HasForeignKey(e => e.OrderId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(e => e.ApprovedByUser)
+            .WithMany()
+            .HasForeignKey(e => e.ApprovedBy)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

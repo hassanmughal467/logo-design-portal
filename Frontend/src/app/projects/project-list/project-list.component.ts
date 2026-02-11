@@ -64,7 +64,17 @@ export class ProjectListComponent implements OnInit, OnDestroy {
             id: order.id,
             orderId: order.id,
             title: order.title,
-            clientName: order.client ? `${order.client.firstName} ${order.client.lastName}` : 'N/A',
+            clientName: order.client ? (() => {
+              const parts: string[] = [];
+              if (order.client.companyName) {
+                parts.push(order.client.companyName);
+              }
+              const personName = `${order.client.firstName || ''} ${order.client.lastName || ''}`.trim();
+              if (personName) {
+                parts.push(personName);
+              }
+              return parts.length > 0 ? parts.join(' - ') : (order.client.email || 'N/A');
+            })() : 'N/A',
             designerName: order.designer ? `${order.designer.firstName} ${order.designer.lastName}` : undefined,
             packageType: (order as any).packageType || 'Basic',
             status: order.status,

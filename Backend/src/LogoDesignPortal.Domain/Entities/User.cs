@@ -7,10 +7,20 @@ public class User : BaseEntity
     public string LastName { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
+    public DateTime? DeactivatedAt { get; set; }
+    public Guid? DeactivatedBy { get; set; }
     public string? RefreshToken { get; set; }
     public DateTime? RefreshTokenExpiryTime { get; set; }
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetTokenExpiryTime { get; set; }
+    
+    // Account lockout fields
+    public int FailedLoginAttempts { get; set; } = 0;
+    public DateTime? LockoutEnd { get; set; }
+    
+    // Additional user information fields
+    public string? SecondaryEmail { get; set; }
+    public string? InvoiceEmail { get; set; }
 
     // Navigation properties
     public Guid RoleId { get; set; }

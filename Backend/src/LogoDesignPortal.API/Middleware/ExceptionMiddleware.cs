@@ -1,3 +1,4 @@
+using LogoDesignPortal.Application.Exceptions;
 using System.Net;
 using System.Text.Json;
 
@@ -36,7 +37,13 @@ public class ExceptionMiddleware
 
         switch (exception)
         {
+            case ForbiddenAccessException:
+                // User is authenticated but doesn't have permission
+                code = HttpStatusCode.Forbidden;
+                result = JsonSerializer.Serialize(new { error = exception.Message });
+                break;
             case UnauthorizedAccessException:
+                // User is not authenticated or token is invalid
                 code = HttpStatusCode.Unauthorized;
                 result = JsonSerializer.Serialize(new { error = exception.Message });
                 break;

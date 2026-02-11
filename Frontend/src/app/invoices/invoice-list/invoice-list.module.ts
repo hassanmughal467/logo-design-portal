@@ -11,6 +11,7 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { InputTextModule } from 'primeng/inputtext';
 import { DropdownModule } from 'primeng/dropdown';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { DialogModule } from 'primeng/dialog';
 
 @NgModule({
@@ -25,6 +26,7 @@ import { DialogModule } from 'primeng/dialog';
     TooltipModule,
     InputTextModule,
     DropdownModule,
+    MultiSelectModule,
     DialogModule
   ]
 })

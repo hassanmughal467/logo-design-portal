@@ -1,0 +1,54 @@
+<div class="designer-detail-container" *ngIf="designer">
+  <div class="header">
+    <button pButton type="button" label="Back" icon="pi pi-arrow-left" (click)="goBack()" class="p-button-text"></button>
+    <h2>{{ designer.user.firstName }} {{ designer.user.lastName }}</h2>
+  </div>
+
+  <p-progressSpinner *ngIf="loading"></p-progressSpinner>
+
+  <div *ngIf="!loading" class="content">
+    <div class="info-cards">
+      <p-card>
+        <h3>Designer Information</h3>
+        <p><strong>Email:</strong> {{ designer.user.email }}</p>
+        <p><strong>Specialization:</strong> {{ designer.designerProfile?.specialization || 'N/A' }}</p>
+        <p><strong>Hourly Rate:</strong> {{ formatCurrency(designer.designerProfile?.hourlyRate || 0) }}</p>
+        <p><strong>Availability:</strong> 
+          <span [class]="designer.isAvailable ? 'badge-success' : 'badge-danger'">
+            {{ designer.isAvailable ? 'Available' : 'Unavailable' }}
+          </span>
+        </p>
+        <p><strong>Completed Orders:</strong> {{ designer.completedOrdersCount }}</p>
+        <p><strong>Average Delivery Time:</strong> {{ formatDays(designer.averageDeliveryTimeDays) }}</p>
+        <p *ngIf="designer.notes"><strong>Notes:</strong> {{ designer.notes }}</p>
+      </p-card>
+    </div>
+
+    <p-tabView [(activeIndex)]="activeTab">
+      <p-tabPanel header="Assigned Orders">
+        <p-table [value]="orders" [loading]="ordersLoading" [paginator]="true" [rows]="10">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Price</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-order>
+            <tr>
+              <td>{{ order.title }}</td>
+              <td><span [class]="'badge-' + getStatusSeverity(order.status)">{{ order.status }}</span></td>
+              <td>{{ formatCurrency((order as any).price || 0) }}</td>
+              <td>{{ formatDate(order.createdAt) }}</td>
+              <td>
+                <button pButton type="button" label="View" (click)="viewOrder(order.id)" class="p-button-sm"></button>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </p-tabPanel>
+    </p-tabView>
+  </div>
+</div>

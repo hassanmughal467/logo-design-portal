@@ -3,6 +3,7 @@ using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using InvoiceStatisticsDto = LogoDesignPortal.Application.DTOs.Invoices.InvoiceStatisticsDto;
 
 namespace LogoDesignPortal.API.Controllers;
 
@@ -69,7 +70,8 @@ public class InvoicesController : ControllerBase
     {
         try
         {
-            var invoice = await _invoiceService.MarkInvoiceAsPaidAsync(id, request.PaymentMethod);
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var invoice = await _invoiceService.MarkInvoiceAsPaidAsync(id, request.PaymentMethod, userId);
             return Ok(invoice);
         }
         catch (InvalidOperationException ex)
@@ -84,12 +86,46 @@ public class InvoicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendInvoice(Guid id)
     {
-        var result = await _invoiceService.SendInvoiceAsync(id);
-        if (result)
+        try
         {
-            return Ok(new { message = "Invoice sent successfully." });
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var result = await _invoiceService.SendInvoiceAsync(id, userId);
+            if (result)
+            {
+                return Ok(new { message = "Invoice sent successfully." });
+            }
+            return BadRequest(new { error = "Failed to send invoice." });
         }
-        return BadRequest(new { error = "Failed to send invoice." });
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("{id}/logs")]
+    [ProducesResponseType(typeof(List<InvoiceLogDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetInvoiceLogs(Guid id)
+    {
+        // Verify invoice exists
+        var invoice = await _invoiceService.GetInvoiceByIdAsync(id);
+        if (invoice == null)
+        {
+            return NotFound(new { error = "Invoice not found." });
+        }
+
+        var logs = await _invoiceService.GetInvoiceLogsAsync(id);
+        return Ok(logs);
+    }
+
+    [HttpGet("statistics")]
+    [ProducesResponseType(typeof(InvoiceStatisticsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetStatistics()
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var statistics = await _invoiceService.GetInvoiceStatisticsAsync(userId, userRole);
+        return Ok(statistics);
     }
 
     [HttpGet("{id}/download")]

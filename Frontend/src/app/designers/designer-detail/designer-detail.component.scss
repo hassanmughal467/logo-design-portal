@@ -1,0 +1,32 @@
+.designer-detail-container {
+  padding: 2rem;
+
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+
+    h2 {
+      margin: 0;
+    }
+  }
+
+  .info-cards {
+    margin-bottom: 2rem;
+  }
+
+  .badge-success {
+    background-color: #28a745;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+  }
+
+  .badge-danger {
+    background-color: #dc3545;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+  }
+}

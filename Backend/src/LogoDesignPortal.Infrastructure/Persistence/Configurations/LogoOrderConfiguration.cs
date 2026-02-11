@@ -22,11 +22,25 @@ public class LogoOrderConfiguration : IEntityTypeConfiguration<LogoOrder>
         builder.Property(e => e.Status)
             .IsRequired()
             .HasConversion<int>()
-            .HasDefaultValue(OrderStatus.Pending);
+            .HasDefaultValue(OrderStatus.WaitingForAdminApproval);
+
+        builder.Property(e => e.Priority)
+            .IsRequired()
+            .HasConversion<int>()
+            .HasDefaultValue(OrderPriority.Medium);
 
         builder.Property(e => e.Price)
             .IsRequired()
             .HasPrecision(18, 2);
+
+        builder.Property(e => e.ProposedPrice)
+            .HasPrecision(18, 2);
+
+        builder.Property(e => e.Instructions)
+            .HasMaxLength(5000);
+
+        builder.Property(e => e.RequiredFormats)
+            .HasMaxLength(500);
 
         builder.Property(e => e.Requirements)
             .HasMaxLength(2000);
@@ -37,6 +51,15 @@ public class LogoOrderConfiguration : IEntityTypeConfiguration<LogoOrder>
         builder.Property(e => e.StylePreferences)
             .HasMaxLength(500);
 
+        builder.Property(e => e.CancellationReason)
+            .HasMaxLength(2000);
+
+        builder.Property(e => e.RefundReason)
+            .HasMaxLength(2000);
+
+        builder.Property(e => e.RefundAmount)
+            .HasPrecision(18, 2);
+
         builder.HasOne(e => e.Client)
             .WithMany(c => c.Orders)
             .HasForeignKey(e => e.ClientId)
@@ -46,10 +69,5 @@ public class LogoOrderConfiguration : IEntityTypeConfiguration<LogoOrder>
             .WithMany(d => d.AssignedOrders)
             .HasForeignKey(e => e.DesignerId)
             .OnDelete(DeleteBehavior.SetNull);
-
-        builder.HasOne(e => e.Invoice)
-            .WithOne(i => i.Order)
-            .HasForeignKey<Invoice>(i => i.OrderId)
-            .OnDelete(DeleteBehavior.Cascade);
     }
 }

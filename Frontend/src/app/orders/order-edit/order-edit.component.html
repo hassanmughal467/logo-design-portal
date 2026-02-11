@@ -1,0 +1,176 @@
+<form [formGroup]="orderForm" (ngSubmit)="onSubmit()" class="order-edit-form">
+  <div class="form-row">
+    <!-- Title -->
+    <div class="form-group full-width">
+      <label for="title">Title <span class="required">*</span></label>
+      <input 
+        id="title"
+        type="text" 
+        pInputText 
+        formControlName="title"
+        [class.ng-invalid]="f['title'].invalid && f['title'].touched"
+        placeholder="Enter order title"
+      />
+      <small class="p-error" *ngIf="f['title'].invalid && f['title'].touched">
+        Title is required (minimum 3 characters)
+      </small>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <!-- Description -->
+    <div class="form-group full-width">
+      <label for="description">Description <span class="required">*</span></label>
+      <textarea 
+        id="description"
+        pInputTextarea 
+        formControlName="description"
+        rows="4"
+        [class.ng-invalid]="f['description'].invalid && f['description'].touched"
+        placeholder="Describe your logo requirements..."
+      ></textarea>
+      <small class="p-error" *ngIf="f['description'].invalid && f['description'].touched">
+        Description is required (minimum 10 characters)
+      </small>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <!-- Price -->
+    <div class="form-group">
+      <label for="price">Price (USD) <span class="required">*</span></label>
+      <p-inputNumber 
+        id="price"
+        formControlName="price"
+        mode="decimal"
+        [min]="0.01"
+        [maxFractionDigits]="2"
+        [class.ng-invalid]="f['price'].invalid && f['price'].touched"
+        styleClass="w-full"
+      ></p-inputNumber>
+      <small class="p-error" *ngIf="f['price'].invalid && f['price'].touched">
+        Valid price is required
+      </small>
+    </div>
+
+    <!-- Priority -->
+    <div class="form-group">
+      <label for="priority">Priority</label>
+      <p-dropdown 
+        id="priority"
+        formControlName="priority"
+        [options]="priorityOptions"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="Select priority"
+        [styleClass]="'w-full'"
+      ></p-dropdown>
+      <small class="p-help">
+        <strong>Low:</strong> No rush<br>
+        <strong>Normal:</strong> Standard timeline<br>
+        <strong>High:</strong> Important, faster delivery<br>
+        <strong>Urgent:</strong> Rush order, fastest delivery
+      </small>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <!-- Deadline -->
+    <div class="form-group full-width">
+      <label for="deadline">Deadline (Optional)</label>
+      <p-calendar 
+        id="deadline"
+        formControlName="deadline"
+        [showIcon]="true"
+        dateFormat="yy-mm-dd"
+        [minDate]="minDate"
+        styleClass="w-full"
+      ></p-calendar>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <!-- Instructions -->
+    <div class="form-group full-width">
+      <label for="instructions">Instructions</label>
+      <textarea 
+        id="instructions"
+        pInputTextarea 
+        formControlName="instructions"
+        rows="3"
+        placeholder="Any specific instructions for the designer..."
+      ></textarea>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <!-- Required Formats -->
+    <div class="form-group">
+      <label for="requiredFormats">Required Formats</label>
+      <input 
+        id="requiredFormats"
+        type="text" 
+        pInputText 
+        formControlName="requiredFormats"
+        placeholder="e.g., PNG, SVG, PDF"
+      />
+      <small class="p-help">Comma-separated list of required file formats</small>
+    </div>
+
+    <!-- Requirements -->
+    <div class="form-group">
+      <label for="requirements">Requirements</label>
+      <textarea 
+        id="requirements"
+        pInputTextarea 
+        formControlName="requirements"
+        rows="2"
+        placeholder="Additional requirements..."
+      ></textarea>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <!-- Color Preferences -->
+    <div class="form-group">
+      <label for="colorPreferences">Color Preferences</label>
+      <input 
+        id="colorPreferences"
+        type="text" 
+        pInputText 
+        formControlName="colorPreferences"
+        placeholder="e.g., Blue, White, Red"
+      />
+    </div>
+
+    <!-- Style Preferences -->
+    <div class="form-group">
+      <label for="stylePreferences">Style Preferences</label>
+      <input 
+        id="stylePreferences"
+        type="text" 
+        pInputText 
+        formControlName="stylePreferences"
+        placeholder="e.g., Modern, Minimalist, Bold"
+      />
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <p-button 
+      type="submit"
+      label="Update Order" 
+      icon="pi pi-check" 
+      [loading]="loading"
+      [disabled]="orderForm.invalid || loading"
+    ></p-button>
+    <p-button 
+      type="button"
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="onCancel()"
+      [styleClass]="'p-button-text'"
+      [disabled]="loading"
+    ></p-button>
+  </div>
+</form>

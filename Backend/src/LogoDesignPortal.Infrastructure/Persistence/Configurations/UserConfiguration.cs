@@ -31,6 +31,15 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired()
             .HasDefaultValue(true);
 
+        builder.Property(e => e.SecondaryEmail)
+            .HasMaxLength(256);
+
+        builder.Property(e => e.InvoiceEmail)
+            .HasMaxLength(256);
+
+        builder.Property(e => e.DeactivatedAt)
+            .IsRequired(false);
+
         builder.HasOne(e => e.Role)
             .WithMany(r => r.Users)
             .HasForeignKey(e => e.RoleId)

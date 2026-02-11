@@ -20,10 +20,19 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<LogoOrder> LogoOrders { get; set; }
     public DbSet<LogoFile> LogoFiles { get; set; }
     public DbSet<OrderStatusHistory> OrderStatusHistories { get; set; }
+    public DbSet<OrderLog> OrderLogs { get; set; }
+    public DbSet<OrderRevision> OrderRevisions { get; set; }
+    public DbSet<RevisionFile> RevisionFiles { get; set; }
+    public DbSet<OrderComment> OrderComments { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
+    public DbSet<ClientGallery> ClientGalleries { get; set; }
     public DbSet<Invoice> Invoices { get; set; }
+    public DbSet<InvoiceOrder> InvoiceOrders { get; set; }
+    public DbSet<InvoiceLog> InvoiceLogs { get; set; }
     public DbSet<Message> Messages { get; set; }
     public DbSet<Review> Reviews { get; set; }
     public DbSet<Settings> Settings { get; set; }
+    public DbSet<AuditLog> AuditLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

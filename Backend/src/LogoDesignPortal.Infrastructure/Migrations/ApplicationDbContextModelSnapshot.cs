@@ -22,6 +22,156 @@ namespace LogoDesignPortal.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.AuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("NewValue")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("PerformedByRole")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid?>("PerformedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PreviousValue")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PerformedByUserId");
+
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("EntityType", "EntityId");
+
+                    b.ToTable("AuditLogs");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.ClientGallery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("FileId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Format")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("PreviewImagePath")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("FileId");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("ClientGalleries");
+                });
+
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.ClientProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -32,12 +182,20 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("Cell")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<string>("City")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("CompanyName")
                         .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ContactName")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
@@ -57,8 +215,15 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Property<Guid?>("DeletedBy")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Fax")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PhoneNumber")
                         .HasMaxLength(20)
@@ -68,6 +233,14 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<string>("Reference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -76,6 +249,10 @@ namespace LogoDesignPortal.Infrastructure.Migrations
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Website")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.HasKey("Id");
 
@@ -119,6 +296,9 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Specialization")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
@@ -150,6 +330,14 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int>("BillingType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -173,18 +361,15 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("IsPaid")
-                        .HasColumnType("bit");
-
                     b.Property<DateTime>("IssueDate")
                         .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("LogoOrderId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
-
-                    b.Property<Guid>("OrderId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime?>("PaidDate")
                         .HasColumnType("datetime2");
@@ -192,6 +377,11 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Property<string>("PaymentMethod")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<decimal>("TaxAmount")
                         .HasPrecision(18, 2)
@@ -209,19 +399,128 @@ namespace LogoDesignPortal.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ClientId");
+
                     b.HasIndex("InvoiceNumber")
                         .IsUnique();
 
-                    b.HasIndex("OrderId")
-                        .IsUnique();
+                    b.HasIndex("LogoOrderId");
 
                     b.ToTable("Invoices");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.InvoiceLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Action")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("PerformedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.ToTable("InvoiceLogs");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.InvoiceOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("InvoiceId", "OrderId")
+                        .IsUnique()
+                        .HasFilter("[OrderId] IS NOT NULL");
+
+                    b.ToTable("InvoiceOrders");
                 });
 
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.LogoFile", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ApprovedBy")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("ContentType")
@@ -258,10 +557,21 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Property<long>("FileSize")
                         .HasColumnType("bigint");
 
+                    b.Property<int>("FileType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<bool>("IsAdminApproved")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsFinalVersion")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsVisibleToClient")
                         .HasColumnType("bit");
 
                     b.Property<Guid>("OrderId")
@@ -281,7 +591,12 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Property<Guid>("UploadedBy")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ApprovedBy");
 
                     b.HasIndex("OrderId");
 
@@ -292,6 +607,22 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ArchivedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CancelledBy")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("ClientId")
@@ -324,16 +655,62 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Property<Guid?>("DesignerId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Instructions")
+                        .HasMaxLength(5000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsCancelledByUser")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRefunded")
                         .HasColumnType("bit");
 
                     b.Property<decimal>("Price")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<bool>("PriceApproved")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Priority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(2);
+
+                    b.Property<decimal?>("ProposedPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("RefundAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("RefundReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("RefundedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("RefundedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RequiredFormats")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<string>("Requirements")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
+
+                    b.Property<bool>("RequiresPriceApproval")
+                        .HasColumnType("bit");
 
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
@@ -420,6 +797,232 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.HasIndex("SenderId");
 
                     b.ToTable("Messages");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("Type")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("UserId", "IsRead");
+
+                    b.ToTable("Notifications");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.OrderComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsInternal")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("OrderComments");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.OrderLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Action")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Metadata")
+                        .HasMaxLength(5000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("NewStatus")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PerformedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("PerformedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("PreviousStatus")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Action");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("OrderLogs");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.OrderRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Instructions")
+                        .IsRequired()
+                        .HasMaxLength(5000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsResolved")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("OrderRevisions");
                 });
 
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.OrderStatusHistory", b =>
@@ -531,7 +1134,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000001"),
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5862),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2922),
                             Description = "Create new users",
                             IsDeleted = false,
                             Name = "CreateUser",
@@ -541,7 +1144,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000002"),
                             Action = "Read",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5866),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2926),
                             Description = "View all users",
                             IsDeleted = false,
                             Name = "ViewUsers",
@@ -551,7 +1154,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000003"),
                             Action = "Update",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5869),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2927),
                             Description = "Update user information",
                             IsDeleted = false,
                             Name = "UpdateUser",
@@ -561,7 +1164,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000004"),
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5872),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2980),
                             Description = "Delete users",
                             IsDeleted = false,
                             Name = "DeleteUser",
@@ -571,7 +1174,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000001"),
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5874),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2982),
                             Description = "Create designer profiles",
                             IsDeleted = false,
                             Name = "CreateDesignerProfile",
@@ -581,7 +1184,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000002"),
                             Action = "Read",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5876),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2983),
                             Description = "View designer profiles",
                             IsDeleted = false,
                             Name = "ViewDesignerProfiles",
@@ -591,7 +1194,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000003"),
                             Action = "Update",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5878),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2985),
                             Description = "Update designer profiles",
                             IsDeleted = false,
                             Name = "UpdateDesignerProfile",
@@ -601,7 +1204,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("30000000-0000-0000-0000-000000000001"),
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5882),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2988),
                             Description = "Create new orders",
                             IsDeleted = false,
                             Name = "CreateOrder",
@@ -611,7 +1214,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("30000000-0000-0000-0000-000000000002"),
                             Action = "ReadAll",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5884),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2989),
                             Description = "View all orders in the system",
                             IsDeleted = false,
                             Name = "ViewAllOrders",
@@ -621,7 +1224,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("30000000-0000-0000-0000-000000000003"),
                             Action = "Assign",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5886),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2991),
                             Description = "Assign orders to designers",
                             IsDeleted = false,
                             Name = "AssignOrder",
@@ -631,7 +1234,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("30000000-0000-0000-0000-000000000004"),
                             Action = "UpdateStatus",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5888),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2993),
                             Description = "Update order status",
                             IsDeleted = false,
                             Name = "UpdateOrderStatus",
@@ -641,7 +1244,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("40000000-0000-0000-0000-000000000001"),
                             Action = "Manage",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5890),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2994),
                             Description = "Manage role permissions",
                             IsDeleted = false,
                             Name = "ManagePermissions",
@@ -651,7 +1254,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("50000000-0000-0000-0000-000000000001"),
                             Action = "Upload",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5892),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2996),
                             Description = "Upload files",
                             IsDeleted = false,
                             Name = "UploadFile",
@@ -661,7 +1264,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("50000000-0000-0000-0000-000000000002"),
                             Action = "Download",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5894),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2998),
                             Description = "Download files",
                             IsDeleted = false,
                             Name = "DownloadFile",
@@ -671,7 +1274,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("50000000-0000-0000-0000-000000000003"),
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 335, DateTimeKind.Utc).AddTicks(5926),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 854, DateTimeKind.Utc).AddTicks(2999),
                             Description = "Delete files",
                             IsDeleted = false,
                             Name = "DeleteFile",
@@ -731,6 +1334,75 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.ToTable("Reviews");
                 });
 
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.RevisionFile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("FileType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("RevisionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RevisionId");
+
+                    b.ToTable("RevisionFiles");
+                });
+
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -779,7 +1451,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("11111111-1111-1111-1111-111111111111"),
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 336, DateTimeKind.Utc).AddTicks(536),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 855, DateTimeKind.Utc).AddTicks(380),
                             Description = "Full system access with all permissions",
                             IsDeleted = false,
                             Name = "SuperAdmin"
@@ -787,7 +1459,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("22222222-2222-2222-2222-222222222222"),
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 336, DateTimeKind.Utc).AddTicks(539),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 855, DateTimeKind.Utc).AddTicks(382),
                             Description = "Administrative access with restricted client data access",
                             IsDeleted = false,
                             Name = "Admin"
@@ -795,7 +1467,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("33333333-3333-3333-3333-333333333333"),
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 336, DateTimeKind.Utc).AddTicks(542),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 855, DateTimeKind.Utc).AddTicks(384),
                             Description = "Designer access without client identity information",
                             IsDeleted = false,
                             Name = "Designer"
@@ -803,7 +1475,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("44444444-4444-4444-4444-444444444444"),
-                            CreatedAt = new DateTime(2026, 2, 9, 14, 18, 58, 336, DateTimeKind.Utc).AddTicks(544),
+                            CreatedAt = new DateTime(2026, 2, 10, 19, 56, 59, 855, DateTimeKind.Utc).AddTicks(385),
                             Description = "Client access to their own data",
                             IsDeleted = false,
                             Name = "Client"
@@ -918,6 +1590,12 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("DeactivatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DeactivatedBy")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("datetime2");
 
@@ -929,10 +1607,17 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<int>("FailedLoginAttempts")
+                        .HasColumnType("int");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("InvoiceEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -946,6 +1631,9 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("LockoutEnd")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -966,6 +1654,10 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("SecondaryEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -980,6 +1672,33 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.HasIndex("RoleId");
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.ClientGallery", b =>
+                {
+                    b.HasOne("LogoDesignPortal.Domain.Entities.ClientProfile", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LogoDesignPortal.Domain.Entities.LogoFile", "File")
+                        .WithMany()
+                        .HasForeignKey("FileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LogoDesignPortal.Domain.Entities.LogoOrder", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("File");
+
+                    b.Navigation("Order");
                 });
 
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.ClientProfile", b =>
@@ -1006,22 +1725,62 @@ namespace LogoDesignPortal.Infrastructure.Migrations
 
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.Invoice", b =>
                 {
-                    b.HasOne("LogoDesignPortal.Domain.Entities.LogoOrder", "Order")
-                        .WithOne("Invoice")
-                        .HasForeignKey("LogoDesignPortal.Domain.Entities.Invoice", "OrderId")
+                    b.HasOne("LogoDesignPortal.Domain.Entities.ClientProfile", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LogoDesignPortal.Domain.Entities.LogoOrder", null)
+                        .WithMany("Invoices")
+                        .HasForeignKey("LogoOrderId");
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.InvoiceLog", b =>
+                {
+                    b.HasOne("LogoDesignPortal.Domain.Entities.Invoice", "Invoice")
+                        .WithMany("InvoiceLogs")
+                        .HasForeignKey("InvoiceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Invoice");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.InvoiceOrder", b =>
+                {
+                    b.HasOne("LogoDesignPortal.Domain.Entities.Invoice", "Invoice")
+                        .WithMany("InvoiceOrders")
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LogoDesignPortal.Domain.Entities.LogoOrder", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Invoice");
 
                     b.Navigation("Order");
                 });
 
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.LogoFile", b =>
                 {
+                    b.HasOne("LogoDesignPortal.Domain.Entities.User", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedBy")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("LogoDesignPortal.Domain.Entities.LogoOrder", "Order")
                         .WithMany("Files")
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("ApprovedByUser");
 
                     b.Navigation("Order");
                 });
@@ -1069,6 +1828,65 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Navigation("Sender");
                 });
 
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.Notification", b =>
+                {
+                    b.HasOne("LogoDesignPortal.Domain.Entities.LogoOrder", "Order")
+                        .WithMany("Notifications")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LogoDesignPortal.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.OrderComment", b =>
+                {
+                    b.HasOne("LogoDesignPortal.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LogoDesignPortal.Domain.Entities.LogoOrder", "Order")
+                        .WithMany("Comments")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.OrderLog", b =>
+                {
+                    b.HasOne("LogoDesignPortal.Domain.Entities.LogoOrder", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.OrderRevision", b =>
+                {
+                    b.HasOne("LogoDesignPortal.Domain.Entities.LogoOrder", "Order")
+                        .WithMany("Revisions")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+                });
+
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.OrderStatusHistory", b =>
                 {
                     b.HasOne("LogoDesignPortal.Domain.Entities.LogoOrder", "Order")
@@ -1097,6 +1915,17 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.RevisionFile", b =>
+                {
+                    b.HasOne("LogoDesignPortal.Domain.Entities.OrderRevision", "Revision")
+                        .WithMany("Files")
+                        .HasForeignKey("RevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Revision");
                 });
 
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.RolePermission", b =>
@@ -1139,13 +1968,31 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Navigation("AssignedOrders");
                 });
 
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.Invoice", b =>
+                {
+                    b.Navigation("InvoiceLogs");
+
+                    b.Navigation("InvoiceOrders");
+                });
+
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.LogoOrder", b =>
                 {
+                    b.Navigation("Comments");
+
                     b.Navigation("Files");
 
-                    b.Navigation("Invoice");
+                    b.Navigation("Invoices");
+
+                    b.Navigation("Notifications");
+
+                    b.Navigation("Revisions");
 
                     b.Navigation("StatusHistory");
+                });
+
+            modelBuilder.Entity("LogoDesignPortal.Domain.Entities.OrderRevision", b =>
+                {
+                    b.Navigation("Files");
                 });
 
             modelBuilder.Entity("LogoDesignPortal.Domain.Entities.Permission", b =>

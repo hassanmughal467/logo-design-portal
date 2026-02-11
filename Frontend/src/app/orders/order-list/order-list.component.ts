@@ -1,8 +1,9 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { MessageService } from 'primeng/api';
+import { FileUpload } from 'primeng/fileupload';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus, OrderPriority } from '@shared/models/order.model';
@@ -20,18 +21,127 @@ export class OrderListComponent implements OnInit, OnDestroy {
   globalFilter = '';
   first = 0;
   rows = 10;
+  
+  // User role
+  isClient = false;
+  isAdmin = false;
+  isSuperAdmin = false;
+  
+  // Order Detail Modal
+  showOrderDetailModal = false;
+  selectedOrderId: string | null = null;
 
-  statuses = Object.values(OrderStatus);
+  statuses = (() => {
+    const statusValues = Object.values(OrderStatus);
+    console.log('All OrderStatus values:', statusValues);
+    
+    const statusMap = statusValues.map(status => {
+      // Custom label formatting for better readability
+      let formattedLabel = status.replace(/([A-Z])/g, ' $1').trim();
+      
+      // Special formatting for specific statuses
+      const labelMap: { [key: string]: string } = {
+        'WaitingForAdminApproval': 'Waiting For Admin Approval',
+        'Waiting For Admin Approval': 'Waiting For Admin Approval',
+        'PriceApprovalPending': 'Price Approval Pending',
+        'Price Approval Pending': 'Price Approval Pending',
+        'InProgress': 'In Progress',
+        'In Progress': 'In Progress',
+        'PreviewDelivered': 'Preview Delivered',
+        'Preview Delivered': 'Preview Delivered',
+        'RevisionRequested': 'Revision Requested',
+        'Revision Requested': 'Revision Requested',
+        'FinalApproved': 'Approved',
+        'Final Approved': 'Approved',
+        'Completed': 'Completed',
+        'Cancelled': 'Cancelled',
+        'Pending': 'Pending',
+        'Paid': 'Paid',
+        'Processing': 'Processing',
+        'CancelledByUser': 'Cancelled By User',
+        'Cancelled By User': 'Cancelled By User',
+        'CancelledByAdmin': 'Cancelled By Admin',
+        'Cancelled By Admin': 'Cancelled By Admin',
+        'Refunded': 'Refunded',
+        'Failed': 'Failed',
+        'Archived': 'Archived'
+      };
+      
+      // Try both original status value and formatted label
+      let displayLabel = labelMap[status] || labelMap[formattedLabel] || formattedLabel;
+      
+      // Explicit handling for statuses that might not match due to formatting
+      if (!displayLabel) {
+        if (status === 'Completed') {
+          displayLabel = 'Completed';
+        } else if (status === 'FinalApproved') {
+          displayLabel = 'Approved';
+        } else {
+          displayLabel = formattedLabel;
+        }
+      }
+      
+      const result = {
+        label: displayLabel,
+        value: status,
+        originalLabel: formattedLabel
+      };
+      
+      // Debug specific statuses
+      if (status === 'Completed' || status === 'FinalApproved') {
+        console.log(`Status: ${status}, Formatted: ${formattedLabel}, Display: ${displayLabel}`);
+      }
+      
+      return result;
+    });
+    
+    // Sort statuses to show important ones first
+    const priority: { [key: string]: number } = {
+      'WaitingForAdminApproval': 1,
+      'PriceApprovalPending': 2,
+      'InProgress': 3,
+      'PreviewDelivered': 4,
+      'RevisionRequested': 5,
+      'FinalApproved': 6,
+      'Completed': 7,
+      'Pending': 8,
+      'Paid': 9,
+      'Processing': 10,
+      'Cancelled': 11,
+      'CancelledByUser': 12,
+      'CancelledByAdmin': 13,
+      'Refunded': 14,
+      'Failed': 15,
+      'Archived': 16
+    };
+    
+    const sorted = statusMap.sort((a, b) => {
+      return (priority[a.value] || 99) - (priority[b.value] || 99);
+    });
+    
+    console.log('Final sorted statuses:', sorted.map(s => ({ label: s.label, value: s.value })));
+    console.log('Completed status found:', sorted.find(s => s.value === 'Completed'));
+    console.log('FinalApproved status found:', sorted.find(s => s.value === 'FinalApproved'));
+    
+    return sorted;
+  })();
   priorities = Object.values(OrderPriority);
 
   // Dialog states
   showAssignDialog = false;
   showStatusDialog = false;
   showUploadDialog = false;
+  selectedFiles: File[] = [];
+  uploadingFiles = false;
+  uploadSuccess = false;
+  uploadedFilesCount = 0;
+  showConfirmDialog = false;
   selectedOrder: Order | null = null;
+  
+  @ViewChild('fileUpload') fileUploadComponent!: FileUpload;
   availableDesigners: any[] = [];
   selectedDesignerId: string | null = null;
-  newStatus: OrderStatus | null = null;
+  newStatus: { label: string; value: OrderStatus } | null = null;
 
   private destroy$ = new Subject<void>();
 
@@ -45,6 +155,13 @@ export class OrderListComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     console.log('OrderListComponent ngOnInit called');
     this.filteredOrders = [];
+    
+    // Check user role
+    const user = this.authService.getCurrentUser();
+    this.isClient = user?.role === 'Client';
+    this.isAdmin = user?.role === 'Admin';
+    this.isSuperAdmin = user?.role === 'SuperAdmin';
+    
     this.loadOrders();
   }
 
@@ -143,38 +260,77 @@ export class OrderListComponent implements OnInit, OnDestroy {
       title: backendOrder.title || backendOrder.Title || '',
       description: backendOrder.description || backendOrder.Description || '',
       status: status,
-      priority: backendOrder.priority || backendOrder.Priority || OrderPriority.Medium, // Default if not provided
+      priority: backendOrder.priority || backendOrder.Priority ? 
+        (typeof (backendOrder.priority || backendOrder.Priority) === 'string' ? 
+          (backendOrder.priority || backendOrder.Priority) as OrderPriority : 
+          OrderPriority.Medium
+        ) : OrderPriority.Medium,
+      price: backendOrder.price || backendOrder.Price || 0,
+      proposedPrice: backendOrder.proposedPrice || backendOrder.ProposedPrice,
+      requiresPriceApproval: backendOrder.requiresPriceApproval || backendOrder.RequiresPriceApproval || false,
+      priceApproved: backendOrder.priceApproved || backendOrder.PriceApproved || false,
+      instructions: backendOrder.instructions || backendOrder.Instructions,
+      requiredFormats: backendOrder.requiredFormats || backendOrder.RequiredFormats,
+      requirements: backendOrder.requirements || backendOrder.Requirements,
+      colorPreferences: backendOrder.colorPreferences || backendOrder.ColorPreferences,
+      stylePreferences: backendOrder.stylePreferences || backendOrder.StylePreferences,
+      fileCount: backendOrder.fileCount || backendOrder.FileCount || 0,
+      visibleFileCount: backendOrder.visibleFileCount || backendOrder.VisibleFileCount || 0,
+      revisionCount: backendOrder.revisionCount || backendOrder.RevisionCount || 0,
+      commentCount: backendOrder.commentCount || backendOrder.CommentCount || 0,
       createdAt: backendOrder.createdAt ? new Date(backendOrder.createdAt) : (backendOrder.CreatedAt ? new Date(backendOrder.CreatedAt) : new Date()),
       updatedAt: backendOrder.updatedAt ? new Date(backendOrder.updatedAt) : (backendOrder.UpdatedAt ? new Date(backendOrder.UpdatedAt) : undefined),
       dueDate: backendOrder.dueDate ? new Date(backendOrder.dueDate) : (backendOrder.Deadline ? new Date(backendOrder.Deadline) : undefined),
-      client: backendOrder.client || backendOrder.Client,
-      designer: backendOrder.designer || backendOrder.Designer
+      client: backendOrder.client || backendOrder.Client ? {
+        id: (backendOrder.client || backendOrder.Client)?.id || (backendOrder.client || backendOrder.Client)?.Id,
+        companyName: (backendOrder.client || backendOrder.Client)?.companyName || (backendOrder.client || backendOrder.Client)?.CompanyName || '',
+        firstName: (backendOrder.client || backendOrder.Client)?.firstName || (backendOrder.client || backendOrder.Client)?.FirstName || '',
+        lastName: (backendOrder.client || backendOrder.Client)?.lastName || (backendOrder.client || backendOrder.Client)?.LastName || '',
+        email: (backendOrder.client || backendOrder.Client)?.email || (backendOrder.client || backendOrder.Client)?.Email,
+        phoneNumber: (backendOrder.client || backendOrder.Client)?.phoneNumber || (backendOrder.client || backendOrder.Client)?.PhoneNumber
+      } : undefined,
+      designer: backendOrder.designer || backendOrder.Designer ? {
+        id: (backendOrder.designer || backendOrder.Designer)?.id || (backendOrder.designer || backendOrder.Designer)?.Id,
+        firstName: (backendOrder.designer || backendOrder.Designer)?.firstName || (backendOrder.designer || backendOrder.Designer)?.FirstName || '',
+        lastName: (backendOrder.designer || backendOrder.Designer)?.lastName || (backendOrder.designer || backendOrder.Designer)?.LastName || '',
+        email: (backendOrder.designer || backendOrder.Designer)?.email || (backendOrder.designer || backendOrder.Designer)?.Email
+      } : undefined
     };
   }
 
   private mapStatus(status: string): OrderStatus {
     // Map backend status strings to frontend enum
-    if (!status) return OrderStatus.Pending;
+    if (!status) return OrderStatus.WaitingForAdminApproval;
     
     const statusStr = status.toString().trim();
     switch (statusStr) {
-      case 'Pending':
+      case 'WaitingForAdminApproval':
       case '1':
-        return OrderStatus.Pending;
+        return OrderStatus.WaitingForAdminApproval;
+      case 'PriceApprovalPending':
+      case '2':
+        return OrderStatus.PriceApprovalPending;
       case 'InProgress':
       case 'In Progress':
-      case '2':
-        return OrderStatus.InProgress;
-      case 'Review':
-        return OrderStatus.Review;
-      case 'Completed':
       case '3':
+        return OrderStatus.InProgress;
+      case 'PreviewDelivered':
+      case '4':
+        return OrderStatus.PreviewDelivered;
+      case 'RevisionRequested':
+      case '5':
+        return OrderStatus.RevisionRequested;
+      case 'FinalApproved':
+      case '6':
+        return OrderStatus.FinalApproved;
+      case 'Completed':
+      case '7':
         return OrderStatus.Completed;
       case 'Cancelled':
-      case '4':
+      case '8':
         return OrderStatus.Cancelled;
       default:
-        return OrderStatus.Pending;
+        return OrderStatus.WaitingForAdminApproval;
     }
   }
 
@@ -196,9 +352,12 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   getStatusSeverity(status: OrderStatus): string {
     const severityMap: { [key: string]: string } = {
-      'Pending': 'warning',
+      'WaitingForAdminApproval': 'warning',
+      'PriceApprovalPending': 'info',
       'InProgress': 'info',
-      'Review': 'secondary',
+      'PreviewDelivered': 'success',
+      'RevisionRequested': 'warn',
+      'FinalApproved': 'success',
       'Completed': 'success',
       'Cancelled': 'danger'
     };
@@ -225,15 +384,42 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   viewOrder(orderId: string): void {
-    this.router.navigate(['/orders', orderId]);
+    this.selectedOrderId = orderId;
+    this.showOrderDetailModal = true;
+  }
+
+  onOrderDetailClose(): void {
+    this.showOrderDetailModal = false;
+    this.selectedOrderId = null;
+  }
+
+  onOrderUpdated(): void {
+    this.loadOrders(); // Refresh the list when order is updated
   }
 
   canCreateOrder(): boolean {
     return this.authService.hasRole('Client');
   }
 
+  // Order Create Modal
+  showOrderCreateModal = false;
+
   createOrder(): void {
-    this.router.navigate(['/orders/create']);
+    this.showOrderCreateModal = true;
+  }
+
+  onOrderCreateClose(): void {
+    this.showOrderCreateModal = false;
+  }
+
+  onOrderCreated(order: any): void {
+    // Refresh orders list when order is created
+    this.loadOrders();
+    // Optionally open the created order in detail modal
+    if (order && order.id) {
+      this.selectedOrderId = order.id;
+      this.showOrderDetailModal = true;
+    }
   }
 
   isOverdue(dueDate: Date | string | undefined): boolean {
@@ -245,6 +431,10 @@ export class OrderListComponent implements OnInit, OnDestroy {
   canAssignDesigner(): boolean {
     const user = this.authService.getCurrentUser();
     return user?.role === 'SuperAdmin' || user?.role === 'Admin';
+  }
+
+  canChangeStatus(): boolean {
+    return this.isAdmin || this.isSuperAdmin;
   }
 
   canGenerateInvoice(): boolean {
@@ -301,14 +491,34 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   openStatusDialog(order: Order): void {
     this.selectedOrder = order;
-    this.newStatus = order.status;
+    // Find the status object that matches the order's current status
+    const currentStatusObj = this.statuses.find(s => s.value === order.status);
+    this.newStatus = currentStatusObj || this.statuses[0];
+    
+    // Debug: Log available statuses
+    console.log('=== STATUS DROPDOWN DEBUG ===');
+    console.log('Total statuses available:', this.statuses.length);
+    console.log('All statuses:', this.statuses.map(s => ({ label: s.label, value: s.value })));
+    console.log('Current order status:', order.status);
+    console.log('Selected status:', this.newStatus);
+    
+    // Verify Completed and FinalApproved are in the list
+    const completedStatus = this.statuses.find(s => s.value === 'Completed');
+    const approvedStatus = this.statuses.find(s => s.value === 'FinalApproved');
+    console.log('Completed status in list:', completedStatus);
+    console.log('FinalApproved status in list:', approvedStatus);
+    console.log('===========================');
+    
     this.showStatusDialog = true;
   }
 
   changeStatus(): void {
     if (!this.selectedOrder || !this.newStatus) return;
 
-    this.apiService.put(`orders/${this.selectedOrder.id}/status`, { status: this.newStatus })
+    // Handle both object format {label, value} and direct enum value
+    const statusValue = typeof this.newStatus === 'object' ? this.newStatus.value : this.newStatus;
+
+    this.apiService.put(`orders/${this.selectedOrder.id}/status`, { status: statusValue })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
@@ -320,11 +530,11 @@ export class OrderListComponent implements OnInit, OnDestroy {
           this.showStatusDialog = false;
           this.loadOrders();
         },
-        error: () => {
+        error: (error) => {
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to update order status'
+            detail: error.error?.error || 'Failed to update order status'
           });
         }
       });
@@ -332,37 +542,172 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   openUploadDialog(order: Order): void {
     this.selectedOrder = order;
+    this.selectedFiles = [];
+    this.uploadSuccess = false;
+    this.uploadedFilesCount = 0;
     this.showUploadDialog = true;
   }
 
-  uploadFile(event: any): void {
-    if (!this.selectedOrder || !event.target.files[0]) return;
-
-    const file = event.target.files[0];
-    const formData = new FormData();
-    formData.append('file', file);
-
-    this.apiService.post(`files/upload/${this.selectedOrder.id}`, formData)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: () => {
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'File uploaded successfully'
-          });
-          this.showUploadDialog = false;
-          // Reset file input
-          event.target.value = '';
-        },
-        error: () => {
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to upload file'
-          });
-        }
+  onFileSelect(event: any): void {
+    // PrimeNG p-fileUpload onSelect event provides files in event.files
+    const files: File[] = event.files ? Array.from(event.files) : [];
+    
+    if (files.length === 0) {
+      return;
+    }
+    
+    // Validate file sizes (max 10MB each)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const invalidFiles = files.filter(file => file.size > maxSize);
+    
+    if (invalidFiles.length > 0) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: `${invalidFiles.length} file(s) exceed the 10MB limit and were not added`
       });
+    }
+    
+    // Add valid files (avoid duplicates by checking file name and size)
+    const validFiles = files.filter(file => {
+      if (file.size > maxSize) {
+        return false;
+      }
+      // Check if file already exists
+      const exists = this.selectedFiles.some(
+        existingFile => existingFile.name === file.name && existingFile.size === file.size
+      );
+      return !exists;
+    });
+    
+    if (validFiles.length > 0) {
+      this.selectedFiles = [...this.selectedFiles, ...validFiles];
+      this.uploadSuccess = false; // Reset success state when new files are added
+      
+      // Clear the file upload component to allow selecting more files
+      if (this.fileUploadComponent) {
+        this.fileUploadComponent.clear();
+      }
+    }
+  }
+
+  removeFile(index: number): void {
+    this.selectedFiles.splice(index, 1);
+  }
+
+  submitFiles(): void {
+    if (this.selectedFiles.length === 0 || !this.selectedOrder) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Please select at least one file'
+      });
+      return;
+    }
+
+    const user = this.authService.getCurrentUser();
+    // Show confirmation dialog for designers
+    if (user?.role === 'Designer') {
+      this.showConfirmDialog = true;
+    } else {
+      this.uploadFiles();
+    }
+  }
+
+  confirmUpload(): void {
+    this.showConfirmDialog = false;
+    this.uploadFiles();
+  }
+
+  cancelUpload(): void {
+    this.showConfirmDialog = false;
+  }
+
+  private uploadFiles(): void {
+    if (this.selectedFiles.length === 0 || !this.selectedOrder) {
+      return;
+    }
+
+    this.uploadingFiles = true;
+    const filesToUpload = [...this.selectedFiles];
+
+    if (this.selectedFiles.length === 1) {
+      // Single file upload
+      const formData = new FormData();
+      formData.append('file', this.selectedFiles[0]);
+      formData.append('fileType', 'Reference');
+
+      this.apiService.post(`files/upload/${this.selectedOrder.id}`, formData)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: () => {
+            this.uploadedFilesCount += filesToUpload.length;
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: `${filesToUpload.length} file(s) uploaded successfully. You can add more files or close the dialog.`
+            });
+            this.selectedFiles = [];
+            this.uploadingFiles = false;
+            this.uploadSuccess = true;
+          },
+          error: (error) => {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: error.error?.error || 'Failed to upload file'
+            });
+            this.uploadingFiles = false;
+          }
+        });
+    } else {
+      // Multiple file upload
+      const formData = new FormData();
+      this.selectedFiles.forEach(file => {
+        formData.append('files', file);
+      });
+      formData.append('fileType', 'Reference');
+
+      this.apiService.post(`files/upload-multiple/${this.selectedOrder.id}`, formData)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (results: any) => {
+            const uploadedCount = Array.isArray(results) ? results.length : 0;
+            this.uploadedFilesCount += uploadedCount;
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Success',
+              detail: `${uploadedCount} file(s) uploaded successfully. You can add more files or close the dialog.`
+            });
+            this.selectedFiles = [];
+            this.uploadingFiles = false;
+            this.uploadSuccess = true;
+          },
+          error: (error) => {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: error.error?.error || 'Failed to upload files'
+            });
+            this.uploadingFiles = false;
+          }
+        });
+    }
+  }
+
+  closeUploadDialog(): void {
+    this.showUploadDialog = false;
+    this.selectedFiles = [];
+    this.uploadSuccess = false;
+    this.uploadedFilesCount = 0;
+  }
+
+  formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   }
 
   generateInvoice(order: Order): void {

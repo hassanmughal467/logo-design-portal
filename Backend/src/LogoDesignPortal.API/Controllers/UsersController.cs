@@ -4,6 +4,8 @@ using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using ClientDetailDto = LogoDesignPortal.Application.DTOs.Users.ClientDetailDto;
+using DesignerDetailDto = LogoDesignPortal.Application.DTOs.Users.DesignerDetailDto;
 
 namespace LogoDesignPortal.API.Controllers;
 
@@ -41,10 +43,22 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [Authorize] // Must be authenticated
     [ProducesResponseType(typeof(UserResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetUserById(Guid id)
     {
+        // Check if user can view this profile (own profile or admin)
+        var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var isAdmin = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
+        
+        // Users can only view their own profile, admins can view any
+        if (id != currentUserId && !isAdmin)
+        {
+            return Forbid();
+        }
+
         var user = await _userService.GetUserByIdAsync(id);
         if (user == null)
         {
@@ -130,6 +144,35 @@ public class UsersController : ControllerBase
         return Ok(profiles);
     }
 
+    [HttpPut("{id}/profile")]
+    [Authorize]
+    [ProducesResponseType(typeof(UserResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UpdateUserProfile(Guid id, [FromBody] UpdateClientProfileDto request)
+    {
+        // Check if user can update (own profile or admin)
+        var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var isAdmin = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
+        
+        // Users can only update their own profile, admins can update any
+        if (id != currentUserId && !isAdmin)
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var user = await _userService.UpdateUserProfileAsync(id, request);
+            return Ok(user);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpDelete("{id}")]
     [Authorize(Roles = "SuperAdmin")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -143,11 +186,39 @@ public class UsersController : ControllerBase
         {
             var deletedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             var result = await _userService.DeleteUserAsync(id, deletedBy);
-            return Ok(new { message = "User deleted successfully." });
+            return Ok(new { message = "User deactivated successfully." });
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    [HttpGet("clients/{id}/detail")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(typeof(ClientDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetClientDetail(Guid id)
+    {
+        var detail = await _userService.GetClientDetailAsync(id);
+        if (detail == null)
+        {
+            return NotFound(new { error = "Client not found." });
+        }
+        return Ok(detail);
+    }
+
+    [HttpGet("designers/{id}/detail")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(typeof(DesignerDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetDesignerDetail(Guid id)
+    {
+        var detail = await _userService.GetDesignerDetailAsync(id);
+        if (detail == null)
+        {
+            return NotFound(new { error = "Designer not found." });
+        }
+        return Ok(detail);
     }
 }

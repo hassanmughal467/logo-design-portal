@@ -1,0 +1,737 @@
+<p-dialog 
+  [(visible)]="visible"
+  [modal]="true"
+  [style]="{width: '95vw', maxWidth: '1400px', height: '90vh'}"
+  [closable]="true"
+  [draggable]="false"
+  [resizable]="true"
+  [header]="order ? order.title : 'Order Details'"
+  (onHide)="closeModal()"
+  styleClass="order-detail-dialog">
+  
+  <p-confirmDialog></p-confirmDialog>
+  
+  <div class="order-detail-container" *ngIf="order && shouldShowOrderDetails()">
+  <div class="order-header">
+    <div class="header-left">
+      <h2>{{ order.title }}</h2>
+      <p-tag 
+        [value]="order.status" 
+        [severity]="getStatusSeverity(order.status)"
+      ></p-tag>
+    </div>
+    <div class="header-actions">
+      <p-button 
+        *ngIf="canApproveLogo()"
+        label="Approve Logo" 
+        icon="pi pi-check" 
+        (onClick)="approveLogo()"
+        [styleClass]="'p-button-success'"
+      ></p-button>
+      <p-button 
+        *ngIf="canApproveOrder()"
+        label="Approve Order" 
+        icon="pi pi-check" 
+        (onClick)="approveOrder()"
+        [styleClass]="'p-button-outlined'"
+      ></p-button>
+      <p-button 
+        *ngIf="canRequestPriceApproval()"
+        label="Request Price Approval" 
+        icon="pi pi-dollar" 
+        (onClick)="openPriceApprovalDialog()"
+        [styleClass]="'p-button-outlined'"
+      ></p-button>
+      <p-button 
+        *ngIf="canApprovePrice()"
+        label="Approve Price" 
+        icon="pi pi-check-circle" 
+        (onClick)="openPriceApprovalDialog()"
+        severity="success"
+      ></p-button>
+      <p-button 
+        *ngIf="canAssignDesigner()"
+        label="Assign Designer" 
+        icon="pi pi-user-plus" 
+        (onClick)="openAssignDialog()"
+        [styleClass]="'p-button-outlined'"
+      ></p-button>
+      <p-button 
+        *ngIf="canSendFiles()"
+        label="Send Files to Client" 
+        icon="pi pi-send" 
+        (onClick)="openSendFilesDialog()"
+        severity="success"
+      ></p-button>
+      <p-button 
+        *ngIf="canEditOrder()"
+        label="Edit Order" 
+        icon="pi pi-pencil" 
+        (onClick)="openEditOrderDialog()"
+        [styleClass]="'p-button-outlined'"
+      ></p-button>
+      <p-button 
+        *ngIf="canCancelOrder()"
+        label="Cancel Order" 
+        icon="pi pi-times-circle" 
+        (onClick)="openCancelOrderDialog()"
+        severity="danger"
+        [styleClass]="'p-button-outlined'"
+      ></p-button>
+      <p-button 
+        *ngIf="canArchiveOrder()"
+        label="Archive Order" 
+        icon="pi pi-archive" 
+        (onClick)="openArchiveConfirmDialog()"
+        [styleClass]="'p-button-outlined'"
+      ></p-button>
+      <p-button 
+        *ngIf="canUnarchiveOrder()"
+        label="Unarchive Order" 
+        icon="pi pi-inbox" 
+        (onClick)="unarchiveOrder()"
+        [styleClass]="'p-button-outlined'"
+      ></p-button>
+      <p-button 
+        *ngIf="canRefundOrder()"
+        label="Refund Order" 
+        icon="pi pi-dollar" 
+        (onClick)="openRefundDialog()"
+        severity="warning"
+        [styleClass]="'p-button-outlined'"
+      ></p-button>
+    </div>
+  </div>
+
+  <div class="order-info-grid">
+    <div class="info-card">
+      <h3>Order Information</h3>
+      <div class="info-item">
+        <label>Price:</label>
+        <span>${{ order.price | number:'1.2-2' }}</span>
+      </div>
+      <div class="info-item" *ngIf="order.proposedPrice">
+        <label>Proposed Price:</label>
+        <span>${{ order.proposedPrice | number:'1.2-2' }}</span>
+      </div>
+      <div class="info-item">
+        <label>Created:</label>
+        <span>{{ order.createdAt | date:'short' }}</span>
+      </div>
+      <div class="info-item" *ngIf="order.dueDate">
+        <label>Deadline:</label>
+        <span>{{ order.dueDate | date:'short' }}</span>
+      </div>
+      <div class="info-item" *ngIf="order.designer">
+        <label>Designer:</label>
+        <span>{{ order.designer.firstName }} {{ order.designer.lastName }}</span>
+      </div>
+    </div>
+
+    <div class="info-card" *ngIf="order.instructions || order.requiredFormats">
+      <h3>Requirements</h3>
+      <div class="info-item" *ngIf="order.instructions">
+        <label>Instructions:</label>
+        <span>{{ order.instructions }}</span>
+      </div>
+      <div class="info-item" *ngIf="order.requiredFormats">
+        <label>Required Formats:</label>
+        <span>{{ order.requiredFormats }}</span>
+      </div>
+      <div class="info-item" *ngIf="order.colorPreferences">
+        <label>Color Preferences:</label>
+        <span>{{ order.colorPreferences }}</span>
+      </div>
+      <div class="info-item" *ngIf="order.stylePreferences">
+        <label>Style Preferences:</label>
+        <span>{{ order.stylePreferences }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="description-card">
+    <h3>Description</h3>
+    <p>{{ order.description }}</p>
+  </div>
+
+  <p-tabView [(activeIndex)]="activeTab">
+    <!-- Files Tab -->
+    <p-tabPanel header="Files" [leftIcon]="'pi pi-file'">
+      <div class="tab-content">
+        <div class="tab-header">
+          <h3>Order Files</h3>
+          <p-button 
+            *ngIf="isDesigner || isAdmin"
+            label="Upload File" 
+            icon="pi pi-upload" 
+            (onClick)="router.navigate(['/orders', order.id, 'upload'])"
+          ></p-button>
+          <p-button 
+            *ngIf="canApproveLogo()"
+            label="Approve Logo" 
+            icon="pi pi-check" 
+            (onClick)="approveLogo()"
+            [styleClass]="'p-button-success'"
+          ></p-button>
+          <p-button 
+            *ngIf="canRequestRevision()"
+            label="Request Revision" 
+            icon="pi pi-refresh" 
+            (onClick)="openRevisionDialog()"
+            [styleClass]="'p-button-warn'"
+          ></p-button>
+          <p-button 
+            label="Add Comment" 
+            icon="pi pi-comment" 
+            (onClick)="openCommentDialog()"
+          ></p-button>
+        </div>
+        
+        <p-table [value]="files" [loading]="loading" [paginator]="true" [rows]="10">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>File Name</th>
+              <th>Type</th>
+              <th>Size</th>
+              <th>Version</th>
+              <th>Status</th>
+              <th *ngIf="!isDesigner">Uploaded By</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-file>
+            <tr>
+              <td>{{ file.originalFileName }}</td>
+              <td><p-tag [value]="file.fileType"></p-tag></td>
+              <td>{{ file.fileSize | number }} bytes</td>
+              <td>{{ file.versionNumber }}</td>
+              <td>
+                <p-tag 
+                  [value]="file.isVisibleToClient ? 'Visible' : 'Hidden'" 
+                  [severity]="file.isVisibleToClient ? 'success' : 'warning'"
+                ></p-tag>
+              </td>
+              <td *ngIf="!isDesigner">{{ file.uploadedByName }}</td>
+              <td>
+                <p-button 
+                  icon="pi pi-download" 
+                  [styleClass]="'p-button-text'"
+                  (onClick)="downloadFile(file)"
+                  [disabled]="!file.isVisibleToClient && isClient"
+                ></p-button>
+                <p-button 
+                  *ngIf="isAdmin && !file.isAdminApproved"
+                  icon="pi pi-check" 
+                  [styleClass]="'p-button-text'"
+                  severity="success"
+                  (onClick)="approveFile(file)"
+                ></p-button>
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr>
+              <td [attr.colspan]="isDesigner ? 6 : 7">No files uploaded yet</td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+    </p-tabPanel>
+
+    <!-- Revisions Tab -->
+    <p-tabPanel header="Revisions" [leftIcon]="'pi pi-refresh'">
+      <div class="tab-content">
+        <div class="tab-header">
+          <h3>Revision Requests</h3>
+          <p-button 
+            *ngIf="canRequestRevision()"
+            label="Request Revision" 
+            icon="pi pi-plus" 
+            (onClick)="openRevisionDialog()"
+          ></p-button>
+        </div>
+        
+        <div class="revision-list">
+          <div class="revision-item" *ngFor="let revision of revisions">
+            <div class="revision-header">
+              <div>
+                <strong>Requested by:</strong> {{ revision.requestedByName }}
+                <span class="date">{{ revision.createdAt | date:'short' }}</span>
+              </div>
+              <p-tag 
+                [value]="revision.isResolved ? 'Resolved' : 'Pending'" 
+                [severity]="revision.isResolved ? 'success' : 'warning'"
+              ></p-tag>
+            </div>
+            <div class="revision-content">
+              <p>{{ revision.instructions }}</p>
+            </div>
+          </div>
+          <div *ngIf="revisions.length === 0" class="empty-state">
+            No revision requests yet
+          </div>
+        </div>
+      </div>
+    </p-tabPanel>
+
+    <!-- Comments Tab -->
+    <p-tabPanel header="Comments" [leftIcon]="'pi pi-comments'">
+      <div class="tab-content">
+        <div class="tab-header">
+          <h3>Order Comments</h3>
+          <p-button 
+            label="Add Comment" 
+            icon="pi pi-plus" 
+            (onClick)="openCommentDialog()"
+          ></p-button>
+        </div>
+        
+        <div class="comment-list">
+          <div class="comment-item" *ngFor="let comment of comments">
+            <div class="comment-header">
+              <div>
+                <strong>{{ comment.createdByName }}</strong>
+                <span class="role">{{ comment.createdByRole }}</span>
+                <span class="date">{{ comment.createdAt | date:'short' }}</span>
+              </div>
+              <p-tag 
+                *ngIf="comment.isInternal"
+                value="Internal" 
+                severity="info"
+              ></p-tag>
+            </div>
+            <div class="comment-content">
+              <p>{{ comment.content }}</p>
+            </div>
+          </div>
+          <div *ngIf="comments.length === 0" class="empty-state">
+            No comments yet
+          </div>
+        </div>
+      </div>
+    </p-tabPanel>
+  </p-tabView>
+  </div>
+  
+  <div *ngIf="!order && loading" class="loading-state">
+    <i class="pi pi-spin pi-spinner"></i>
+    <p>Loading order details...</p>
+  </div>
+
+<!-- Dialogs -->
+<p-dialog 
+  [(visible)]="showPriceApprovalDialog" 
+  header="Price Approval" 
+  [modal]="true"
+  [style]="{width: '500px'}"
+>
+  <div class="dialog-content">
+    <div class="form-group" *ngIf="isAdmin">
+      <label>Proposed Price (USD)</label>
+      <p-inputNumber 
+        [(ngModel)]="proposedPrice"
+        mode="decimal"
+        [min]="0.01"
+        [maxFractionDigits]="2"
+        styleClass="w-full"
+      ></p-inputNumber>
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea 
+        pInputTextarea 
+        [(ngModel)]="priceApprovalNotes"
+        rows="4"
+        styleClass="w-full"
+      ></textarea>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button 
+      *ngIf="isAdmin"
+      label="Request Approval" 
+      icon="pi pi-check" 
+      (onClick)="requestPriceApproval()"
+    ></p-button>
+    <p-button 
+      *ngIf="isClient"
+      label="Approve" 
+      icon="pi pi-check" 
+      severity="success"
+      (onClick)="approvePrice(true)"
+    ></p-button>
+    <p-button 
+      *ngIf="isClient"
+      label="Reject" 
+      icon="pi pi-times" 
+      severity="danger"
+      (onClick)="approvePrice(false)"
+    ></p-button>
+    <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showPriceApprovalDialog = false"
+      [styleClass]="'p-button-text'"
+    ></p-button>
+  </ng-template>
+</p-dialog>
+
+<p-dialog 
+  [(visible)]="showAssignDialog" 
+  header="Assign Designer" 
+  [modal]="true"
+  [style]="{width: '500px'}"
+  [closable]="true"
+  [draggable]="false"
+  [resizable]="false"
+  styleClass="assign-designer-dialog">
+  <div class="dialog-content">
+    <div class="form-group">
+      <label for="designer-select-detail">Select Designer <span class="required">*</span></label>
+      <p-dropdown 
+        id="designer-select-detail"
+        [(ngModel)]="selectedDesignerId"
+        [options]="availableDesigners"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="Select a designer"
+        [filter]="true"
+        [showClear]="true"
+        [styleClass]="'w-full'"
+        styleClass="w-full">
+      </p-dropdown>
+      <small class="p-help" *ngIf="availableDesigners.length === 0">
+        No designers available. Please create a designer account first.
+      </small>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showAssignDialog = false"
+      [styleClass]="'p-button-text'">
+    </p-button>
+    <p-button 
+      label="Assign" 
+      icon="pi pi-check" 
+      (onClick)="assignDesigner()"
+      [disabled]="!selectedDesignerId"
+      [styleClass]="'p-button-primary'">
+    </p-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Edit Order Dialog -->
+<p-dialog 
+  [(visible)]="showEditOrderDialog"
+  [modal]="true"
+  [style]="{width: '90vw', maxWidth: '800px'}"
+  [closable]="true"
+  [draggable]="false"
+  [resizable]="false"
+  header="Edit Order"
+  styleClass="order-edit-dialog">
+  <app-order-edit
+    *ngIf="order"
+    [order]="order"
+    (orderUpdated)="onOrderUpdated($event)"
+    (cancel)="showEditOrderDialog = false"
+  ></app-order-edit>
+</p-dialog>
+
+
+<p-dialog 
+  [(visible)]="showSendFilesDialog" 
+  header="Send Files to Client" 
+  [modal]="true"
+  [style]="{width: '500px'}"
+>
+  <div class="dialog-content">
+    <p>Select files to send to client:</p>
+    <div class="file-checkbox-list">
+      <div *ngFor="let file of files" class="file-checkbox-item">
+        <p-checkbox 
+          [value]="file.id"
+          [(ngModel)]="selectedFileIds"
+          [inputId]="'file-' + file.id"
+        ></p-checkbox>
+        <label [for]="'file-' + file.id">{{ file.originalFileName }}</label>
+      </div>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button 
+      label="Send" 
+      icon="pi pi-send" 
+      (onClick)="sendFilesToClient()"
+      [disabled]="selectedFileIds.length === 0"
+    ></p-button>
+    <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showSendFilesDialog = false"
+      [styleClass]="'p-button-text'"
+    ></p-button>
+  </ng-template>
+</p-dialog>
+
+<p-dialog 
+  [(visible)]="showRevisionDialog" 
+  header="Request Revision" 
+  [modal]="true"
+  [style]="{width: '700px'}"
+>
+  <div class="dialog-content">
+    <div class="warning-message" style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin-bottom: 20px;">
+      <i class="pi pi-exclamation-triangle" style="color: #856404; margin-right: 8px;"></i>
+      <strong style="color: #856404;">Warning:</strong>
+      <span style="color: #856404;">Requesting a revision will permanently delete previous preview files. Please download them if you need a copy.</span>
+    </div>
+    
+    <div class="form-group">
+      <label>Revision Instructions <span class="required">*</span></label>
+      <textarea 
+        pInputTextarea 
+        [(ngModel)]="revisionInstructions"
+        rows="6"
+        placeholder="Describe what changes you need..."
+        styleClass="w-full"
+        required
+      ></textarea>
+    </div>
+    
+    <div class="form-group">
+      <label>Reference Files (Optional)</label>
+      <p-fileUpload 
+        #revisionFileUpload
+        [multiple]="true"
+        [maxFileSize]="10485760"
+        accept="image/*,.pdf,.ai,.eps,.psd"
+        (onSelect)="onRevisionFileSelect($event)"
+        [auto]="false"
+        [showUploadButton]="false"
+        [showCancelButton]="false"
+        chooseLabel="Select Files"
+        [styleClass]="'w-full'"
+      ></p-fileUpload>
+      
+      <div *ngIf="revisionFiles.length > 0" class="file-list" style="margin-top: 10px;">
+        <div *ngFor="let file of revisionFiles; let i = index" class="file-item" style="display: flex; align-items: center; justify-content: space-between; padding: 8px; background: #f5f5f5; border-radius: 4px; margin-bottom: 5px;">
+          <span style="flex: 1;">
+            <i class="pi pi-file" style="margin-right: 8px;"></i>
+            {{ file.name }} ({{ (file.size / 1024 / 1024).toFixed(2) }} MB)
+          </span>
+          <p-button 
+            icon="pi pi-times" 
+            [styleClass]="'p-button-text p-button-danger p-button-sm'"
+            (onClick)="removeRevisionFile(i)"
+            [pTooltip]="'Remove'"
+          ></p-button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button 
+      label="Request Revision" 
+      icon="pi pi-refresh" 
+      (onClick)="createRevision()"
+      [disabled]="!revisionInstructions.trim()"
+    ></p-button>
+    <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showRevisionDialog = false"
+      [styleClass]="'p-button-text'"
+    ></p-button>
+  </ng-template>
+</p-dialog>
+
+<p-dialog 
+  [(visible)]="showCommentDialog" 
+  header="Add Comment" 
+  [modal]="true"
+  [style]="{width: '500px'}"
+>
+  <div class="dialog-content">
+    <div class="form-group">
+      <label>Comment <span class="required">*</span></label>
+      <textarea 
+        pInputTextarea 
+        [(ngModel)]="commentContent"
+        rows="4"
+        placeholder="Enter your comment..."
+        styleClass="w-full"
+      ></textarea>
+    </div>
+    <div class="form-group" *ngIf="!isClient">
+      <p-checkbox 
+        [(ngModel)]="isInternalComment"
+        label="Internal Comment (Admin/Designer only)"
+        [binary]="true"
+      ></p-checkbox>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button 
+      label="Post" 
+      icon="pi pi-check" 
+      (onClick)="createComment()"
+      [disabled]="!commentContent.trim()"
+    ></p-button>
+    <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showCommentDialog = false"
+      [styleClass]="'p-button-text'"
+    ></p-button>
+  </ng-template>
+</p-dialog>
+<!-- Cancel Order Dialog -->
+<p-dialog 
+  [(visible)]="showCancelOrderDialog"
+  [modal]="true"
+  [style]="{width: '600px'}"
+  [closable]="true"
+  [draggable]="false"
+  [resizable]="false"
+  header="Cancel Order"
+  styleClass="cancel-order-dialog">
+  <div class="dialog-content">
+    <div class="form-group">
+      <label for="cancellation-reason">Cancellation Reason <span class="required">*</span></label>
+      <textarea 
+        id="cancellation-reason"
+        pInputTextarea 
+        [(ngModel)]="cancellationReason"
+        rows="4"
+        placeholder="Please provide a reason for cancelling this order..."
+        style="width: 100%"
+      ></textarea>
+      <small class="p-help">This reason will be recorded in the order history.</small>
+    </div>
+    <div class="order-info" *ngIf="order">
+      <p><strong>Order:</strong> {{ order.title }}</p>
+      <p><strong>Status:</strong> {{ order.status }}</p>
+      <p *ngIf="order.client"><strong>Client:</strong> {{ order.client.companyName || (order.client.firstName + ' ' + order.client.lastName) }}</p>
+    </div>
+    <p class="warning-text"><strong>This action cannot be undone.</strong></p>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showCancelOrderDialog = false"
+      [styleClass]="'p-button-text'"
+    ></p-button>
+    <p-button 
+      label="Confirm Cancellation" 
+      icon="pi pi-times-circle" 
+      (onClick)="confirmCancelOrder()"
+      severity="danger"
+      [disabled]="!cancellationReason.trim()"
+    ></p-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Archive Confirmation Dialog -->
+<p-dialog 
+  [(visible)]="showArchiveConfirmDialog"
+  [modal]="true"
+  [style]="{width: '500px'}"
+  [closable]="true"
+  [draggable]="false"
+  [resizable]="false"
+  header="Archive Order"
+  styleClass="archive-confirm-dialog">
+  <div class="dialog-content">
+    <p>Are you sure you want to archive this order?</p>
+    <p class="p-help">Archived orders will be hidden from default views but remain in the database.</p>
+    <div class="form-group" style="margin-top: 1rem;">
+      <label for="archive-note">Archive Note (Optional)</label>
+      <textarea 
+        id="archive-note"
+        pInputTextarea 
+        [(ngModel)]="archiveNote"
+        rows="2"
+        placeholder="Optional note about why this order is being archived..."
+        style="width: 100%"
+      ></textarea>
+    </div>
+    <div class="order-info" *ngIf="order">
+      <p><strong>Order:</strong> {{ order.title }}</p>
+      <p><strong>Status:</strong> {{ order.status }}</p>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showArchiveConfirmDialog = false"
+      [styleClass]="'p-button-text'"
+    ></p-button>
+    <p-button 
+      label="Archive Order" 
+      icon="pi pi-archive" 
+      (onClick)="confirmArchiveOrder()"
+    ></p-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Refund Order Dialog -->
+<p-dialog 
+  [(visible)]="showRefundDialog"
+  [modal]="true"
+  [style]="{width: '600px'}"
+  [closable]="true"
+  [draggable]="false"
+  [resizable]="false"
+  header="Refund Order"
+  styleClass="refund-order-dialog">
+  <div class="dialog-content">
+    <div class="form-group">
+      <label for="refund-amount">Refund Amount (USD) <span class="required">*</span></label>
+      <p-inputNumber 
+        id="refund-amount"
+        [(ngModel)]="refundAmount"
+        mode="decimal"
+        [min]="0.01"
+        [max]="order?.price || 999999"
+        [maxFractionDigits]="2"
+        [styleClass]="'w-full'"
+      ></p-inputNumber>
+      <small class="p-help" *ngIf="order">Order total: ${{ order.price }}</small>
+    </div>
+    <div class="form-group">
+      <label for="refund-reason">Refund Reason <span class="required">*</span></label>
+      <textarea 
+        id="refund-reason"
+        pInputTextarea 
+        [(ngModel)]="refundReason"
+        rows="4"
+        placeholder="Please provide a reason for this refund..."
+        style="width: 100%"
+      ></textarea>
+    </div>
+    <div class="order-info" *ngIf="order">
+      <p><strong>Order:</strong> {{ order.title }}</p>
+      <p><strong>Order Price:</strong> ${{ order.price }}</p>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showRefundDialog = false"
+      [styleClass]="'p-button-text'"
+    ></p-button>
+    <p-button 
+      label="Process Refund" 
+      icon="pi pi-dollar" 
+      (onClick)="confirmRefundOrder()"
+      severity="warning"
+      [disabled]="!refundReason.trim() || refundAmount <= 0"
+    ></p-button>
+  </ng-template>
+</p-dialog>

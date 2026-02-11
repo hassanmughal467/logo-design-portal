@@ -37,6 +37,9 @@ public class SettingsService : ISettingsService
                 case "InvoiceTemplate":
                     response.InvoiceTemplate[setting.Key] = setting.Value;
                     break;
+                case "Invoice":
+                    response.Invoice[setting.Key] = setting.Value;
+                    break;
                 case "PaymentMethods":
                     try
                     {

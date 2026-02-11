@@ -78,8 +78,8 @@
           <th pSortableColumn="priority">
             Priority <p-sortIcon field="priority"></p-sortIcon>
           </th>
-          <th>Client</th>
-          <th>Designer</th>
+          <th *ngIf="!isClient">Client</th>
+          <th *ngIf="!isClient">Designer</th>
           <th pSortableColumn="createdAt">
             Created <p-sortIcon field="createdAt"></p-sortIcon>
           </th>
@@ -110,13 +110,19 @@
               [rounded]="true">
             </p-tag>
           </td>
-          <td>
+          <td *ngIf="!isClient">
             <span *ngIf="order.client">
-              {{ order.client.firstName }} {{ order.client.lastName }}
+              <div *ngIf="order.client.companyName" class="client-company">{{ order.client.companyName }}</div>
+              <div *ngIf="order.client.firstName || order.client.lastName" class="client-name">
+                {{ order.client.firstName }} {{ order.client.lastName }}
+              </div>
+              <span *ngIf="!order.client.companyName && !order.client.firstName && !order.client.lastName && order.client.email" class="text-muted">
+                {{ order.client.email }}
+              </span>
             </span>
             <span *ngIf="!order.client" class="text-muted">N/A</span>
           </td>
-          <td>
+          <td *ngIf="!isClient">
             <span *ngIf="order.designer">
               {{ order.designer.firstName }} {{ order.designer.lastName }}
             </span>
@@ -153,6 +159,7 @@
                 tooltipPosition="top">
               </p-button>
               <p-button 
+                *ngIf="canChangeStatus()"
                 icon="pi pi-pencil" 
                 styleClass="p-button-text p-button-rounded p-button-sm"
                 (onClick)="openStatusDialog(order)"
@@ -174,36 +181,59 @@
 
       <ng-template pTemplate="emptymessage">
         <tr>
-          <td colspan="8" class="empty-message">
+          <td [attr.colspan]="isClient ? 6 : 8" class="empty-message">
             <div class="empty-state">
               <i class="pi pi-shopping-cart empty-icon"></i>
               <p>No orders found</p>
             </div>
           </td>
         </tr>
-      </ng-template>
-    </p-table>
+    </ng-template>
+  </p-table>
   </p-card>
+
+  <!-- Order Create Modal -->
+  <app-order-create
+    [(visible)]="showOrderCreateModal"
+    (orderCreated)="onOrderCreated($event)">
+  </app-order-create>
+
+  <!-- Order Detail Modal -->
+  <app-order-detail
+    *ngIf="selectedOrderId"
+    [orderId]="selectedOrderId"
+    [(visible)]="showOrderDetailModal"
+    (orderUpdated)="onOrderUpdated()">
+  </app-order-detail>
 
   <!-- Assign Designer Dialog -->
   <p-dialog 
     [(visible)]="showAssignDialog" 
     [modal]="true" 
-    [style]="{width: '450px'}"
+    [style]="{width: '500px'}"
     header="Assign Designer"
-    [closable]="true">
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false"
+    styleClass="assign-designer-dialog">
     <div class="dialog-content">
       <div class="form-group">
-        <label>Select Designer</label>
+        <label for="designer-select">Select Designer <span class="required">*</span></label>
         <p-dropdown 
+          id="designer-select"
           [options]="availableDesigners"
           [(ngModel)]="selectedDesignerId"
           optionLabel="label"
           optionValue="value"
           placeholder="Select a designer"
           [filter]="true"
-          class="full-width">
+          [showClear]="true"
+          [styleClass]="'w-full'"
+          styleClass="w-full">
         </p-dropdown>
+        <small class="p-help" *ngIf="availableDesigners.length === 0">
+          No designers available. Please create a designer account first.
+        </small>
       </div>
     </div>
     <ng-template pTemplate="footer">
@@ -211,13 +241,14 @@
         label="Cancel" 
         icon="pi pi-times"
         (onClick)="showAssignDialog = false"
-        styleClass="p-button-text">
+        [styleClass]="'p-button-text'">
       </p-button>
       <p-button 
         label="Assign" 
         icon="pi pi-check"
         (onClick)="assignDesigner()"
-        styleClass="p-button-primary">
+        [disabled]="!selectedDesignerId"
+        [styleClass]="'p-button-primary'">
       </p-button>
     </ng-template>
   </p-dialog>
@@ -226,17 +257,28 @@
   <p-dialog 
     [(visible)]="showStatusDialog" 
     [modal]="true" 
-    [style]="{width: '450px'}"
+    [style]="{width: '500px'}"
     header="Change Order Status"
-    [closable]="true">
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false"
+    styleClass="change-status-dialog">
     <div class="dialog-content">
       <div class="form-group">
-        <label>New Status</label>
+        <label for="status-select">New Status <span class="required">*</span></label>
         <p-dropdown 
+          id="status-select"
           [options]="statuses"
           [(ngModel)]="newStatus"
+          optionLabel="label"
+          optionValue="value"
           placeholder="Select status"
-          class="full-width">
+          [showClear]="false"
+          [filter]="false"
+          [virtualScroll]="false"
+          [styleClass]="'w-full'"
+          styleClass="w-full"
+          [panelStyle]="{'max-height': '300px'}">
         </p-dropdown>
       </div>
     </div>
@@ -245,13 +287,14 @@
         label="Cancel" 
         icon="pi pi-times"
         (onClick)="showStatusDialog = false"
-        styleClass="p-button-text">
+        [styleClass]="'p-button-text'">
       </p-button>
       <p-button 
         label="Update Status" 
         icon="pi pi-check"
         (onClick)="changeStatus()"
-        styleClass="p-button-primary">
+        [disabled]="!newStatus"
+        [styleClass]="'p-button-primary'">
       </p-button>
     </ng-template>
   </p-dialog>
@@ -260,27 +303,158 @@
   <p-dialog 
     [(visible)]="showUploadDialog" 
     [modal]="true" 
-    [style]="{width: '450px'}"
-    header="Upload File"
-    [closable]="true">
-    <div class="dialog-content">
+    [style]="{width: '600px'}"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="true"
+    header="Upload Files"
+    styleClass="upload-file-dialog">
+    <div class="upload-dialog-content">
+      <div class="upload-header">
+        <i class="pi pi-cloud-upload upload-icon"></i>
+        <div>
+          <h3>Upload Files to Order</h3>
+          <p class="upload-subtitle">Select one or multiple files to upload</p>
+        </div>
+      </div>
+
       <div class="form-group">
-        <label>Select File</label>
-        <input 
-          type="file" 
-          (change)="uploadFile($event)"
-          class="file-input"
-          accept=".jpg,.jpeg,.png,.pdf,.ai,.eps,.svg" />
-        <small class="help-text">Accepted formats: JPG, PNG, PDF, AI, EPS, SVG (Max 10MB)</small>
+        <label class="file-label">
+          <i class="pi pi-file"></i>
+          Select Files <span class="required">*</span>
+        </label>
+        <p-fileUpload
+          #fileUpload
+          mode="basic"
+          [multiple]="true"
+          [auto]="false"
+          accept="image/*,.pdf,.ai,.eps,.psd,.svg"
+          [maxFileSize]="10000000"
+          (onSelect)="onFileSelect($event)"
+          chooseLabel="Choose Files"
+          [showUploadButton]="false"
+          [showCancelButton]="false"
+          styleClass="w-full upload-button-custom"
+        ></p-fileUpload>
+        <small class="help-text">
+          <i class="pi pi-info-circle"></i>
+          Maximum file size: 10MB per file<br>
+          Supported formats: JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD<br>
+          You can select multiple files at once
+        </small>
+        
+        <!-- Selected Files List -->
+        <div class="selected-files-container" *ngIf="selectedFiles.length > 0">
+          <div class="files-header">
+            <span class="files-count">{{ selectedFiles.length }} file(s) selected</span>
+          </div>
+          <div class="file-list">
+            <div class="file-item" *ngFor="let file of selectedFiles; let i = index">
+              <div class="file-icon">
+                <i class="pi pi-file"></i>
+              </div>
+              <div class="file-details">
+                <span class="file-name">{{ file.name }}</span>
+                <span class="file-size">{{ formatFileSize(file.size) }}</span>
+              </div>
+              <button 
+                type="button"
+                class="remove-file-btn"
+                [pTooltip]="'Remove file'"
+                (click)="removeFile(i)"
+                aria-label="Remove file"
+              >
+                <i class="pi pi-times"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Success Message -->
+      <div class="upload-success-message" *ngIf="uploadSuccess && uploadedFilesCount > 0">
+        <div class="success-content">
+          <i class="pi pi-check-circle"></i>
+          <div>
+            <strong>Success!</strong>
+            <p>{{ uploadedFilesCount }} file(s) uploaded successfully. You can add more files or close the dialog.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <div class="dialog-footer">
+        <p-button 
+          label="Cancel" 
+          icon="pi pi-times"
+          (onClick)="closeUploadDialog()"
+          [styleClass]="'p-button-outlined p-button-secondary'"
+          [disabled]="uploadingFiles">
+        </p-button>
+        <p-button 
+          *ngIf="!uploadSuccess || selectedFiles.length > 0"
+          [label]="selectedFiles.length > 0 ? 'Submit ' + selectedFiles.length + ' File(s)' : 'Submit Files'" 
+          icon="pi pi-upload"
+          (onClick)="submitFiles()"
+          [loading]="uploadingFiles"
+          [disabled]="selectedFiles.length === 0 || uploadingFiles"
+          [styleClass]="'p-button-primary'">
+        </p-button>
+        <p-button 
+          *ngIf="uploadSuccess && selectedFiles.length === 0"
+          label="Done" 
+          icon="pi pi-check"
+          (onClick)="closeUploadDialog()"
+          [styleClass]="'p-button-success'">
+        </p-button>
+      </div>
+    </ng-template>
+  </p-dialog>
+
+  <!-- Confirmation Dialog -->
+  <p-dialog 
+    [(visible)]="showConfirmDialog"
+    [modal]="true"
+    [style]="{width: '500px'}"
+    [closable]="true"
+    [draggable]="false"
+    header="Confirm File Upload"
+    styleClass="upload-confirm-dialog">
+    <div class="confirm-dialog-content">
+      <div class="confirm-icon">
+        <i class="pi pi-exclamation-triangle"></i>
+      </div>
+      <p class="confirm-message">
+        You are about to upload <strong>{{ selectedFiles.length }}</strong> file(s).
+      </p>
+      <p class="confirm-note">
+        These files will require admin approval before being visible to the client.
+      </p>
+      <div class="confirm-files-preview" *ngIf="selectedFiles.length > 0">
+        <div class="preview-header">Files to upload:</div>
+        <div class="preview-list">
+          <div class="preview-item" *ngFor="let file of selectedFiles">
+            <i class="pi pi-file"></i>
+            <span>{{ file.name }}</span>
+            <span class="preview-size">({{ formatFileSize(file.size) }})</span>
+          </div>
+        </div>
       </div>
     </div>
     <ng-template pTemplate="footer">
       <p-button 
-        label="Close" 
-        icon="pi pi-times"
-        (onClick)="showUploadDialog = false"
-        styleClass="p-button-text">
-      </p-button>
+        label="Cancel" 
+        icon="pi pi-times" 
+        (onClick)="cancelUpload()"
+        [styleClass]="'p-button-outlined p-button-secondary'"
+      ></p-button>
+      <p-button 
+        label="Confirm Upload" 
+        icon="pi pi-check" 
+        (onClick)="confirmUpload()"
+        [styleClass]="'p-button-primary'"
+        [loading]="uploadingFiles"
+      ></p-button>
     </ng-template>
   </p-dialog>
 </div>

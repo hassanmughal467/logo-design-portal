@@ -39,10 +39,34 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid email or password.");
         }
 
+        // Check if account is locked
+        if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.UtcNow)
+        {
+            var lockoutMinutes = (int)(user.LockoutEnd.Value - DateTime.UtcNow).TotalMinutes;
+            throw new UnauthorizedAccessException($"Account is locked. Please try again in {lockoutMinutes} minute(s).");
+        }
+
+        // Verify password
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
+            // Increment failed login attempts
+            user.FailedLoginAttempts++;
+            
+            // Lock account after 5 failed attempts for 30 minutes
+            if (user.FailedLoginAttempts >= 5)
+            {
+                user.LockoutEnd = DateTime.UtcNow.AddMinutes(30);
+                await _context.SaveChangesAsync();
+                throw new UnauthorizedAccessException("Account locked due to multiple failed login attempts. Please try again in 30 minutes.");
+            }
+            
+            await _context.SaveChangesAsync();
             throw new UnauthorizedAccessException("Invalid email or password.");
         }
+
+        // Reset failed attempts on successful login
+        user.FailedLoginAttempts = 0;
+        user.LockoutEnd = null;
 
         var token = await _jwtTokenService.GenerateTokenAsync(user);
         var refreshToken = _jwtTokenService.GenerateRefreshToken();
@@ -87,7 +111,7 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Client role not found.");
         }
 
-        // Create user
+        // Create user (profile will be completed later)
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -97,26 +121,11 @@ public class AuthService : IAuthService
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             RoleId = clientRole.Id,
             IsActive = true,
+            SecondaryEmail = request.SecondaryEmail,
             CreatedAt = DateTime.UtcNow
         };
 
         _context.Users.Add(user);
-
-        // Create client profile
-        var clientProfile = new ClientProfile
-        {
-            Id = Guid.NewGuid(),
-            UserId = user.Id,
-            CompanyName = request.CompanyName,
-            PhoneNumber = request.Phone ?? string.Empty,
-            Address = request.Address,
-            City = request.City,
-            Country = request.Country,
-            PostalCode = request.ZipCode,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.ClientProfiles.Add(clientProfile);
         await _context.SaveChangesAsync();
 
         // Generate tokens

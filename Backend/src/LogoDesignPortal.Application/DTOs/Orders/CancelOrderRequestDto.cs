@@ -1,0 +1,11 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace LogoDesignPortal.Application.DTOs.Orders;
+
+public class CancelOrderRequestDto
+{
+    [Required]
+    [MinLength(5)]
+    [MaxLength(2000)]
+    public string Reason { get; set; } = string.Empty;
+}

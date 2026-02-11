@@ -1,26 +1,44 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ApiService } from '@core/services/api.service';
 import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+
+export interface InvoiceItem {
+  id: string;
+  orderId?: string;
+  orderTitle?: string;
+  description: string;
+  amount: number;
+}
 
 export interface Invoice {
   id: string;
   invoiceNumber: string;
   clientId: string;
   clientName: string;
-  orderId?: string;
+  orderId?: string; // Backward compatibility
+  orderIds?: string[]; // New: multiple orders
   amount: number;
-  status: 'Paid' | 'Unpaid' | 'Overdue';
+  taxAmount: number;
+  totalAmount: number;
+  billingType: number; // 1=PerLogo, 2=Weekly, 3=Monthly, 4=Manual
+  billingTypeDisplay: string;
+  status: 'Paid' | 'Pending' | 'Overdue';
   dueDate: Date;
   paidDate?: Date;
+  paymentMethod?: string;
+  notes?: string;
+  items: InvoiceItem[];
+  isLocked: boolean;
   createdAt: Date;
 }
 
 @Component({
   selector: 'app-invoice-list',
   templateUrl: './invoice-list.component.html',
-  styleUrls: ['./invoice-list.component.scss']
+  styleUrls: ['./invoice-list.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class InvoiceListComponent implements OnInit, OnDestroy {
   invoices: Invoice[] = [];
@@ -35,7 +53,18 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   // Generate invoice dialog
   showGenerateDialog = false;
   availableOrders: any[] = [];
-  selectedOrderId: string | null = null;
+  selectedOrderIds: string[] = [];
+  selectedBillingType: number = 1; // Default: PerLogo
+  billingTypes = [
+    { label: 'Per Logo', value: 1 },
+    { label: 'Weekly', value: 2 },
+    { label: 'Monthly', value: 3 },
+    { label: 'Manual', value: 4 }
+  ];
+  
+  // Invoice detail dialog
+  showDetailDialog = false;
+  selectedInvoice: Invoice | null = null;
 
   // Statistics
   invoiceStats = {
@@ -52,11 +81,35 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   constructor(
     private apiService: ApiService,
-    private messageService: MessageService
+    private messageService: MessageService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
     this.loadInvoices();
+    this.loadStatistics();
+  }
+
+  loadStatistics(): void {
+    this.apiService.get<any>('invoices/statistics')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (stats) => {
+          this.invoiceStats = {
+            total: stats.totalInvoices || 0,
+            paid: stats.paidInvoices || 0,
+            unpaid: stats.dueInvoices || 0,
+            overdue: stats.overdueInvoices || 0,
+            totalAmount: stats.totalAmount || 0,
+            paidAmount: stats.paidAmount || 0,
+            pendingAmount: (stats.dueAmount || 0) + (stats.overdueAmount || 0)
+          };
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          // Statistics will be calculated from invoices if endpoint fails
+        }
+      });
   }
 
   ngOnDestroy(): void {
@@ -74,6 +127,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           this.invoices = invoices;
           this.calculateStats(invoices);
           this.loading = false;
+          this.cdr.markForCheck();
         },
         error: (error) => {
           console.error('Error loading invoices:', error);
@@ -81,6 +135,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           this.createMockInvoices();
           this.calculateStats(this.invoices);
           this.loading = false;
+          this.cdr.markForCheck();
         }
       });
   }
@@ -97,8 +152,14 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   openGenerateDialog(): void {
     this.loadAvailableOrders();
-    this.selectedOrderId = null;
+    this.selectedOrderIds = [];
+    this.selectedBillingType = 1;
     this.showGenerateDialog = true;
+  }
+  
+  openDetailDialog(invoice: Invoice): void {
+    this.selectedInvoice = invoice;
+    this.showDetailDialog = true;
   }
 
   loadAvailableOrders(): void {
@@ -118,16 +179,22 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   generateInvoice(): void {
-    if (!this.selectedOrderId) {
+    if (this.selectedOrderIds.length === 0) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Warning',
-        detail: 'Please select an order'
+        detail: 'Please select at least one order'
       });
       return;
     }
 
-    this.apiService.post('invoices', { orderId: this.selectedOrderId })
+    // Support both single order (backward compatibility) and multiple orders
+    const request: any = {
+      orderIds: this.selectedOrderIds,
+      billingType: this.selectedBillingType
+    };
+
+    this.apiService.post('invoices', request)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
@@ -139,11 +206,11 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           this.showGenerateDialog = false;
           this.loadInvoices();
         },
-        error: () => {
+        error: (error) => {
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to generate invoice'
+            detail: error.error?.error || 'Failed to generate invoice'
           });
         }
       });
@@ -200,15 +267,30 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     return new Date(dueDate) < new Date() && new Date(dueDate).getTime() !== 0;
   }
 
+  getBillingTypeLabel(billingType: number): string {
+    const type = this.billingTypes.find(t => t.value === billingType);
+    return type?.label || 'Unknown';
+  }
+  
+  getBillingTypeSeverity(billingType: number): string {
+    const severityMap: { [key: number]: string } = {
+      1: 'info',      // PerLogo
+      2: 'warning',   // Weekly
+      3: 'success',   // Monthly
+      4: 'secondary'  // Manual
+    };
+    return severityMap[billingType] || 'secondary';
+  }
+
   private calculateStats(invoices: Invoice[]): void {
     this.invoiceStats = {
       total: invoices.length,
       paid: invoices.filter(i => i.status === 'Paid').length,
-      unpaid: invoices.filter(i => i.status === 'Unpaid').length,
+      unpaid: invoices.filter(i => i.status !== 'Paid' && i.status !== 'Overdue').length,
       overdue: invoices.filter(i => i.status === 'Overdue').length,
-      totalAmount: invoices.reduce((sum, i) => sum + i.amount, 0),
-      paidAmount: invoices.filter(i => i.status === 'Paid').reduce((sum, i) => sum + i.amount, 0),
-      pendingAmount: invoices.filter(i => i.status !== 'Paid').reduce((sum, i) => sum + i.amount, 0)
+      totalAmount: invoices.reduce((sum, i) => sum + (i.totalAmount || i.amount), 0),
+      paidAmount: invoices.filter(i => i.status === 'Paid').reduce((sum, i) => sum + (i.totalAmount || i.amount), 0),
+      pendingAmount: invoices.filter(i => i.status !== 'Paid').reduce((sum, i) => sum + (i.totalAmount || i.amount), 0)
     };
   }
 }

@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrderListComponent } from './order-list.component';
 import { OrderListRoutingModule } from './order-list-routing.module';
+import { OrderDetailModule } from '../order-detail/order-detail.module';
+import { OrderCreateModule } from '../order-create/order-create.module';
 
 // PrimeNG
 import { TableModule } from 'primeng/table';
@@ -13,6 +15,7 @@ import { TooltipModule } from 'primeng/tooltip';
 import { InputTextModule } from 'primeng/inputtext';
 import { DropdownModule } from 'primeng/dropdown';
 import { DialogModule } from 'primeng/dialog';
+import { FileUploadModule } from 'primeng/fileupload';
 import { MessageService } from 'primeng/api';
 
 @NgModule({
@@ -21,6 +24,8 @@ import { MessageService } from 'primeng/api';
     CommonModule,
     FormsModule,
     OrderListRoutingModule,
+    OrderDetailModule,
+    OrderCreateModule,
     TableModule,
     ButtonModule,
     CardModule,
@@ -28,7 +33,8 @@ import { MessageService } from 'primeng/api';
     TooltipModule,
     InputTextModule,
     DropdownModule,
-    DialogModule
+    DialogModule,
+    FileUploadModule
   ],
   providers: [MessageService]
 })

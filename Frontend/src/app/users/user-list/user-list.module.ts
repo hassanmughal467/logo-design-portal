@@ -15,6 +15,8 @@ import { TooltipModule } from 'primeng/tooltip';
 import { CheckboxModule } from 'primeng/checkbox';
 import { CardModule } from 'primeng/card';
 import { PasswordModule } from 'primeng/password';
+import { InputNumberModule } from 'primeng/inputnumber';
+import { InputTextareaModule } from 'primeng/inputtextarea';
 import { MessageService } from 'primeng/api';
 
 @NgModule({
@@ -33,7 +35,9 @@ import { MessageService } from 'primeng/api';
     TooltipModule,
     CheckboxModule,
     CardModule,
-    PasswordModule
+    PasswordModule,
+    InputNumberModule,
+    InputTextareaModule
   ],
   providers: [MessageService]
 })

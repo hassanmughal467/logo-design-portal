@@ -22,6 +22,11 @@ public static class DependencyInjection
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<IReviewService, ReviewService>();
         services.AddScoped<ISettingsService, SettingsService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<ICommentService, CommentService>();
+        services.AddScoped<IRevisionService, RevisionService>();
+        services.AddScoped<IGalleryService, GalleryService>();
+        services.AddScoped<IAuditLogService, AuditLogService>();
 
         return services;
     }

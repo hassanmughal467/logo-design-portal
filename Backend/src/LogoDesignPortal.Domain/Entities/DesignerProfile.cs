@@ -7,6 +7,7 @@ public class DesignerProfile : BaseEntity
     public string? Bio { get; set; }
     public decimal? HourlyRate { get; set; }
     public bool IsAvailable { get; set; } = true;
+    public string? Notes { get; set; } // Internal admin notes
 
     // Navigation properties
     public User User { get; set; } = null!;

@@ -5,6 +5,7 @@ public class SettingsResponseDto
     public Dictionary<string, string> Business { get; set; } = new();
     public Dictionary<string, string> Brand { get; set; } = new();
     public Dictionary<string, string> InvoiceTemplate { get; set; } = new();
+    public Dictionary<string, string> Invoice { get; set; } = new(); // Invoice prefix, due days, tax percentage, currency
     public List<PaymentMethodDto> PaymentMethods { get; set; } = new();
     public Dictionary<string, bool> Notifications { get; set; } = new();
 }

@@ -1,0 +1,81 @@
+<div class="gallery-container">
+  <div class="gallery-header">
+    <h2>My Gallery</h2>
+    <p>All your approved final files</p>
+  </div>
+
+  <div class="gallery-grid" *ngIf="!loading">
+    <div 
+      class="gallery-item" 
+      *ngFor="let item of galleryItems"
+      (click)="previewItem(item)"
+    >
+      <div class="gallery-item-image">
+        <img [src]="item.previewImagePath" [alt]="item.originalFileName" />
+        <div class="gallery-item-overlay">
+          <p-button 
+            icon="pi pi-eye" 
+            [styleClass]="'p-button-rounded'"
+            (onClick)="previewItem(item); $event.stopPropagation()"
+          ></p-button>
+          <p-button 
+            icon="pi pi-download" 
+            [styleClass]="'p-button-rounded'"
+            (onClick)="downloadFile(item); $event.stopPropagation()"
+          ></p-button>
+        </div>
+      </div>
+      <div class="gallery-item-info">
+        <h4>{{ item.orderTitle }}</h4>
+        <p>{{ item.originalFileName }}</p>
+        <div class="gallery-item-meta">
+          <span><i [class]="'pi ' + getFileIcon(item.format)"></i> {{ item.format || 'File' }}</span>
+          <span>{{ item.approvedAt | date:'short' }}</span>
+        </div>
+      </div>
+    </div>
+    <div *ngIf="galleryItems.length === 0" class="empty-state">
+      <i class="pi pi-images"></i>
+      <p>No files in gallery yet</p>
+      <span>Approved final files will appear here</span>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading-state">
+    <i class="pi pi-spin pi-spinner"></i>
+    <p>Loading gallery...</p>
+  </div>
+</div>
+
+<p-dialog 
+  [(visible)]="showPreviewDialog" 
+  [header]="selectedItem.orderTitle || 'Preview'" 
+  [modal]="true"
+  [style]="{width: '90vw', maxWidth: '1200px'}"
+  *ngIf="selectedItem"
+>
+  <div class="preview-dialog">
+    <img [src]="selectedItem.previewImagePath" [alt]="selectedItem.originalFileName" class="preview-image" />
+    <div class="preview-info">
+      <h3>{{ selectedItem.originalFileName }}</h3>
+      <div class="preview-meta">
+        <p><strong>Format:</strong> {{ selectedItem.format || 'N/A' }}</p>
+        <p><strong>Order:</strong> {{ selectedItem.orderTitle }}</p>
+        <p><strong>Approved:</strong> {{ selectedItem.approvedAt | date:'short' }}</p>
+      </div>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button 
+      label="Download" 
+      icon="pi pi-download" 
+      (onClick)="downloadFile(selectedItem!)"
+    ></p-button>
+    <p-button 
+      label="Close" 
+      icon="pi pi-times" 
+      (onClick)="showPreviewDialog = false"
+      [styleClass]="'p-button-text'"
+    ></p-button>
+  </ng-template>
+</p-dialog>

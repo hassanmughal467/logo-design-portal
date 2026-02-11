@@ -1,0 +1,61 @@
+<div class="notifications-container">
+  <div class="notifications-header">
+    <h2>Notifications</h2>
+    <div class="header-actions">
+      <p-button 
+        *ngIf="unreadCount > 0"
+        [label]="'Mark All Read (' + unreadCount + ')'" 
+        icon="pi pi-check" 
+        (onClick)="markAllAsRead()"
+        [styleClass]="'p-button-outlined'"
+      ></p-button>
+      <p-button 
+        [label]="showUnreadOnly ? 'Show All' : 'Show Unread Only'" 
+        icon="pi pi-filter" 
+        (onClick)="toggleUnreadFilter()"
+        [styleClass]="'p-button-outlined'"
+      ></p-button>
+    </div>
+  </div>
+
+  <div class="notifications-list" *ngIf="!loading">
+    <div 
+      class="notification-item" 
+      *ngFor="let notification of filteredNotifications"
+      [class.unread]="!notification.isRead"
+      (click)="markAsRead(notification)"
+    >
+      <div class="notification-icon">
+        <i [class]="'pi ' + getNotificationIcon(notification.type)"></i>
+      </div>
+      <div class="notification-content">
+        <div class="notification-header">
+          <h4>{{ notification.title }}</h4>
+          <p-tag 
+            [value]="notification.type" 
+            [severity]="getNotificationSeverity(notification.type)"
+          ></p-tag>
+        </div>
+        <p class="notification-message">{{ notification.message }}</p>
+        <div class="notification-footer">
+          <span class="notification-date">{{ notification.createdAt | date:'short' }}</span>
+          <span class="notification-order" *ngIf="notification.orderId">
+            Order: {{ notification.orderId }}
+          </span>
+        </div>
+      </div>
+      <div class="notification-actions">
+        <i class="pi pi-circle-fill unread-indicator" *ngIf="!notification.isRead"></i>
+      </div>
+    </div>
+    <div *ngIf="filteredNotifications.length === 0" class="empty-state">
+      <i class="pi pi-bell-slash"></i>
+      <p>No notifications</p>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading-state">
+    <i class="pi pi-spin pi-spinner"></i>
+    <p>Loading notifications...</p>
+  </div>
+</div>

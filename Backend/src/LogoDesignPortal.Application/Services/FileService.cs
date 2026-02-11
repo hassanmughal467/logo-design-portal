@@ -1,7 +1,10 @@
+using AutoMapper;
 using LogoDesignPortal.Application.DTOs.Files;
+using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
+using LogoDesignPortal.Domain.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -11,21 +14,35 @@ namespace LogoDesignPortal.Application.Services;
 public class FileService : IFileService
 {
     private readonly IApplicationDbContext _context;
+    private readonly IMapper _mapper;
     private readonly string _fileStoragePath;
+    private readonly string _temporaryStoragePath;
+    private readonly string _permanentStoragePath;
     private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
 
-    public FileService(IApplicationDbContext context, IConfiguration configuration)
+    public FileService(IApplicationDbContext context, IConfiguration configuration, IMapper mapper)
     {
         _context = context;
+        _mapper = mapper;
         _fileStoragePath = configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
+        _temporaryStoragePath = Path.Combine(_fileStoragePath, "Temporary");
+        _permanentStoragePath = Path.Combine(_fileStoragePath, "Permanent");
         
         if (!Directory.Exists(_fileStoragePath))
         {
             Directory.CreateDirectory(_fileStoragePath);
         }
+        if (!Directory.Exists(_temporaryStoragePath))
+        {
+            Directory.CreateDirectory(_temporaryStoragePath);
+        }
+        if (!Directory.Exists(_permanentStoragePath))
+        {
+            Directory.CreateDirectory(_permanentStoragePath);
+        }
     }
 
-    public async Task<FileUploadResponseDto> UploadFileAsync(Guid orderId, IFormFile file, Guid uploadedBy)
+    public async Task<FileUploadResponseDto> UploadFileAsync(Guid orderId, IFormFile file, Guid uploadedBy, string fileType, string? description = null)
     {
         var order = await _context.LogoOrders
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
@@ -48,13 +65,56 @@ public class FileService : IFileService
             throw new InvalidOperationException("File type not allowed.");
         }
 
+        // Parse file type enum first to determine storage location
+        if (!Enum.TryParse<FileType>(fileType, true, out var parsedFileType))
+        {
+            parsedFileType = FileType.Reference;
+        }
+
         var fileName = $"{Guid.NewGuid()}{fileExtension}";
-        var filePath = Path.Combine(_fileStoragePath, fileName);
+        
+        // Determine storage path based on file type
+        // Preview and Revision files go to temporary storage
+        // Final files go to permanent storage
+        // Reference files go to main storage (client uploads)
+        string storagePath;
+        if (parsedFileType == FileType.Preview || parsedFileType == FileType.Revision)
+        {
+            storagePath = _temporaryStoragePath;
+        }
+        else if (parsedFileType == FileType.Final)
+        {
+            storagePath = _permanentStoragePath;
+        }
+        else
+        {
+            storagePath = _fileStoragePath;
+        }
+        
+        var filePath = Path.Combine(storagePath, fileName);
 
         using (var stream = new FileStream(filePath, FileMode.Create))
         {
             await file.CopyToAsync(stream);
         }
+
+        // Get version number (increment from existing files)
+        var existingFiles = await _context.LogoFiles
+            .Where(f => f.OrderId == orderId && !f.IsDeleted)
+            .ToListAsync();
+        var versionNumber = existingFiles.Any() ? existingFiles.Max(f => f.VersionNumber) + 1 : 1;
+
+        // Determine visibility based on file type and uploader role
+        var user = await _context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == uploadedBy);
+        
+        var userRole = user?.Role?.Name ?? string.Empty;
+        
+        // Designer uploads are NEVER visible to clients until admin approval
+        // Only client uploads of Reference type are visible immediately
+        var isVisibleToClient = userRole == "Client" && parsedFileType == FileType.Reference;
+        var isAdminApproved = userRole == "Client" && parsedFileType == FileType.Reference;
 
         var logoFile = new LogoFile
         {
@@ -65,12 +125,27 @@ public class FileService : IFileService
             FilePath = filePath,
             ContentType = file.ContentType,
             FileSize = file.Length,
+            FileType = parsedFileType,
+            VersionNumber = versionNumber,
+            Description = description,
+            IsVisibleToClient = isVisibleToClient,
+            IsAdminApproved = isAdminApproved,
+            IsFinalVersion = parsedFileType == FileType.Final,
             UploadedBy = uploadedBy,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = uploadedBy
         };
 
         _context.LogoFiles.Add(logoFile);
+
+        // If designer uploads preview files, update order status to PreviewDelivered
+        if (userRole == "Designer" && parsedFileType == FileType.Preview)
+        {
+            order.Status = OrderStatus.PreviewDelivered;
+            order.UpdatedAt = DateTime.UtcNow;
+            order.UpdatedBy = uploadedBy;
+        }
+
         await _context.SaveChangesAsync();
 
         return new FileUploadResponseDto
@@ -82,6 +157,138 @@ public class FileService : IFileService
             ContentType = logoFile.ContentType,
             UploadedAt = logoFile.CreatedAt
         };
+    }
+
+    public async Task<List<FileUploadResponseDto>> UploadMultipleFilesAsync(Guid orderId, IFormFile[] files, Guid uploadedBy, string fileType, string? description = null)
+    {
+        var order = await _context.LogoOrders
+            .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+
+        if (order == null)
+        {
+            throw new InvalidOperationException("Order not found.");
+        }
+
+        if (files == null || files.Length == 0)
+        {
+            throw new InvalidOperationException("No files provided.");
+        }
+
+        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".svg", ".pdf", ".ai", ".eps", ".psd" };
+        var results = new List<FileUploadResponseDto>();
+
+        // Get existing files to determine version numbers
+        var existingFiles = await _context.LogoFiles
+            .Where(f => f.OrderId == orderId && !f.IsDeleted)
+            .ToListAsync();
+        var currentVersion = existingFiles.Any() ? existingFiles.Max(f => f.VersionNumber) : 0;
+
+        // Parse file type enum
+        if (!Enum.TryParse<FileType>(fileType, true, out var parsedFileType))
+        {
+            parsedFileType = FileType.Reference;
+        }
+
+        // Get uploader role to determine visibility
+        var user = await _context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == uploadedBy);
+        
+        var userRole = user?.Role?.Name ?? string.Empty;
+        
+        // Designer uploads are NEVER visible to clients until admin approval
+        // Only client uploads of Reference type are visible immediately
+        var isVisibleToClient = userRole == "Client" && parsedFileType == FileType.Reference;
+        var isAdminApproved = userRole == "Client" && parsedFileType == FileType.Reference;
+
+        // Determine storage path based on file type
+        string storagePath;
+        if (parsedFileType == FileType.Preview || parsedFileType == FileType.Revision)
+        {
+            storagePath = _temporaryStoragePath;
+        }
+        else if (parsedFileType == FileType.Final)
+        {
+            storagePath = _permanentStoragePath;
+        }
+        else
+        {
+            storagePath = _fileStoragePath;
+        }
+
+        foreach (var file in files)
+        {
+            if (file == null || file.Length == 0)
+            {
+                continue; // Skip empty files
+            }
+
+            if (file.Length > MaxFileSize)
+            {
+                throw new InvalidOperationException($"File '{file.FileName}' exceeds maximum allowed size (10MB).");
+            }
+
+            var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
+
+            if (!allowedExtensions.Contains(fileExtension))
+            {
+                throw new InvalidOperationException($"File type '{fileExtension}' is not allowed for file '{file.FileName}'.");
+            }
+
+            currentVersion++;
+            var fileName = $"{Guid.NewGuid()}{fileExtension}";
+            
+            // Use the storage path determined earlier based on file type
+            var filePath = Path.Combine(storagePath, fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var logoFile = new LogoFile
+            {
+                Id = Guid.NewGuid(),
+                OrderId = orderId,
+                FileName = fileName,
+                OriginalFileName = file.FileName,
+                FilePath = filePath,
+                ContentType = file.ContentType,
+                FileSize = file.Length,
+                FileType = parsedFileType,
+                VersionNumber = currentVersion,
+                Description = description,
+                IsVisibleToClient = isVisibleToClient,
+                IsAdminApproved = isAdminApproved,
+                IsFinalVersion = parsedFileType == FileType.Final,
+                UploadedBy = uploadedBy,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = uploadedBy
+            };
+
+            _context.LogoFiles.Add(logoFile);
+
+            results.Add(new FileUploadResponseDto
+            {
+                Id = logoFile.Id,
+                FileName = logoFile.FileName,
+                OriginalFileName = logoFile.OriginalFileName,
+                FileSize = logoFile.FileSize,
+                ContentType = logoFile.ContentType,
+                UploadedAt = logoFile.CreatedAt
+            });
+        }
+
+        // If designer uploads preview files, update order status to PreviewDelivered
+        if (userRole == "Designer" && parsedFileType == FileType.Preview)
+        {
+            order.Status = OrderStatus.PreviewDelivered;
+            order.UpdatedAt = DateTime.UtcNow;
+            order.UpdatedBy = uploadedBy;
+        }
+
+        await _context.SaveChangesAsync();
+        return results;
     }
 
     public async Task<(byte[] fileContent, string fileName, string contentType)> DownloadFileAsync(
@@ -100,14 +307,45 @@ public class FileService : IFileService
         }
 
         // Authorization
-        if (userRole == "Client" && file.Order.Client.UserId != userId)
+        // Use ForbiddenAccessException for authorization failures (user is authenticated but lacks permission)
+        
+        // Admin and SuperAdmin have access to all files
+        if (userRole == "Admin" || userRole == "SuperAdmin")
         {
-            throw new UnauthorizedAccessException("You don't have access to this file.");
+            // Allow access - no additional checks needed
         }
-
-        if (userRole == "Designer" && file.Order.DesignerId != userId)
+        else if (userRole == "Client")
         {
-            throw new UnauthorizedAccessException("You don't have access to this file.");
+            // Clients can only access files from their own orders
+            if (file.Order.Client.UserId != userId)
+            {
+                throw new ForbiddenAccessException("You don't have access to this file.");
+            }
+            // If we reach here, the client owns the order - allow access
+        }
+        else if (userRole == "Designer")
+        {
+            // For designers, we need to check if the order is assigned to their DesignerProfile
+            // order.DesignerId is the DesignerProfile.Id, not the User.Id
+            if (file.Order.DesignerId == null)
+            {
+                throw new ForbiddenAccessException("You don't have access to this file.");
+            }
+
+            // Get the designer's profile to compare DesignerProfile.Id
+            var designer = await _context.DesignerProfiles
+                .FirstOrDefaultAsync(d => d.UserId == userId && !d.IsDeleted);
+
+            if (designer == null || file.Order.DesignerId != designer.Id)
+            {
+                throw new ForbiddenAccessException("You don't have access to this file.");
+            }
+            // If we reach here, the designer is assigned to the order - allow access
+        }
+        else
+        {
+            // Unknown role or null role - deny access
+            throw new ForbiddenAccessException("You don't have access to this file.");
         }
 
         if (!System.IO.File.Exists(file.FilePath))
@@ -120,7 +358,7 @@ public class FileService : IFileService
         return (fileContent, file.OriginalFileName, file.ContentType);
     }
 
-    public async Task<List<FileUploadResponseDto>> GetOrderFilesAsync(Guid orderId, Guid? userId, string? userRole)
+    public async Task<List<FileResponseDto>> GetOrderFilesAsync(Guid orderId, Guid? userId, string? userRole)
     {
         var order = await _context.LogoOrders
             .Include(o => o.Client)
@@ -133,29 +371,135 @@ public class FileService : IFileService
         }
 
         // Authorization
+        // Use ForbiddenAccessException for authorization failures (user is authenticated but lacks permission)
         if (userRole == "Client" && order.Client.UserId != userId)
         {
-            throw new UnauthorizedAccessException("You don't have access to this order's files.");
+            throw new ForbiddenAccessException("You don't have access to this order's files.");
         }
 
-        if (userRole == "Designer" && order.DesignerId != userId)
+        if (userRole == "Designer")
         {
-            throw new UnauthorizedAccessException("You don't have access to this order's files.");
+            // For designers, we need to check if the order is assigned to their DesignerProfile
+            // order.DesignerId is the DesignerProfile.Id, not the User.Id
+            if (order.DesignerId == null)
+            {
+                throw new ForbiddenAccessException("You don't have access to this order's files.");
+            }
+
+            // Get the designer's profile to compare DesignerProfile.Id
+            var designer = await _context.DesignerProfiles
+                .FirstOrDefaultAsync(d => d.UserId == userId && !d.IsDeleted);
+
+            if (designer == null || order.DesignerId != designer.Id)
+            {
+                throw new ForbiddenAccessException("You don't have access to this order's files.");
+            }
         }
 
+        var filesQuery = _context.LogoFiles
+            .Include(f => f.Order)
+            .Where(f => f.OrderId == orderId && !f.IsDeleted);
+
+        // Filter files based on role - clients only see approved/visible files
+        if (userRole == "Client")
+        {
+            filesQuery = filesQuery.Where(f => f.IsVisibleToClient);
+        }
+
+        var files = await filesQuery
+            .Include(f => f.ApprovedByUser)
+            .ToListAsync();
+
+        var result = _mapper.Map<List<FileResponseDto>>(files);
+        
+        // Populate user names
+        foreach (var fileDto in result)
+        {
+            var file = files.First(f => f.Id == fileDto.Id);
+            var uploadedByUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == file.UploadedBy);
+            if (uploadedByUser != null)
+            {
+                fileDto.UploadedByName = $"{uploadedByUser.FirstName} {uploadedByUser.LastName}";
+            }
+            if (file.ApprovedByUser != null)
+            {
+                fileDto.ApprovedByName = $"{file.ApprovedByUser.FirstName} {file.ApprovedByUser.LastName}";
+            }
+        }
+
+        // Hide uploaded by information from designers
+        if (userRole == "Designer")
+        {
+            foreach (var fileDto in result)
+            {
+                fileDto.UploadedBy = Guid.Empty;
+                fileDto.UploadedByName = string.Empty;
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<List<FileResponseDto>> GetOrderFilesForAdminAsync(Guid orderId)
+    {
         var files = await _context.LogoFiles
+            .Include(f => f.ApprovedByUser)
             .Where(f => f.OrderId == orderId && !f.IsDeleted)
             .ToListAsync();
 
-        return files.Select(f => new FileUploadResponseDto
+        var result = _mapper.Map<List<FileResponseDto>>(files);
+        
+        foreach (var fileDto in result)
         {
-            Id = f.Id,
-            FileName = f.FileName,
-            OriginalFileName = f.OriginalFileName,
-            FileSize = f.FileSize,
-            ContentType = f.ContentType,
-            UploadedAt = f.CreatedAt
-        }).ToList();
+            var file = files.First(f => f.Id == fileDto.Id);
+            var uploadedByUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == file.UploadedBy);
+            if (uploadedByUser != null)
+            {
+                fileDto.UploadedByName = $"{uploadedByUser.FirstName} {uploadedByUser.LastName}";
+            }
+            if (file.ApprovedByUser != null)
+            {
+                fileDto.ApprovedByName = $"{file.ApprovedByUser.FirstName} {file.ApprovedByUser.LastName}";
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<FileResponseDto> ApproveFileAsync(Guid fileId, ApproveFileDto request, Guid approvedBy)
+    {
+        var file = await _context.LogoFiles
+            .Include(f => f.Order)
+            .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsDeleted);
+
+        if (file == null)
+        {
+            throw new InvalidOperationException("File not found.");
+        }
+
+        file.IsAdminApproved = request.Approved;
+        file.IsVisibleToClient = request.MakeVisibleToClient && request.Approved;
+        file.ApprovedBy = approvedBy;
+        file.ApprovedAt = DateTime.UtcNow;
+        file.UpdatedAt = DateTime.UtcNow;
+        file.UpdatedBy = approvedBy;
+
+        await _context.SaveChangesAsync();
+
+        var result = _mapper.Map<FileResponseDto>(file);
+        var uploadedByUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == file.UploadedBy);
+        var approvedByUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == approvedBy);
+        
+        if (uploadedByUser != null)
+        {
+            result.UploadedByName = $"{uploadedByUser.FirstName} {uploadedByUser.LastName}";
+        }
+        if (approvedByUser != null)
+        {
+            result.ApprovedByName = $"{approvedByUser.FirstName} {approvedByUser.LastName}";
+        }
+
+        return result;
     }
 
     public async Task<bool> DeleteFileAsync(Guid fileId, Guid userId, string userRole)

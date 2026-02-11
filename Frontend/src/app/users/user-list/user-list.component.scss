@@ -472,7 +472,41 @@
                 font-size: 0.9rem;
                 color: var(--text-color-secondary);
               }
+
+              a {
+                color: var(--primary-color);
+                text-decoration: none;
+
+                &:hover {
+                  text-decoration: underline;
+                }
+              }
             }
+          }
+        }
+
+        .detail-section-divider {
+          display: flex;
+          align-items: center;
+          margin: 1.5rem 0 1rem 0;
+          font-weight: 600;
+          color: var(--primary-color);
+          font-size: 1rem;
+
+          &::before,
+          &::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--surface-border);
+          }
+
+          &::before {
+            margin-right: 1rem;
+          }
+
+          &::after {
+            margin-left: 1rem;
           }
         }
       }
@@ -641,6 +675,14 @@
     }
 
     // Create User Dialog Styles
+    ::ng-deep .create-user-dialog,
+    ::ng-deep .edit-user-dialog {
+      .p-dialog-content {
+        max-height: calc(90vh - 150px);
+        overflow-y: auto;
+      }
+    }
+
     .create-user-content {
       padding: 0.5rem 0;
 
@@ -694,16 +736,89 @@
       }
 
       .create-user-form {
+        max-height: calc(90vh - 300px);
+        overflow-y: auto;
+        padding-right: 0.5rem;
+
         .create-form-fields {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 1.5rem;
+          margin-bottom: 1rem;
+          align-items: start;
+          grid-auto-rows: min-content;
+
+          .form-section-divider {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            margin: 1.5rem 0 1rem 0;
+            font-weight: 600;
+            color: var(--primary-color);
+            font-size: 1rem;
+
+            &::before,
+            &::after {
+              content: '';
+              flex: 1;
+              height: 1px;
+              background: var(--surface-border);
+            }
+
+            &::before {
+              margin-right: 1rem;
+            }
+
+            &::after {
+              margin-left: 1rem;
+            }
+          }
+        }
+      }
+
+      .edit-user-form {
+        max-height: calc(90vh - 300px);
+        overflow-y: auto;
+        padding-right: 0.5rem;
+
+        .edit-form-fields {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 1.5rem;
           margin-bottom: 1rem;
 
+          .form-section-divider {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            margin: 1.5rem 0 1rem 0;
+            font-weight: 600;
+            color: var(--primary-color);
+            font-size: 1rem;
+
+            &::before,
+            &::after {
+              content: '';
+              flex: 1;
+              height: 1px;
+              background: var(--surface-border);
+            }
+
+            &::before {
+              margin-right: 1rem;
+            }
+
+            &::after {
+              margin-left: 1rem;
+            }
+          }
+
           .form-field {
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
+            align-items: stretch;
+            min-width: 0;
 
             &.full-width {
               grid-column: 1 / -1;
@@ -716,7 +831,8 @@
               font-weight: 600;
               color: var(--text-color);
               font-size: 0.95rem;
-              margin-bottom: 0.75rem;
+              margin-bottom: 0.5rem;
+              min-height: 1.5rem;
 
               i {
                 color: var(--primary-color);
@@ -729,24 +845,45 @@
               }
             }
 
-            input {
+            input, textarea {
               width: 100%;
               padding: 0.75rem;
               font-size: 0.95rem;
               border-radius: 6px;
+              min-height: 2.75rem;
+              box-sizing: border-box;
+            }
+
+            textarea {
+              resize: vertical;
+              min-height: 80px;
             }
 
             ::ng-deep {
               .password-input {
                 width: 100%;
+                display: flex;
+                align-items: stretch;
 
                 .p-password {
                   width: 100%;
+                  display: flex;
+                  flex-direction: column;
 
+                  .p-inputtext {
+                    width: 100%;
+                    padding: 0.75rem;
+                    font-size: 0.95rem;
+                    min-height: 2.75rem;
+                    box-sizing: border-box;
+                  }
+                  
                   input {
                     width: 100%;
                     padding: 0.75rem;
                     font-size: 0.95rem;
+                    min-height: 2.75rem;
+                    box-sizing: border-box;
                   }
                 }
               }
@@ -755,6 +892,36 @@
                 width: 100%;
 
                 .p-dropdown {
+                  width: 100%;
+                  
+                  .p-dropdown-trigger {
+                    min-width: 2.5rem;
+                  }
+                  
+                  .p-dropdown-label {
+                    min-height: 2.75rem;
+                    padding: 0.75rem;
+                    box-sizing: border-box;
+                  }
+                }
+              }
+
+              p-inputNumber {
+                width: 100%;
+
+                .p-inputnumber {
+                  width: 100%;
+
+                  input {
+                    width: 100%;
+                  }
+                }
+              }
+
+              p-inputTextarea {
+                width: 100%;
+
+                textarea {
                   width: 100%;
                 }
               }
@@ -766,6 +933,7 @@
               gap: 0.5rem;
               margin-top: 0.5rem;
               font-size: 0.85rem;
+              min-height: 1.5rem;
 
               i {
                 font-size: 0.8rem;

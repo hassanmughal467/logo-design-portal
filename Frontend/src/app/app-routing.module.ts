@@ -105,6 +105,21 @@ const routes: Routes = [
     canActivate: [AuthGuard]
   },
 
+  // Notifications (lazy loaded)
+  {
+    path: 'notifications',
+    loadChildren: () => import('./notifications/notifications.module').then(m => m.NotificationsModule),
+    canActivate: [AuthGuard]
+  },
+
+  // Gallery (lazy loaded)
+  {
+    path: 'gallery',
+    loadChildren: () => import('./gallery/gallery.module').then(m => m.GalleryModule),
+    canActivate: [AuthGuard, RoleGuard],
+    data: { roles: ['Client'] }
+  },
+
   // Wildcard route
   { path: '**', redirectTo: '/dashboard' }
 ];

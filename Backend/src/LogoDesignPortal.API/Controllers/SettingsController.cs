@@ -88,6 +88,16 @@ public class SettingsController : ControllerBase
         return Ok(new { message = "Payment methods updated successfully." });
     }
 
+    [HttpPost("invoice")]
+    [Authorize(Roles = "SuperAdmin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateInvoiceSettings([FromBody] Dictionary<string, object> data)
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        await _settingsService.UpdateSettingsAsync("Invoice", data, userId);
+        return Ok(new { message = "Invoice settings updated successfully." });
+    }
+
     [HttpPost("notifications")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateNotifications([FromBody] Dictionary<string, bool> data)

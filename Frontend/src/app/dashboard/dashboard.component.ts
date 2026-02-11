@@ -426,12 +426,48 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  // Order Detail Modal
+  showOrderDetailModal = false;
+  selectedOrderId: string | null = null;
+
   navigateToOrder(orderId: string): void {
-    this.router.navigate(['/orders', orderId]);
+    this.selectedOrderId = orderId;
+    this.showOrderDetailModal = true;
   }
+
+  onOrderDetailClose(): void {
+    this.showOrderDetailModal = false;
+    this.selectedOrderId = null;
+  }
+
+  onOrderUpdated(): void {
+    // Refresh dashboard data when order is updated
+    this.loadDashboardData();
+  }
+
+  // Order Create Modal
+  showOrderCreateModal = false;
 
   navigateToOrders(): void {
     this.router.navigate(['/orders']);
+  }
+
+  openCreateOrderModal(): void {
+    this.showOrderCreateModal = true;
+  }
+
+  onOrderCreateClose(): void {
+    this.showOrderCreateModal = false;
+  }
+
+  onOrderCreated(order: any): void {
+    // Refresh dashboard data when order is created
+    this.loadDashboardData();
+    // Optionally open the created order in detail modal
+    if (order && order.id) {
+      this.selectedOrderId = order.id;
+      this.showOrderDetailModal = true;
+    }
   }
 
   isOverdue(dueDate: Date | string | undefined): boolean {

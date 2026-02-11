@@ -1,4 +1,5 @@
 using LogoDesignPortal.Domain.Entities;
+using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -28,15 +29,25 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .IsRequired()
             .HasPrecision(18, 2);
 
+        builder.Property(e => e.Status)
+            .IsRequired()
+            .HasConversion<int>()
+            .HasDefaultValue(InvoiceStatus.Pending);
+
+        builder.Property(e => e.BillingType)
+            .IsRequired()
+            .HasConversion<int>()
+            .HasDefaultValue(BillingType.PerLogo); // Default for backward compatibility
+
         builder.Property(e => e.PaymentMethod)
             .HasMaxLength(50);
 
         builder.Property(e => e.Notes)
             .HasMaxLength(1000);
 
-        builder.HasOne(e => e.Order)
-            .WithOne(o => o.Invoice)
-            .HasForeignKey<Invoice>(i => i.OrderId)
-            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(e => e.Client)
+            .WithMany()
+            .HasForeignKey(e => e.ClientId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

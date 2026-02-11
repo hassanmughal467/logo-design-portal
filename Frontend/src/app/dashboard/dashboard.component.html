@@ -10,7 +10,7 @@
         *ngIf="user?.role === 'Client'"
         label="New Order" 
         icon="pi pi-plus" 
-        (onClick)="navigateToOrders()"
+        (onClick)="openCreateOrderModal()"
         styleClass="p-button-primary">
       </p-button>
       <!-- Quick Navigation Test Buttons -->
@@ -29,6 +29,7 @@
           styleClass="p-button-outlined">
         </p-button>
         <p-button 
+          *ngIf="user?.role === 'SuperAdmin' || user?.role === 'Admin'"
           label="Designers" 
           icon="pi pi-user-edit" 
           (onClick)="navigateToRoute('/designers')"
@@ -155,7 +156,7 @@
             *ngIf="user?.role === 'Client'"
             label="Create Order" 
             icon="pi pi-plus" 
-            (onClick)="navigateToOrders()"
+            (onClick)="openCreateOrderModal()"
             styleClass="p-button-primary">
           </p-button>
         </div>
@@ -254,4 +255,18 @@
       </p-card>
     </div>
   </div>
+
+  <!-- Order Create Modal -->
+  <app-order-create
+    [(visible)]="showOrderCreateModal"
+    (orderCreated)="onOrderCreated($event)">
+  </app-order-create>
+
+  <!-- Order Detail Modal -->
+  <app-order-detail
+    *ngIf="selectedOrderId"
+    [orderId]="selectedOrderId"
+    [(visible)]="showOrderDetailModal"
+    (orderUpdated)="onOrderUpdated()">
+  </app-order-detail>
 </div>

@@ -70,6 +70,55 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
 
   loadClient(): void {
     this.loading = true;
+    // Use new comprehensive client detail endpoint
+    this.apiService.get<any>(`users/clients/${this.clientId}/detail`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (clientDetail) => {
+          const user = clientDetail.user;
+          if (user.role === 'Client' || user.roleName === 'Client') {
+            this.client = {
+              id: user.id,
+              email: user.email,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              companyName: clientDetail.clientProfile?.companyName,
+              phoneNumber: clientDetail.clientProfile?.phoneNumber,
+              totalOrders: clientDetail.orderHistory?.length || 0,
+              totalSpent: clientDetail.invoices?.reduce((sum: number, inv: any) => sum + (inv.totalAmount || 0), 0) || 0,
+              createdAt: new Date(user.createdAt),
+              status: user.isActive ? 'Active' : 'Inactive',
+              lastOrderDate: clientDetail.orderHistory?.length > 0 
+                ? new Date(clientDetail.orderHistory[0].createdAt) 
+                : undefined
+            };
+            
+            // Load data from detail response
+            this.orders = clientDetail.orderHistory || [];
+            this.invoices = clientDetail.invoices || [];
+            this.files = clientDetail.files || [];
+            this.ordersLoading = false;
+            this.invoicesLoading = false;
+            this.filesLoading = false;
+            
+            this.loading = false;
+          } else {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'User is not a client'
+            });
+            this.router.navigate(['/clients']);
+          }
+        },
+        error: () => {
+          // Fallback to old endpoint if new one doesn't exist
+          this.loadClientLegacy();
+        }
+      });
+  }
+
+  private loadClientLegacy(): void {
     this.apiService.get<any>(`users/${this.clientId}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -88,6 +137,9 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
               status: 'Active'
             };
             this.loading = false;
+            this.loadOrders();
+            this.loadInvoices();
+            this.loadFiles();
           } else {
             this.messageService.add({
               severity: 'error',
@@ -109,6 +161,7 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
   }
 
   loadOrders(): void {
+    if (this.orders.length > 0) return; // Already loaded from detail endpoint
     this.ordersLoading = true;
     this.apiService.get<Order[]>('orders')
       .pipe(takeUntil(this.destroy$))
@@ -132,6 +185,7 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
   }
 
   loadInvoices(): void {
+    if (this.invoices.length > 0) return; // Already loaded from detail endpoint
     this.invoicesLoading = true;
     this.apiService.get<any[]>('invoices')
       .pipe(takeUntil(this.destroy$))
@@ -148,6 +202,7 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
   }
 
   loadFiles(): void {
+    if (this.files.length > 0) return; // Already loaded from detail endpoint
     this.filesLoading = true;
     if (this.orders.length > 0) {
       // Load files for all client orders

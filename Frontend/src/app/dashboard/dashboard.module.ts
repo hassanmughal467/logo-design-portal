@@ -4,6 +4,8 @@ import { DashboardComponent } from './dashboard.component';
 import { DashboardRoutingModule } from './dashboard-routing.module';
 import { LayoutModule } from '../layout/layout.module';
 import { SharedModule } from '../shared/shared.module';
+import { OrderDetailModule } from '../orders/order-detail/order-detail.module';
+import { OrderCreateModule } from '../orders/order-create/order-create.module';
 
 // PrimeNG
 import { CardModule } from 'primeng/card';
@@ -23,6 +25,8 @@ import { TooltipModule } from 'primeng/tooltip';
     DashboardRoutingModule,
     LayoutModule,
     SharedModule,
+    OrderDetailModule,
+    OrderCreateModule,
     CardModule,
     TableModule,
     TagModule,

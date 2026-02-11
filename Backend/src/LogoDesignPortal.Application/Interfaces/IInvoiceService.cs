@@ -8,6 +8,9 @@ public interface IInvoiceService
     Task<InvoiceResponseDto?> GetInvoiceByIdAsync(Guid invoiceId);
     Task<List<InvoiceResponseDto>> GetInvoicesAsync(Guid? userId, string? userRole);
     Task<List<InvoiceResponseDto>> GetInvoicesByClientAsync(Guid clientId);
-    Task<InvoiceResponseDto> MarkInvoiceAsPaidAsync(Guid invoiceId, string? paymentMethod);
-    Task<bool> SendInvoiceAsync(Guid invoiceId);
+    Task<InvoiceResponseDto> MarkInvoiceAsPaidAsync(Guid invoiceId, string? paymentMethod, Guid? performedBy);
+    Task<bool> SendInvoiceAsync(Guid invoiceId, Guid? performedBy);
+    Task<List<InvoiceLogDto>> GetInvoiceLogsAsync(Guid invoiceId);
+    Task UpdateOverdueInvoicesAsync(); // For background job
+    Task<InvoiceStatisticsDto> GetInvoiceStatisticsAsync(Guid? userId = null, string? userRole = null);
 }
