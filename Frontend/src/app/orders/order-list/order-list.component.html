@@ -1,15 +1,15 @@
 <div class="orders-page">
+  <!-- Page Header -->
   <div class="page-header">
     <div class="header-content">
-      <h1 class="page-title">Orders Management</h1>
-      <p class="page-subtitle">View and manage all orders</p>
-      <p *ngIf="orders.length > 0" class="page-info">Total: {{ orders.length }} order(s)</p>
+      <h1 class="page-title">{{ pageTitle }}</h1>
+      <p class="page-subtitle">{{ pageSubtitle }}</p>
     </div>
     <div class="header-actions">
-      <p-button 
+      <p-button
         *ngIf="canCreateOrder()"
-        label="Create Order" 
-        icon="pi pi-plus" 
+        label="Create Order"
+        icon="pi pi-plus"
         (onClick)="createOrder()"
         styleClass="p-button-primary">
       </p-button>
@@ -17,180 +17,275 @@
   </div>
 
   <!-- Loading State -->
-  <div *ngIf="loading" style="text-align: center; padding: 3rem;">
-    <i class="pi pi-spin pi-spinner" style="font-size: 2rem;"></i>
+  <div *ngIf="loading" class="loading-container">
+    <i class="pi pi-spin pi-spinner" style="font-size: 2rem; color: var(--primary-color);"></i>
     <p>Loading orders...</p>
   </div>
 
-  <!-- Debug info (remove in production) -->
-  <div *ngIf="orders.length === 0 && !loading" style="padding: 1rem; background: #f0f0f0; margin: 1rem; border-radius: 4px;">
-    <p><strong>Debug Info:</strong></p>
-    <p>Orders array length: {{ orders.length }}</p>
-    <p>Filtered orders length: {{ filteredOrders.length }}</p>
-    <p>Loading: {{ loading }}</p>
-    <p>Check browser console for API response details</p>
-  </div>
+  <!-- Dashboard Content -->
+  <ng-container *ngIf="!loading">
 
-  <p-card styleClass="orders-card">
-    <p-table 
-      [value]="selectedStatus ? filteredOrders : orders" 
-      [loading]="loading"
-      [paginator]="orders.length > 0"
-      [rows]="rows"
-      [first]="first"
-      (onPage)="first = $event.first"
-      [globalFilterFields]="['title', 'status', 'priority']"
-      [rowsPerPageOptions]="[10, 25, 50]"
-      styleClass="p-datatable-striped"
-      [responsive]="true"
-      [lazy]="false">
-      
-      <ng-template pTemplate="caption">
-        <div class="table-header">
-          <span class="p-input-icon-left">
-            <i class="pi pi-search"></i>
-            <input 
-              type="text" 
-              pInputText 
-              [(ngModel)]="globalFilter" 
-              placeholder="Search orders..." 
-              class="search-input" />
-          </span>
-          <p-dropdown 
-            [options]="statuses" 
-            [(ngModel)]="selectedStatus"
-            (onChange)="onStatusFilterChange()"
-            placeholder="Filter by Status"
-            [showClear]="true"
-            styleClass="status-filter">
-          </p-dropdown>
+    <!-- Role-Specific Summary Cards -->
+    <div class="summary-cards" *ngIf="orders.length > 0">
+      <div class="summary-card" *ngFor="let card of summaryCards"
+        [class]="'summary-' + card.color"
+        [class.clickable]="card.filterStatus !== undefined"
+        (click)="onSummaryCardClick(card)">
+        <div class="summary-card-icon" [class]="'bg-' + card.color">
+          <i [class]="card.icon"></i>
         </div>
-      </ng-template>
+        <div class="summary-card-info">
+          <span class="summary-card-value">{{ card.value }}</span>
+          <span class="summary-card-label">{{ card.label }}</span>
+        </div>
+      </div>
+    </div>
 
-      <ng-template pTemplate="header">
-        <tr>
-          <th pSortableColumn="title">
-            Title <p-sortIcon field="title"></p-sortIcon>
-          </th>
-          <th pSortableColumn="status">
-            Status <p-sortIcon field="status"></p-sortIcon>
-          </th>
-          <th pSortableColumn="priority">
-            Priority <p-sortIcon field="priority"></p-sortIcon>
-          </th>
-          <th *ngIf="!isClient">Client</th>
-          <th *ngIf="!isClient">Designer</th>
-          <th pSortableColumn="createdAt">
-            Created <p-sortIcon field="createdAt"></p-sortIcon>
-          </th>
-          <th>Due Date</th>
-          <th>Actions</th>
-        </tr>
-      </ng-template>
+    <!-- Quick Filter Chips -->
+    <div class="quick-filters" *ngIf="orders.length > 0">
+      <button *ngFor="let chip of quickFilterChips"
+        class="filter-chip"
+        [class.active]="isActiveChip(chip)"
+        (click)="onQuickFilterClick(chip)">
+        <i [class]="chip.icon"></i>
+        <span>{{ chip.label }}</span>
+        <span class="chip-count" *ngIf="chip.count > 0">{{ chip.count }}</span>
+      </button>
+    </div>
 
-      <ng-template pTemplate="body" let-order>
-        <tr>
-          <td>
-            <div class="order-title-cell">
-              <i class="pi pi-file-edit"></i>
-              <span>{{ order.title }}</span>
+    <!-- Orders Grid -->
+    <p-card styleClass="orders-card">
+      <p-table
+        [value]="filteredOrders"
+        [loading]="loading"
+        [paginator]="filteredOrders.length > 0"
+        [rows]="rows"
+        [first]="first"
+        (onPage)="first = $event.first"
+        [rowsPerPageOptions]="[10, 25, 50]"
+        [sortField]="'createdAt'"
+        [sortOrder]="-1"
+        styleClass="p-datatable-sm p-datatable-striped"
+        [responsive]="true"
+        [lazy]="false">
+
+        <!-- Table Toolbar -->
+        <ng-template pTemplate="caption">
+          <div class="table-header">
+            <span class="p-input-icon-left">
+              <i class="pi pi-search"></i>
+              <input
+                type="text"
+                pInputText
+                [(ngModel)]="globalFilter"
+                (input)="onGlobalFilterChange()"
+                placeholder="Search by title, status, client..."
+                class="search-input" />
+            </span>
+            <div class="table-header-right">
+              <p-dropdown
+                [options]="statuses"
+                [(ngModel)]="selectedStatus"
+                (onChange)="onStatusFilterChange()"
+                placeholder="Filter by Status"
+                [showClear]="true"
+                styleClass="status-filter">
+              </p-dropdown>
+              <p-button *ngIf="selectedStatus || globalFilter"
+                icon="pi pi-filter-slash"
+                pTooltip="Clear Filters" tooltipPosition="top"
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                (onClick)="clearAllFilters()">
+              </p-button>
             </div>
-          </td>
-          <td>
-            <p-tag 
-              [value]="order.status" 
-              [severity]="getStatusSeverity(order.status)"
-              [rounded]="true">
-            </p-tag>
-          </td>
-          <td>
-            <p-tag 
-              [value]="order.priority" 
-              [severity]="getPrioritySeverity(order.priority)"
-              [rounded]="true">
-            </p-tag>
-          </td>
-          <td *ngIf="!isClient">
-            <span *ngIf="order.client">
-              <div *ngIf="order.client.companyName" class="client-company">{{ order.client.companyName }}</div>
-              <div *ngIf="order.client.firstName || order.client.lastName" class="client-name">
-                {{ order.client.firstName }} {{ order.client.lastName }}
+          </div>
+        </ng-template>
+
+        <!-- Table Header -->
+        <ng-template pTemplate="header">
+          <tr>
+            <th pSortableColumn="title" style="min-width: 200px">
+              Title <p-sortIcon field="title"></p-sortIcon>
+            </th>
+            <th pSortableColumn="status" style="width: 160px">
+              Status <p-sortIcon field="status"></p-sortIcon>
+            </th>
+            <th pSortableColumn="priority" style="width: 110px">
+              Priority <p-sortIcon field="priority"></p-sortIcon>
+            </th>
+            <!-- Client column: visible to Admin/SuperAdmin only -->
+            <th *ngIf="isAdminOrSuper" style="width: 160px">Client</th>
+            <!-- Designer column: visible to Admin/SuperAdmin only -->
+            <th *ngIf="isAdminOrSuper" style="width: 150px">Designer</th>
+            <th pSortableColumn="createdAt" style="width: 120px">
+              Created <p-sortIcon field="createdAt"></p-sortIcon>
+            </th>
+            <th pSortableColumn="dueDate" style="width: 120px">
+              Due Date <p-sortIcon field="dueDate"></p-sortIcon>
+            </th>
+            <th style="width: 180px">Actions</th>
+          </tr>
+        </ng-template>
+
+        <!-- Table Body -->
+        <ng-template pTemplate="body" let-order>
+          <tr>
+            <td>
+              <div class="order-title-cell">
+                <i class="pi pi-file-edit"></i>
+                <span class="order-title-text" (click)="viewOrder(order.id)">{{ order.title }}</span>
               </div>
-              <span *ngIf="!order.client.companyName && !order.client.firstName && !order.client.lastName && order.client.email" class="text-muted">
-                {{ order.client.email }}
+            </td>
+            <td>
+              <p-tag
+                [value]="getStatusLabel(order.status)"
+                [severity]="getStatusSeverity(order.status)"
+                [rounded]="true">
+              </p-tag>
+            </td>
+            <td>
+              <p-tag
+                [value]="order.priority"
+                [severity]="getPrioritySeverity(order.priority)"
+                [rounded]="true">
+              </p-tag>
+            </td>
+            <!-- Client cell: Admin/SuperAdmin only -->
+            <td *ngIf="isAdminOrSuper">
+              <span *ngIf="order.client">
+                <div *ngIf="order.client.companyName" class="client-company">{{ order.client.companyName }}</div>
+                <div *ngIf="order.client.firstName || order.client.lastName" class="client-name">
+                  {{ order.client.firstName }} {{ order.client.lastName }}
+                </div>
+                <span *ngIf="!order.client.companyName && !order.client.firstName && !order.client.lastName && order.client.email" class="text-muted">
+                  {{ order.client.email }}
+                </span>
               </span>
-            </span>
-            <span *ngIf="!order.client" class="text-muted">N/A</span>
-          </td>
-          <td *ngIf="!isClient">
-            <span *ngIf="order.designer">
-              {{ order.designer.firstName }} {{ order.designer.lastName }}
-            </span>
-            <span *ngIf="!order.designer" class="text-muted">Unassigned</span>
-          </td>
-          <td>{{ formatDate(order.createdAt) }}</td>
-          <td>
-            <span [class.overdue]="isOverdue(order.dueDate)">
-              {{ formatDate(order.dueDate) }}
-            </span>
-          </td>
-          <td>
-            <div class="action-buttons">
-              <p-button 
-                icon="pi pi-eye" 
-                styleClass="p-button-text p-button-rounded p-button-sm"
-                (onClick)="viewOrder(order.id)"
-                pTooltip="View Details"
-                tooltipPosition="top">
-              </p-button>
-              <p-button 
-                *ngIf="canAssignDesigner()"
-                icon="pi pi-user-plus" 
-                styleClass="p-button-text p-button-rounded p-button-sm"
-                (onClick)="openAssignDialog(order)"
-                pTooltip="Assign Designer"
-                tooltipPosition="top">
-              </p-button>
-              <p-button 
-                icon="pi pi-upload" 
-                styleClass="p-button-text p-button-rounded p-button-sm"
-                (onClick)="openUploadDialog(order)"
-                pTooltip="Upload Files"
-                tooltipPosition="top">
-              </p-button>
-              <p-button 
-                *ngIf="canChangeStatus()"
-                icon="pi pi-pencil" 
-                styleClass="p-button-text p-button-rounded p-button-sm"
-                (onClick)="openStatusDialog(order)"
-                pTooltip="Change Status"
-                tooltipPosition="top">
-              </p-button>
-              <p-button 
-                *ngIf="canGenerateInvoice()"
-                icon="pi pi-file-pdf" 
-                styleClass="p-button-text p-button-rounded p-button-sm"
-                (onClick)="generateInvoice(order)"
-                pTooltip="Generate Invoice"
-                tooltipPosition="top">
-              </p-button>
-            </div>
-          </td>
-        </tr>
-      </ng-template>
+              <span *ngIf="!order.client" class="text-muted">N/A</span>
+            </td>
+            <!-- Designer cell: Admin/SuperAdmin only -->
+            <td *ngIf="isAdminOrSuper">
+              <span *ngIf="order.designer" class="designer-name">
+                {{ order.designer.firstName }} {{ order.designer.lastName }}
+              </span>
+              <span *ngIf="!order.designer" class="text-muted unassigned-tag">Unassigned</span>
+            </td>
+            <td>
+              <span class="date-text">{{ formatRelativeDate(order.createdAt) }}</span>
+            </td>
+            <td>
+              <span [class.overdue]="isOverdue(order.dueDate) && !isTerminalStatus(order.status)"
+                [class.date-text]="!isOverdue(order.dueDate) || isTerminalStatus(order.status)">
+                {{ formatDate(order.dueDate) }}
+                <i *ngIf="isOverdue(order.dueDate) && !isTerminalStatus(order.status)"
+                  class="pi pi-exclamation-triangle overdue-icon" pTooltip="Overdue" tooltipPosition="top"></i>
+              </span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <!-- Common: View Details -->
+                <p-button
+                  icon="pi pi-eye"
+                  styleClass="p-button-text p-button-rounded p-button-sm"
+                  (onClick)="viewOrder(order.id)"
+                  pTooltip="View Details" tooltipPosition="top">
+                </p-button>
 
-      <ng-template pTemplate="emptymessage">
-        <tr>
-          <td [attr.colspan]="isClient ? 6 : 8" class="empty-message">
-            <div class="empty-state">
-              <i class="pi pi-shopping-cart empty-icon"></i>
-              <p>No orders found</p>
-            </div>
-          </td>
-        </tr>
-    </ng-template>
-  </p-table>
-  </p-card>
+                <!-- Client: Approve -->
+                <p-button *ngIf="canApproveOrder(order)"
+                  icon="pi pi-check"
+                  styleClass="p-button-text p-button-rounded p-button-sm p-button-success"
+                  (onClick)="quickApprove(order)"
+                  pTooltip="Approve" tooltipPosition="top">
+                </p-button>
+
+                <!-- Client: Request Revision -->
+                <p-button *ngIf="canRequestRevision(order)"
+                  icon="pi pi-refresh"
+                  styleClass="p-button-text p-button-rounded p-button-sm p-button-warning"
+                  (onClick)="quickRequestRevision(order)"
+                  pTooltip="Request Revision" tooltipPosition="top">
+                </p-button>
+
+                <!-- Designer: Submit Preview -->
+                <p-button *ngIf="canSubmitPreview(order)"
+                  icon="pi pi-send"
+                  styleClass="p-button-text p-button-rounded p-button-sm p-button-info"
+                  (onClick)="quickSubmitPreview(order)"
+                  pTooltip="Submit Preview" tooltipPosition="top">
+                </p-button>
+
+                <!-- Admin: Assign Designer -->
+                <p-button
+                  *ngIf="canAssignDesigner()"
+                  icon="pi pi-user-plus"
+                  styleClass="p-button-text p-button-rounded p-button-sm"
+                  (onClick)="openAssignDialog(order)"
+                  pTooltip="Assign Designer" tooltipPosition="top">
+                </p-button>
+
+                <!-- Admin/Designer: Upload Files -->
+                <p-button
+                  *ngIf="canUploadFiles()"
+                  icon="pi pi-upload"
+                  styleClass="p-button-text p-button-rounded p-button-sm"
+                  (onClick)="openUploadDialog(order)"
+                  pTooltip="Upload Files" tooltipPosition="top">
+                </p-button>
+
+                <!-- Admin: Change Status -->
+                <p-button
+                  *ngIf="canChangeStatus()"
+                  icon="pi pi-pencil"
+                  styleClass="p-button-text p-button-rounded p-button-sm"
+                  (onClick)="openStatusDialog(order)"
+                  pTooltip="Change Status" tooltipPosition="top">
+                </p-button>
+
+                <!-- Admin: Generate Invoice -->
+                <p-button
+                  *ngIf="canGenerateInvoice()"
+                  icon="pi pi-file-pdf"
+                  styleClass="p-button-text p-button-rounded p-button-sm"
+                  (onClick)="generateInvoice(order)"
+                  pTooltip="Generate Invoice" tooltipPosition="top">
+                </p-button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+
+        <!-- Empty Message -->
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td [attr.colspan]="isAdminOrSuper ? 8 : 6" class="empty-message">
+              <div class="empty-state">
+                <i class="pi pi-shopping-cart empty-icon"></i>
+                <p class="empty-text" *ngIf="!selectedStatus && !globalFilter">No orders found</p>
+                <p class="empty-text" *ngIf="selectedStatus || globalFilter">No orders match your filters</p>
+                <p-button *ngIf="selectedStatus || globalFilter"
+                  label="Clear Filters" icon="pi pi-filter-slash"
+                  styleClass="p-button-text p-button-sm" (onClick)="clearAllFilters()"></p-button>
+                <p-button *ngIf="canCreateOrder() && !selectedStatus && !globalFilter"
+                  label="Create Order" icon="pi pi-plus"
+                  styleClass="p-button-primary" (onClick)="createOrder()"></p-button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+
+        <!-- Summary Footer -->
+        <ng-template pTemplate="summary" *ngIf="filteredOrders.length > 0">
+          <div class="table-footer">
+            <span>Showing {{ filteredOrders.length }} of {{ orders.length }} order(s)</span>
+            <span *ngIf="selectedStatus || globalFilter" class="active-filter-label">
+              <i class="pi pi-filter"></i> Filters active
+            </span>
+          </div>
+        </ng-template>
+      </p-table>
+    </p-card>
+  </ng-container>
 
   <!-- Order Create Modal -->
   <app-order-create
@@ -207,9 +302,9 @@
   </app-order-detail>
 
   <!-- Assign Designer Dialog -->
-  <p-dialog 
-    [(visible)]="showAssignDialog" 
-    [modal]="true" 
+  <p-dialog
+    [(visible)]="showAssignDialog"
+    [modal]="true"
     [style]="{width: '500px'}"
     header="Assign Designer"
     [closable]="true"
@@ -219,7 +314,7 @@
     <div class="dialog-content">
       <div class="form-group">
         <label for="designer-select">Select Designer <span class="required">*</span></label>
-        <p-dropdown 
+        <p-dropdown
           id="designer-select"
           [options]="availableDesigners"
           [(ngModel)]="selectedDesignerId"
@@ -228,7 +323,6 @@
           placeholder="Select a designer"
           [filter]="true"
           [showClear]="true"
-          [styleClass]="'w-full'"
           styleClass="w-full">
         </p-dropdown>
         <small class="p-help" *ngIf="availableDesigners.length === 0">
@@ -237,26 +331,17 @@
       </div>
     </div>
     <ng-template pTemplate="footer">
-      <p-button 
-        label="Cancel" 
-        icon="pi pi-times"
-        (onClick)="showAssignDialog = false"
-        [styleClass]="'p-button-text'">
-      </p-button>
-      <p-button 
-        label="Assign" 
-        icon="pi pi-check"
-        (onClick)="assignDesigner()"
-        [disabled]="!selectedDesignerId"
-        [styleClass]="'p-button-primary'">
-      </p-button>
+      <p-button label="Cancel" icon="pi pi-times"
+        (onClick)="showAssignDialog = false" styleClass="p-button-text"></p-button>
+      <p-button label="Assign" icon="pi pi-check"
+        (onClick)="assignDesigner()" [disabled]="!selectedDesignerId" styleClass="p-button-primary"></p-button>
     </ng-template>
   </p-dialog>
 
   <!-- Change Status Dialog -->
-  <p-dialog 
-    [(visible)]="showStatusDialog" 
-    [modal]="true" 
+  <p-dialog
+    [(visible)]="showStatusDialog"
+    [modal]="true"
     [style]="{width: '500px'}"
     header="Change Order Status"
     [closable]="true"
@@ -266,43 +351,37 @@
     <div class="dialog-content">
       <div class="form-group">
         <label for="status-select">New Status <span class="required">*</span></label>
-        <p-dropdown 
+        <p-dropdown
           id="status-select"
-          [options]="statuses"
+          [options]="availableStatuses.length > 0 ? availableStatuses : statuses"
           [(ngModel)]="newStatus"
           optionLabel="label"
-          optionValue="value"
           placeholder="Select status"
           [showClear]="false"
-          [filter]="false"
-          [virtualScroll]="false"
-          [styleClass]="'w-full'"
+          [filter]="true"
+          filterPlaceholder="Search status..."
           styleClass="w-full"
-          [panelStyle]="{'max-height': '300px'}">
+          [scrollHeight]="'300px'"
+          [autoDisplayFirst]="false">
         </p-dropdown>
+        <small class="p-help" *ngIf="availableStatuses.length > 0 && availableStatuses.length < statuses.length">
+          <i class="pi pi-info-circle"></i>
+          Only statuses allowed for your role are shown.
+        </small>
       </div>
     </div>
     <ng-template pTemplate="footer">
-      <p-button 
-        label="Cancel" 
-        icon="pi pi-times"
-        (onClick)="showStatusDialog = false"
-        [styleClass]="'p-button-text'">
-      </p-button>
-      <p-button 
-        label="Update Status" 
-        icon="pi pi-check"
-        (onClick)="changeStatus()"
-        [disabled]="!newStatus"
-        [styleClass]="'p-button-primary'">
-      </p-button>
+      <p-button label="Cancel" icon="pi pi-times"
+        (onClick)="showStatusDialog = false" styleClass="p-button-text"></p-button>
+      <p-button label="Update Status" icon="pi pi-check"
+        (onClick)="changeStatus()" [disabled]="!newStatus" styleClass="p-button-primary"></p-button>
     </ng-template>
   </p-dialog>
 
   <!-- Upload File Dialog -->
-  <p-dialog 
-    [(visible)]="showUploadDialog" 
-    [modal]="true" 
+  <p-dialog
+    [(visible)]="showUploadDialog"
+    [modal]="true"
     [style]="{width: '600px'}"
     [closable]="true"
     [draggable]="false"
@@ -334,15 +413,15 @@
           chooseLabel="Choose Files"
           [showUploadButton]="false"
           [showCancelButton]="false"
-          styleClass="w-full upload-button-custom"
-        ></p-fileUpload>
+          styleClass="w-full upload-button-custom">
+        </p-fileUpload>
         <small class="help-text">
           <i class="pi pi-info-circle"></i>
           Maximum file size: 10MB per file<br>
           Supported formats: JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD<br>
           You can select multiple files at once
         </small>
-        
+
         <!-- Selected Files List -->
         <div class="selected-files-container" *ngIf="selectedFiles.length > 0">
           <div class="files-header">
@@ -350,20 +429,12 @@
           </div>
           <div class="file-list">
             <div class="file-item" *ngFor="let file of selectedFiles; let i = index">
-              <div class="file-icon">
-                <i class="pi pi-file"></i>
-              </div>
+              <div class="file-icon"><i class="pi pi-file"></i></div>
               <div class="file-details">
                 <span class="file-name">{{ file.name }}</span>
                 <span class="file-size">{{ formatFileSize(file.size) }}</span>
               </div>
-              <button 
-                type="button"
-                class="remove-file-btn"
-                [pTooltip]="'Remove file'"
-                (click)="removeFile(i)"
-                aria-label="Remove file"
-              >
+              <button type="button" class="remove-file-btn" [pTooltip]="'Remove file'" (click)="removeFile(i)" aria-label="Remove file">
                 <i class="pi pi-times"></i>
               </button>
             </div>
@@ -384,35 +455,21 @@
     </div>
     <ng-template pTemplate="footer">
       <div class="dialog-footer">
-        <p-button 
-          label="Cancel" 
-          icon="pi pi-times"
-          (onClick)="closeUploadDialog()"
-          [styleClass]="'p-button-outlined p-button-secondary'"
-          [disabled]="uploadingFiles">
-        </p-button>
-        <p-button 
-          *ngIf="!uploadSuccess || selectedFiles.length > 0"
-          [label]="selectedFiles.length > 0 ? 'Submit ' + selectedFiles.length + ' File(s)' : 'Submit Files'" 
-          icon="pi pi-upload"
-          (onClick)="submitFiles()"
-          [loading]="uploadingFiles"
-          [disabled]="selectedFiles.length === 0 || uploadingFiles"
-          [styleClass]="'p-button-primary'">
-        </p-button>
-        <p-button 
-          *ngIf="uploadSuccess && selectedFiles.length === 0"
-          label="Done" 
-          icon="pi pi-check"
-          (onClick)="closeUploadDialog()"
-          [styleClass]="'p-button-success'">
-        </p-button>
+        <p-button label="Cancel" icon="pi pi-times"
+          (onClick)="closeUploadDialog()" styleClass="p-button-outlined p-button-secondary"
+          [disabled]="uploadingFiles"></p-button>
+        <p-button *ngIf="!uploadSuccess || selectedFiles.length > 0"
+          [label]="selectedFiles.length > 0 ? 'Submit ' + selectedFiles.length + ' File(s)' : 'Submit Files'"
+          icon="pi pi-upload" (onClick)="submitFiles()" [loading]="uploadingFiles"
+          [disabled]="selectedFiles.length === 0 || uploadingFiles" styleClass="p-button-primary"></p-button>
+        <p-button *ngIf="uploadSuccess && selectedFiles.length === 0"
+          label="Done" icon="pi pi-check" (onClick)="closeUploadDialog()" styleClass="p-button-success"></p-button>
       </div>
     </ng-template>
   </p-dialog>
 
   <!-- Confirmation Dialog -->
-  <p-dialog 
+  <p-dialog
     [(visible)]="showConfirmDialog"
     [modal]="true"
     [style]="{width: '500px'}"
@@ -421,15 +478,9 @@
     header="Confirm File Upload"
     styleClass="upload-confirm-dialog">
     <div class="confirm-dialog-content">
-      <div class="confirm-icon">
-        <i class="pi pi-exclamation-triangle"></i>
-      </div>
-      <p class="confirm-message">
-        You are about to upload <strong>{{ selectedFiles.length }}</strong> file(s).
-      </p>
-      <p class="confirm-note">
-        These files will require admin approval before being visible to the client.
-      </p>
+      <div class="confirm-icon"><i class="pi pi-exclamation-triangle"></i></div>
+      <p class="confirm-message">You are about to upload <strong>{{ selectedFiles.length }}</strong> file(s).</p>
+      <p class="confirm-note">These files will require admin approval before being visible to the client.</p>
       <div class="confirm-files-preview" *ngIf="selectedFiles.length > 0">
         <div class="preview-header">Files to upload:</div>
         <div class="preview-list">
@@ -442,19 +493,8 @@
       </div>
     </div>
     <ng-template pTemplate="footer">
-      <p-button 
-        label="Cancel" 
-        icon="pi pi-times" 
-        (onClick)="cancelUpload()"
-        [styleClass]="'p-button-outlined p-button-secondary'"
-      ></p-button>
-      <p-button 
-        label="Confirm Upload" 
-        icon="pi pi-check" 
-        (onClick)="confirmUpload()"
-        [styleClass]="'p-button-primary'"
-        [loading]="uploadingFiles"
-      ></p-button>
+      <p-button label="Cancel" icon="pi pi-times" (onClick)="cancelUpload()" styleClass="p-button-outlined p-button-secondary"></p-button>
+      <p-button label="Confirm Upload" icon="pi pi-check" (onClick)="confirmUpload()" styleClass="p-button-primary" [loading]="uploadingFiles"></p-button>
     </ng-template>
   </p-dialog>
 </div>

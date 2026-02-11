@@ -8,6 +8,21 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus, OrderPriority } from '@shared/models/order.model';
 
+interface SummaryCard {
+  label: string;
+  value: number;
+  icon: string;
+  color: string;
+  filterStatus?: OrderStatus | null;
+}
+
+interface QuickFilterChip {
+  label: string;
+  status: OrderStatus | null;
+  icon: string;
+  count: number;
+}
+
 @Component({
   selector: 'app-order-list',
   templateUrl: './order-list.component.html',
@@ -21,25 +36,28 @@ export class OrderListComponent implements OnInit, OnDestroy {
   globalFilter = '';
   first = 0;
   rows = 10;
-  
+
   // User role
   isClient = false;
+  isDesigner = false;
   isAdmin = false;
   isSuperAdmin = false;
-  
+
+  // Summary cards
+  summaryCards: SummaryCard[] = [];
+
+  // Quick filter chips
+  quickFilterChips: QuickFilterChip[] = [];
+  activeQuickFilter: OrderStatus | null | 'all' = 'all';
+
   // Order Detail Modal
   showOrderDetailModal = false;
   selectedOrderId: string | null = null;
 
   statuses = (() => {
     const statusValues = Object.values(OrderStatus);
-    console.log('All OrderStatus values:', statusValues);
-    
     const statusMap = statusValues.map(status => {
-      // Custom label formatting for better readability
       let formattedLabel = status.replace(/([A-Z])/g, ' $1').trim();
-      
-      // Special formatting for specific statuses
       const labelMap: { [key: string]: string } = {
         'WaitingForAdminApproval': 'Waiting For Admin Approval',
         'Waiting For Admin Approval': 'Waiting For Admin Approval',
@@ -66,64 +84,21 @@ export class OrderListComponent implements OnInit, OnDestroy {
         'Failed': 'Failed',
         'Archived': 'Archived'
       };
-      
-      // Try both original status value and formatted label
       let displayLabel = labelMap[status] || labelMap[formattedLabel] || formattedLabel;
-      
-      // Explicit handling for statuses that might not match due to formatting
       if (!displayLabel) {
-        if (status === 'Completed') {
-          displayLabel = 'Completed';
-        } else if (status === 'FinalApproved') {
-          displayLabel = 'Approved';
-        } else {
-          displayLabel = formattedLabel;
-        }
+        displayLabel = formattedLabel;
       }
-      
-      const result = {
-        label: displayLabel,
-        value: status,
-        originalLabel: formattedLabel
-      };
-      
-      // Debug specific statuses
-      if (status === 'Completed' || status === 'FinalApproved') {
-        console.log(`Status: ${status}, Formatted: ${formattedLabel}, Display: ${displayLabel}`);
-      }
-      
-      return result;
+      return { label: displayLabel, value: status, originalLabel: formattedLabel };
     });
-    
-    // Sort statuses to show important ones first
+
     const priority: { [key: string]: number } = {
-      'WaitingForAdminApproval': 1,
-      'PriceApprovalPending': 2,
-      'InProgress': 3,
-      'PreviewDelivered': 4,
-      'RevisionRequested': 5,
-      'FinalApproved': 6,
-      'Completed': 7,
-      'Pending': 8,
-      'Paid': 9,
-      'Processing': 10,
-      'Cancelled': 11,
-      'CancelledByUser': 12,
-      'CancelledByAdmin': 13,
-      'Refunded': 14,
-      'Failed': 15,
-      'Archived': 16
+      'WaitingForAdminApproval': 1, 'PriceApprovalPending': 2, 'InProgress': 3,
+      'PreviewDelivered': 4, 'RevisionRequested': 5, 'FinalApproved': 6,
+      'Completed': 7, 'Pending': 8, 'Paid': 9, 'Processing': 10,
+      'Cancelled': 11, 'CancelledByUser': 12, 'CancelledByAdmin': 13,
+      'Refunded': 14, 'Failed': 15, 'Archived': 16
     };
-    
-    const sorted = statusMap.sort((a, b) => {
-      return (priority[a.value] || 99) - (priority[b.value] || 99);
-    });
-    
-    console.log('Final sorted statuses:', sorted.map(s => ({ label: s.label, value: s.value })));
-    console.log('Completed status found:', sorted.find(s => s.value === 'Completed'));
-    console.log('FinalApproved status found:', sorted.find(s => s.value === 'FinalApproved'));
-    
-    return sorted;
+    return statusMap.sort((a, b) => (priority[a.value] || 99) - (priority[b.value] || 99));
   })();
   priorities = Object.values(OrderPriority);
 
@@ -137,11 +112,12 @@ export class OrderListComponent implements OnInit, OnDestroy {
   uploadedFilesCount = 0;
   showConfirmDialog = false;
   selectedOrder: Order | null = null;
-  
+
   @ViewChild('fileUpload') fileUploadComponent!: FileUpload;
   availableDesigners: any[] = [];
   selectedDesignerId: string | null = null;
   newStatus: { label: string; value: OrderStatus } | null = null;
+  availableStatuses: { label: string; value: OrderStatus }[] = [];
 
   private destroy$ = new Subject<void>();
 
@@ -153,15 +129,15 @@ export class OrderListComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    console.log('OrderListComponent ngOnInit called');
     this.filteredOrders = [];
-    
+
     // Check user role
     const user = this.authService.getCurrentUser();
     this.isClient = user?.role === 'Client';
+    this.isDesigner = user?.role === 'Designer';
     this.isAdmin = user?.role === 'Admin';
     this.isSuperAdmin = user?.role === 'SuperAdmin';
-    
+
     this.loadOrders();
   }
 
@@ -170,14 +146,29 @@ export class OrderListComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  // ═══ ROLE HELPERS ═══
+  get isAdminOrSuper(): boolean {
+    return this.isAdmin || this.isSuperAdmin;
+  }
+
+  get pageTitle(): string {
+    if (this.isClient) return 'My Orders';
+    if (this.isDesigner) return 'Assigned Orders';
+    return 'Orders Management';
+  }
+
+  get pageSubtitle(): string {
+    if (this.isClient) return 'Track and manage your orders';
+    if (this.isDesigner) return 'Orders assigned to you';
+    return 'View and manage all orders';
+  }
+
+  // ═══ DATA LOADING ═══
   loadOrders(): void {
-    console.log('loadOrders() called');
     this.loading = true;
     const user = this.authService.getCurrentUser();
-    console.log('Current user:', user);
-    
+
     if (!user) {
-      console.warn('No user found, cannot load orders');
       this.loading = false;
       this.orders = [];
       this.filteredOrders = [];
@@ -190,43 +181,26 @@ export class OrderListComponent implements OnInit, OnDestroy {
     } else if (user.role === 'Designer') {
       endpoint = 'orders/assigned-orders';
     }
-    
-    console.log('Loading orders from endpoint:', endpoint);
-    console.log('User role:', user.role);
 
     this.apiService.get<any[]>(endpoint)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (orders) => {
-          console.log('Raw orders from API:', orders);
-          // Handle case where orders might be null or undefined
           if (!orders || !Array.isArray(orders)) {
-            console.warn('Orders is not an array:', orders);
             this.orders = [];
             this.filteredOrders = [];
             this.loading = false;
             return;
           }
-          
-          // Transform backend response to frontend model
-          this.orders = orders.map(order => {
-            const transformed = this.transformOrder(order);
-            console.log('Transformed order:', transformed);
-            return transformed;
-          });
-          console.log('Final orders array:', this.orders);
+
+          this.orders = orders.map(order => this.transformOrder(order));
+          this.buildSummaryCards();
+          this.buildQuickFilterChips();
           this.applyFilters();
           this.loading = false;
         },
         error: (error) => {
           console.error('Error loading orders:', error);
-          console.error('Error details:', {
-            status: error.status,
-            statusText: error.statusText,
-            message: error.message,
-            error: error.error
-          });
-          
           let errorMessage = 'Failed to load orders';
           if (error.status === 403) {
             errorMessage = 'You do not have permission to view orders';
@@ -235,12 +209,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
           } else if (error.error?.error) {
             errorMessage = error.error.error;
           }
-          
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: errorMessage
-          });
+
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: errorMessage });
           this.loading = false;
           this.orders = [];
           this.filteredOrders = [];
@@ -248,11 +218,166 @@ export class OrderListComponent implements OnInit, OnDestroy {
       });
   }
 
+  // ═══ SUMMARY CARDS ═══
+  private buildSummaryCards(): void {
+    const counts = this.getStatusCounts();
+
+    if (this.isClient) {
+      this.summaryCards = [
+        { label: 'Total Orders', value: this.orders.length, icon: 'pi pi-list', color: 'primary', filterStatus: null },
+        { label: 'Active Orders', value: counts.active, icon: 'pi pi-spin pi-spinner', color: 'info', filterStatus: OrderStatus.InProgress },
+        { label: 'Awaiting Approval', value: counts.awaitingApproval, icon: 'pi pi-clock', color: 'warning', filterStatus: OrderStatus.PreviewDelivered },
+        { label: 'Completed', value: counts.completed, icon: 'pi pi-check-circle', color: 'success', filterStatus: OrderStatus.Completed }
+      ];
+    } else if (this.isDesigner) {
+      this.summaryCards = [
+        { label: 'Assigned Orders', value: this.orders.length, icon: 'pi pi-briefcase', color: 'primary', filterStatus: null },
+        { label: 'Due Today', value: counts.dueToday, icon: 'pi pi-calendar', color: 'warning', filterStatus: null },
+        { label: 'Overdue', value: counts.overdue, icon: 'pi pi-exclamation-triangle', color: 'danger', filterStatus: null },
+        { label: 'In Progress', value: counts.inProgress, icon: 'pi pi-spin pi-spinner', color: 'info', filterStatus: OrderStatus.InProgress }
+      ];
+    } else {
+      // Admin / SuperAdmin
+      this.summaryCards = [
+        { label: 'New Orders', value: counts.newOrders, icon: 'pi pi-inbox', color: 'primary', filterStatus: OrderStatus.WaitingForAdminApproval },
+        { label: 'In QA', value: counts.inQA, icon: 'pi pi-search', color: 'info', filterStatus: OrderStatus.PreviewDelivered },
+        { label: 'Pending Approval', value: counts.pendingClientApproval, icon: 'pi pi-clock', color: 'warning', filterStatus: OrderStatus.PriceApprovalPending },
+        { label: 'Overdue', value: counts.overdue, icon: 'pi pi-exclamation-triangle', color: 'danger', filterStatus: null }
+      ];
+    }
+  }
+
+  private getStatusCounts(): any {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    const activeStatuses = [OrderStatus.InProgress, OrderStatus.RevisionRequested, OrderStatus.PreviewDelivered, OrderStatus.PriceApprovalPending, OrderStatus.WaitingForAdminApproval];
+
+    return {
+      active: this.orders.filter(o => activeStatuses.includes(o.status)).length,
+      awaitingApproval: this.orders.filter(o =>
+        o.status === OrderStatus.PreviewDelivered || o.status === OrderStatus.PriceApprovalPending
+      ).length,
+      completed: this.orders.filter(o =>
+        o.status === OrderStatus.Completed || o.status === OrderStatus.FinalApproved
+      ).length,
+      inProgress: this.orders.filter(o => o.status === OrderStatus.InProgress).length,
+      dueToday: this.orders.filter(o => {
+        if (!o.dueDate) return false;
+        const d = new Date(o.dueDate);
+        return d >= todayStart && d < todayEnd && !this.isTerminalStatus(o.status);
+      }).length,
+      overdue: this.orders.filter(o => this.isOverdue(o.dueDate) && !this.isTerminalStatus(o.status)).length,
+      newOrders: this.orders.filter(o => o.status === OrderStatus.WaitingForAdminApproval).length,
+      inQA: this.orders.filter(o => o.status === OrderStatus.PreviewDelivered).length,
+      pendingClientApproval: this.orders.filter(o => o.status === OrderStatus.PriceApprovalPending).length
+    };
+  }
+
+  isTerminalStatus(status: OrderStatus): boolean {
+    return [OrderStatus.Completed, OrderStatus.FinalApproved, OrderStatus.Cancelled,
+      OrderStatus.CancelledByUser, OrderStatus.CancelledByAdmin, OrderStatus.Refunded,
+      OrderStatus.Failed, OrderStatus.Archived].includes(status);
+  }
+
+  onSummaryCardClick(card: SummaryCard): void {
+    if (card.filterStatus !== undefined) {
+      this.selectedStatus = card.filterStatus;
+      this.activeQuickFilter = card.filterStatus;
+      this.applyFilters();
+      this.first = 0;
+    }
+  }
+
+  // ═══ QUICK FILTER CHIPS ═══
+  private buildQuickFilterChips(): void {
+    const chipConfigs: { status: OrderStatus | null; label: string; icon: string; roles: string[] }[] = [
+      { status: null, label: 'All', icon: 'pi pi-list', roles: ['Client', 'Designer', 'Admin', 'SuperAdmin'] },
+      { status: OrderStatus.WaitingForAdminApproval, label: 'Awaiting Admin', icon: 'pi pi-inbox', roles: ['Admin', 'SuperAdmin'] },
+      { status: OrderStatus.PriceApprovalPending, label: 'Price Pending', icon: 'pi pi-dollar', roles: ['Client', 'Admin', 'SuperAdmin'] },
+      { status: OrderStatus.InProgress, label: 'In Progress', icon: 'pi pi-spin pi-spinner', roles: ['Client', 'Designer', 'Admin', 'SuperAdmin'] },
+      { status: OrderStatus.PreviewDelivered, label: 'Preview Ready', icon: 'pi pi-eye', roles: ['Client', 'Admin', 'SuperAdmin'] },
+      { status: OrderStatus.RevisionRequested, label: 'Revisions', icon: 'pi pi-refresh', roles: ['Designer', 'Admin', 'SuperAdmin'] },
+      { status: OrderStatus.FinalApproved, label: 'Approved', icon: 'pi pi-check', roles: ['Client', 'Designer', 'Admin', 'SuperAdmin'] },
+      { status: OrderStatus.Completed, label: 'Completed', icon: 'pi pi-check-circle', roles: ['Client', 'Designer', 'Admin', 'SuperAdmin'] },
+      { status: OrderStatus.Cancelled, label: 'Cancelled', icon: 'pi pi-times', roles: ['Client', 'Admin', 'SuperAdmin'] }
+    ];
+
+    const userRole = this.authService.getCurrentUser()?.role || '';
+
+    this.quickFilterChips = chipConfigs
+      .filter(c => c.roles.includes(userRole))
+      .map(c => ({
+        label: c.label,
+        status: c.status,
+        icon: c.icon,
+        count: c.status === null ? this.orders.length : this.orders.filter(o => o.status === c.status).length
+      }))
+      .filter(c => c.status === null || c.count > 0); // hide zero-count chips (except "All")
+  }
+
+  onQuickFilterClick(chip: QuickFilterChip): void {
+    this.activeQuickFilter = chip.status === null ? 'all' : chip.status;
+    this.selectedStatus = chip.status;
+    this.applyFilters();
+    this.first = 0;
+  }
+
+  isActiveChip(chip: QuickFilterChip): boolean {
+    if (chip.status === null) return this.activeQuickFilter === 'all';
+    return this.activeQuickFilter === chip.status;
+  }
+
+  // ═══ FILTERING ═══
+  applyFilters(): void {
+    let filtered = [...this.orders];
+
+    // Apply status filter
+    if (this.selectedStatus) {
+      filtered = filtered.filter(order => order.status === this.selectedStatus);
+    }
+
+    // Apply global text search
+    if (this.globalFilter && this.globalFilter.trim()) {
+      const search = this.globalFilter.trim().toLowerCase();
+      filtered = filtered.filter(order => {
+        const titleMatch = order.title?.toLowerCase().includes(search);
+        const statusMatch = order.status?.toLowerCase().includes(search);
+        const clientMatch = order.client ?
+          `${order.client.firstName} ${order.client.lastName} ${order.client.companyName}`.toLowerCase().includes(search) : false;
+        const designerMatch = order.designer ?
+          `${order.designer.firstName} ${order.designer.lastName}`.toLowerCase().includes(search) : false;
+        return titleMatch || statusMatch || clientMatch || designerMatch;
+      });
+    }
+
+    this.filteredOrders = filtered;
+  }
+
+  onStatusFilterChange(): void {
+    this.activeQuickFilter = this.selectedStatus || 'all';
+    this.applyFilters();
+    this.first = 0;
+  }
+
+  onGlobalFilterChange(): void {
+    this.applyFilters();
+    this.first = 0;
+  }
+
+  clearAllFilters(): void {
+    this.selectedStatus = null;
+    this.globalFilter = '';
+    this.activeQuickFilter = 'all';
+    this.applyFilters();
+    this.first = 0;
+  }
+
+  // ═══ TRANSFORM & MAP ═══
   private transformOrder(backendOrder: any): Order {
-    // Map backend field names to frontend model
-    // Backend uses PascalCase (Status, Id, Deadline) and frontend uses camelCase
     const status = this.mapStatus(backendOrder.status || backendOrder.Status);
-    
+
     return {
       id: backendOrder.id || backendOrder.Id,
       clientId: backendOrder.clientId || backendOrder.ClientId || '',
@@ -260,9 +385,9 @@ export class OrderListComponent implements OnInit, OnDestroy {
       title: backendOrder.title || backendOrder.Title || '',
       description: backendOrder.description || backendOrder.Description || '',
       status: status,
-      priority: backendOrder.priority || backendOrder.Priority ? 
-        (typeof (backendOrder.priority || backendOrder.Priority) === 'string' ? 
-          (backendOrder.priority || backendOrder.Priority) as OrderPriority : 
+      priority: backendOrder.priority || backendOrder.Priority ?
+        (typeof (backendOrder.priority || backendOrder.Priority) === 'string' ?
+          (backendOrder.priority || backendOrder.Priority) as OrderPriority :
           OrderPriority.Medium
         ) : OrderPriority.Medium,
       price: backendOrder.price || backendOrder.Price || 0,
@@ -299,90 +424,92 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   private mapStatus(status: string): OrderStatus {
-    // Map backend status strings to frontend enum
     if (!status) return OrderStatus.WaitingForAdminApproval;
-    
+
     const statusStr = status.toString().trim();
     switch (statusStr) {
-      case 'WaitingForAdminApproval':
-      case '1':
-        return OrderStatus.WaitingForAdminApproval;
-      case 'PriceApprovalPending':
-      case '2':
-        return OrderStatus.PriceApprovalPending;
-      case 'InProgress':
-      case 'In Progress':
-      case '3':
-        return OrderStatus.InProgress;
-      case 'PreviewDelivered':
-      case '4':
-        return OrderStatus.PreviewDelivered;
-      case 'RevisionRequested':
-      case '5':
-        return OrderStatus.RevisionRequested;
-      case 'FinalApproved':
-      case '6':
-        return OrderStatus.FinalApproved;
-      case 'Completed':
-      case '7':
-        return OrderStatus.Completed;
-      case 'Cancelled':
-      case '8':
-        return OrderStatus.Cancelled;
-      default:
-        return OrderStatus.WaitingForAdminApproval;
+      case 'WaitingForAdminApproval': case '1': return OrderStatus.WaitingForAdminApproval;
+      case 'PriceApprovalPending': case '2': return OrderStatus.PriceApprovalPending;
+      case 'InProgress': case 'In Progress': case '3': return OrderStatus.InProgress;
+      case 'PreviewDelivered': case '4': return OrderStatus.PreviewDelivered;
+      case 'RevisionRequested': case '5': return OrderStatus.RevisionRequested;
+      case 'FinalApproved': case '6': return OrderStatus.FinalApproved;
+      case 'Completed': case '7': return OrderStatus.Completed;
+      case 'Cancelled': case '8': return OrderStatus.Cancelled;
+      default: return OrderStatus.WaitingForAdminApproval;
     }
   }
 
-  applyFilters(): void {
-    let filtered = [...this.orders];
-    
-    // Apply status filter
-    if (this.selectedStatus) {
-      filtered = filtered.filter(order => order.status === this.selectedStatus);
-    }
-    
-    this.filteredOrders = filtered;
-  }
-
-  onStatusFilterChange(): void {
-    this.applyFilters();
-    this.first = 0; // Reset pagination
-  }
-
+  // ═══ STATUS & FORMATTING ═══
   getStatusSeverity(status: OrderStatus): string {
     const severityMap: { [key: string]: string } = {
       'WaitingForAdminApproval': 'warning',
       'PriceApprovalPending': 'info',
       'InProgress': 'info',
       'PreviewDelivered': 'success',
-      'RevisionRequested': 'warn',
+      'RevisionRequested': 'warning',
       'FinalApproved': 'success',
       'Completed': 'success',
-      'Cancelled': 'danger'
+      'Cancelled': 'danger',
+      'CancelledByUser': 'danger',
+      'CancelledByAdmin': 'danger',
+      'Refunded': 'warning',
+      'Failed': 'danger',
+      'Archived': 'secondary'
     };
     return severityMap[status] || 'secondary';
   }
 
+  getStatusLabel(status: OrderStatus): string {
+    const found = this.statuses.find(s => s.value === status);
+    return found?.label || status;
+  }
+
   getPrioritySeverity(priority: OrderPriority): string {
     const severityMap: { [key: string]: string } = {
-      'Low': 'success',
-      'Medium': 'warning',
-      'High': 'warning',
-      'Urgent': 'danger'
+      'Low': 'success', 'Medium': 'warning', 'High': 'warning', 'Urgent': 'danger'
     };
     return severityMap[priority] || 'secondary';
   }
 
   formatDate(date: Date | string | undefined): string {
     if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    try {
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) return 'N/A';
+      return dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch {
+      return 'N/A';
+    }
   }
 
+  formatRelativeDate(date: Date | string | undefined): string {
+    if (!date) return 'N/A';
+    try {
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) return 'N/A';
+      const now = new Date();
+      const diffMs = now.getTime() - dateObj.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      const diffHrs = Math.floor(diffMins / 60);
+      if (diffHrs < 24) return `${diffHrs}h ago`;
+      const diffDays = Math.floor(diffHrs / 24);
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return this.formatDate(date);
+    } catch {
+      return 'N/A';
+    }
+  }
+
+  isOverdue(dueDate: Date | string | undefined): boolean {
+    if (!dueDate) return false;
+    const d = new Date(dueDate);
+    return d < new Date() && d.getTime() !== 0;
+  }
+
+  // ═══ ORDER DETAIL MODAL ═══
   viewOrder(orderId: string): void {
     this.selectedOrderId = orderId;
     this.showOrderDetailModal = true;
@@ -394,15 +521,15 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   onOrderUpdated(): void {
-    this.loadOrders(); // Refresh the list when order is updated
+    this.loadOrders();
   }
+
+  // ═══ ORDER CREATE ═══
+  showOrderCreateModal = false;
 
   canCreateOrder(): boolean {
     return this.authService.hasRole('Client');
   }
-
-  // Order Create Modal
-  showOrderCreateModal = false;
 
   createOrder(): void {
     this.showOrderCreateModal = true;
@@ -413,35 +540,45 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   onOrderCreated(order: any): void {
-    // Refresh orders list when order is created
     this.loadOrders();
-    // Optionally open the created order in detail modal
     if (order && order.id) {
       this.selectedOrderId = order.id;
       this.showOrderDetailModal = true;
     }
   }
 
-  isOverdue(dueDate: Date | string | undefined): boolean {
-    if (!dueDate) return false;
-    return new Date(dueDate) < new Date() && new Date(dueDate).getTime() !== 0;
-  }
-
-  // Action methods
+  // ═══ PERMISSION CHECKS ═══
   canAssignDesigner(): boolean {
-    const user = this.authService.getCurrentUser();
-    return user?.role === 'SuperAdmin' || user?.role === 'Admin';
+    return this.isAdmin || this.isSuperAdmin;
   }
 
   canChangeStatus(): boolean {
     return this.isAdmin || this.isSuperAdmin;
   }
 
-  canGenerateInvoice(): boolean {
-    const user = this.authService.getCurrentUser();
-    return user?.role === 'SuperAdmin' || user?.role === 'Admin';
+  canUploadFiles(): boolean {
+    return this.isAdmin || this.isSuperAdmin || this.isDesigner;
   }
 
+  canGenerateInvoice(): boolean {
+    return this.isAdmin || this.isSuperAdmin;
+  }
+
+  // Client-specific actions
+  canApproveOrder(order: Order): boolean {
+    return this.isClient && order.status === OrderStatus.PreviewDelivered;
+  }
+
+  canRequestRevision(order: Order): boolean {
+    return this.isClient && order.status === OrderStatus.PreviewDelivered;
+  }
+
+  // Designer-specific actions
+  canSubmitPreview(order: Order): boolean {
+    return this.isDesigner && (order.status === OrderStatus.InProgress || order.status === OrderStatus.RevisionRequested);
+  }
+
+  // ═══ ACTION DIALOGS ═══
   openAssignDialog(order: Order): void {
     this.selectedOrder = order;
     this.selectedDesignerId = order.designerId || null;
@@ -458,9 +595,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
             .filter(u => u.role === 'Designer' || u.roleName === 'Designer')
             .map(u => ({ label: `${u.firstName} ${u.lastName}`, value: u.id }));
         },
-        error: () => {
-          this.availableDesigners = [];
-        }
+        error: () => { this.availableDesigners = []; }
       });
   }
 
@@ -471,75 +606,127 @@ export class OrderListComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Designer assigned successfully'
-          });
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Designer assigned successfully' });
           this.showAssignDialog = false;
           this.loadOrders();
         },
         error: () => {
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to assign designer'
-          });
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to assign designer' });
         }
       });
   }
 
   openStatusDialog(order: Order): void {
     this.selectedOrder = order;
-    // Find the status object that matches the order's current status
-    const currentStatusObj = this.statuses.find(s => s.value === order.status);
-    this.newStatus = currentStatusObj || this.statuses[0];
-    
-    // Debug: Log available statuses
-    console.log('=== STATUS DROPDOWN DEBUG ===');
-    console.log('Total statuses available:', this.statuses.length);
-    console.log('All statuses:', this.statuses.map(s => ({ label: s.label, value: s.value })));
-    console.log('Current order status:', order.status);
-    console.log('Selected status:', this.newStatus);
-    
-    // Verify Completed and FinalApproved are in the list
-    const completedStatus = this.statuses.find(s => s.value === 'Completed');
-    const approvedStatus = this.statuses.find(s => s.value === 'FinalApproved');
-    console.log('Completed status in list:', completedStatus);
-    console.log('FinalApproved status in list:', approvedStatus);
-    console.log('===========================');
-    
+    const allowedStatuses = this.getAllowedStatusesForRole(order);
+    const filteredStatuses = this.statuses.filter(s => allowedStatuses.includes(s.value));
+    const currentStatusObj = filteredStatuses.find(s => s.value === order.status);
+    this.newStatus = currentStatusObj || filteredStatuses[0];
+    this.availableStatuses = filteredStatuses;
     this.showStatusDialog = true;
+  }
+
+  private getAllowedStatusesForRole(order: Order): OrderStatus[] {
+    const user = this.authService.getCurrentUser();
+    if (!user) return [];
+
+    const currentStatus = order.status;
+    const isOrderOwner = user.role === 'Client' && order.clientId && user.id === order.clientId;
+    const allowedStatuses: OrderStatus[] = [];
+
+    switch (user.role) {
+      case 'Client':
+        if (currentStatus === OrderStatus.PreviewDelivered) {
+          allowedStatuses.push(OrderStatus.RevisionRequested, OrderStatus.FinalApproved);
+        }
+        if (isOrderOwner && (
+          currentStatus === OrderStatus.WaitingForAdminApproval ||
+          currentStatus === OrderStatus.PriceApprovalPending ||
+          currentStatus === OrderStatus.Pending
+        )) {
+          allowedStatuses.push(OrderStatus.Cancelled);
+        }
+        break;
+      case 'Designer':
+        if (currentStatus === OrderStatus.InProgress || currentStatus === OrderStatus.RevisionRequested) {
+          allowedStatuses.push(OrderStatus.PreviewDelivered);
+        }
+        break;
+      case 'Admin':
+      case 'SuperAdmin':
+        allowedStatuses.push(...Object.values(OrderStatus));
+        break;
+    }
+
+    if (!allowedStatuses.includes(currentStatus)) {
+      allowedStatuses.push(currentStatus);
+    }
+    return allowedStatuses;
   }
 
   changeStatus(): void {
     if (!this.selectedOrder || !this.newStatus) return;
-
-    // Handle both object format {label, value} and direct enum value
     const statusValue = typeof this.newStatus === 'object' ? this.newStatus.value : this.newStatus;
 
     this.apiService.put(`orders/${this.selectedOrder.id}/status`, { status: statusValue })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Order status updated successfully'
-          });
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Order status updated successfully' });
           this.showStatusDialog = false;
           this.loadOrders();
         },
         error: (error) => {
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: error.error?.error || 'Failed to update order status'
-          });
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to update order status' });
         }
       });
   }
 
+  // Quick status update for client actions
+  quickApprove(order: Order): void {
+    this.apiService.put(`orders/${order.id}/status`, { status: OrderStatus.FinalApproved })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.messageService.add({ severity: 'success', summary: 'Approved', detail: 'Order has been approved' });
+          this.loadOrders();
+        },
+        error: (error) => {
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to approve order' });
+        }
+      });
+  }
+
+  quickRequestRevision(order: Order): void {
+    this.apiService.put(`orders/${order.id}/status`, { status: OrderStatus.RevisionRequested })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.messageService.add({ severity: 'success', summary: 'Revision Requested', detail: 'Revision has been requested' });
+          this.loadOrders();
+        },
+        error: (error) => {
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to request revision' });
+        }
+      });
+  }
+
+  // Designer submit preview
+  quickSubmitPreview(order: Order): void {
+    this.apiService.put(`orders/${order.id}/status`, { status: OrderStatus.PreviewDelivered })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.messageService.add({ severity: 'success', summary: 'Preview Submitted', detail: 'Preview has been delivered to client' });
+          this.loadOrders();
+        },
+        error: (error) => {
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to submit preview' });
+        }
+      });
+  }
+
+  // ═══ FILE UPLOAD ═══
   openUploadDialog(order: Order): void {
     this.selectedOrder = order;
     this.selectedFiles = [];
@@ -549,45 +736,24 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   onFileSelect(event: any): void {
-    // PrimeNG p-fileUpload onSelect event provides files in event.files
     const files: File[] = event.files ? Array.from(event.files) : [];
-    
-    if (files.length === 0) {
-      return;
-    }
-    
-    // Validate file sizes (max 10MB each)
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (files.length === 0) return;
+
+    const maxSize = 10 * 1024 * 1024;
     const invalidFiles = files.filter(file => file.size > maxSize);
-    
     if (invalidFiles.length > 0) {
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: `${invalidFiles.length} file(s) exceed the 10MB limit and were not added`
-      });
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: `${invalidFiles.length} file(s) exceed the 10MB limit` });
     }
-    
-    // Add valid files (avoid duplicates by checking file name and size)
+
     const validFiles = files.filter(file => {
-      if (file.size > maxSize) {
-        return false;
-      }
-      // Check if file already exists
-      const exists = this.selectedFiles.some(
-        existingFile => existingFile.name === file.name && existingFile.size === file.size
-      );
-      return !exists;
+      if (file.size > maxSize) return false;
+      return !this.selectedFiles.some(ef => ef.name === file.name && ef.size === file.size);
     });
-    
+
     if (validFiles.length > 0) {
       this.selectedFiles = [...this.selectedFiles, ...validFiles];
-      this.uploadSuccess = false; // Reset success state when new files are added
-      
-      // Clear the file upload component to allow selecting more files
-      if (this.fileUploadComponent) {
-        this.fileUploadComponent.clear();
-      }
+      this.uploadSuccess = false;
+      if (this.fileUploadComponent) this.fileUploadComponent.clear();
     }
   }
 
@@ -597,16 +763,11 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   submitFiles(): void {
     if (this.selectedFiles.length === 0 || !this.selectedOrder) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Warning',
-        detail: 'Please select at least one file'
-      });
+      this.messageService.add({ severity: 'warn', summary: 'Warning', detail: 'Please select at least one file' });
       return;
     }
 
     const user = this.authService.getCurrentUser();
-    // Show confirmation dialog for designers
     if (user?.role === 'Designer') {
       this.showConfirmDialog = true;
     } else {
@@ -624,15 +785,12 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   private uploadFiles(): void {
-    if (this.selectedFiles.length === 0 || !this.selectedOrder) {
-      return;
-    }
+    if (this.selectedFiles.length === 0 || !this.selectedOrder) return;
 
     this.uploadingFiles = true;
     const filesToUpload = [...this.selectedFiles];
 
     if (this.selectedFiles.length === 1) {
-      // Single file upload
       const formData = new FormData();
       formData.append('file', this.selectedFiles[0]);
       formData.append('fileType', 'Reference');
@@ -642,30 +800,19 @@ export class OrderListComponent implements OnInit, OnDestroy {
         .subscribe({
           next: () => {
             this.uploadedFilesCount += filesToUpload.length;
-            this.messageService.add({
-              severity: 'success',
-              summary: 'Success',
-              detail: `${filesToUpload.length} file(s) uploaded successfully. You can add more files or close the dialog.`
-            });
+            this.messageService.add({ severity: 'success', summary: 'Success', detail: `${filesToUpload.length} file(s) uploaded successfully.` });
             this.selectedFiles = [];
             this.uploadingFiles = false;
             this.uploadSuccess = true;
           },
           error: (error) => {
-            this.messageService.add({
-              severity: 'error',
-              summary: 'Error',
-              detail: error.error?.error || 'Failed to upload file'
-            });
+            this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to upload file' });
             this.uploadingFiles = false;
           }
         });
     } else {
-      // Multiple file upload
       const formData = new FormData();
-      this.selectedFiles.forEach(file => {
-        formData.append('files', file);
-      });
+      this.selectedFiles.forEach(file => formData.append('files', file));
       formData.append('fileType', 'Reference');
 
       this.apiService.post(`files/upload-multiple/${this.selectedOrder.id}`, formData)
@@ -674,21 +821,13 @@ export class OrderListComponent implements OnInit, OnDestroy {
           next: (results: any) => {
             const uploadedCount = Array.isArray(results) ? results.length : 0;
             this.uploadedFilesCount += uploadedCount;
-            this.messageService.add({
-              severity: 'success',
-              summary: 'Success',
-              detail: `${uploadedCount} file(s) uploaded successfully. You can add more files or close the dialog.`
-            });
+            this.messageService.add({ severity: 'success', summary: 'Success', detail: `${uploadedCount} file(s) uploaded successfully.` });
             this.selectedFiles = [];
             this.uploadingFiles = false;
             this.uploadSuccess = true;
           },
           error: (error) => {
-            this.messageService.add({
-              severity: 'error',
-              summary: 'Error',
-              detail: error.error?.error || 'Failed to upload files'
-            });
+            this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to upload files' });
             this.uploadingFiles = false;
           }
         });
@@ -711,25 +850,14 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   generateInvoice(order: Order): void {
-    this.apiService.post(`invoices`, { orderId: order.id })
+    this.apiService.post('invoices', { orderId: order.id })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (invoice: any) => {
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Invoice generated successfully'
-          });
-          // Optionally navigate to invoices or stay on orders page
-          // this.router.navigate(['/invoices']);
+        next: () => {
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoice generated successfully' });
         },
         error: (error) => {
-          console.error('Generate invoice error:', error);
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: error.error?.error || 'Failed to generate invoice'
-          });
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to generate invoice' });
         }
       });
   }

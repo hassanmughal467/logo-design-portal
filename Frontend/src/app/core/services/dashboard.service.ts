@@ -14,14 +14,35 @@ export interface DashboardStats {
   newClientsThisMonth: number;
   totalRevenue: number;
   averageDeliveryTime: number; // in days
+  // Client-specific stats
+  activeOrders?: number;
+  ordersAwaitingApproval?: number;
+  pendingInvoices?: number;
+  dueAmount?: number;
+  amountPaidThisMonth?: number;
+  // Client analytics & productivity
+  ordersThisMonth?: number;
+  ordersThisWeek?: number;
+  ordersToday?: number;
+  completedOrdersThisMonth?: number;
+  lifetimeSpend?: number;
+  monthlySpend?: number;
+  averageOrderValue?: number;
 }
 
 export interface DashboardData {
   stats: DashboardStats;
   recentOrders: Order[];
+  allOrders?: Order[]; // Full order list for client history
   ordersByStatus: { status: string; count: number }[];
   ordersByMonth: { month: string; count: number }[];
   revenueByPackage: { package: string; revenue: number }[];
+  // Client-specific data
+  invoices?: any[];
+  galleryItems?: any[];
+  notifications?: any[];
+  // Client analytics
+  ordersByWeek?: { weekLabel: string; count: number }[];
 }
 
 @Injectable({
@@ -60,6 +81,8 @@ export class DashboardService {
     // Fetch additional data for admin users
     let clients$: Observable<any[]> = of([]);
     let invoices$: Observable<any[]> = of([]);
+    let galleryItems$: Observable<any[]> = of([]);
+    let notifications$: Observable<any[]> = of([]);
     
     if (user.role === 'SuperAdmin' || user.role === 'Admin') {
       // Try to fetch clients (if endpoint exists)
@@ -72,14 +95,31 @@ export class DashboardService {
       invoices$ = this.apiService.get<any[]>('invoices').pipe(
         catchError(() => of([]))
       );
+    } else if (user.role === 'Client') {
+      // Fetch client-specific data
+      invoices$ = this.apiService.get<any[]>('invoices').pipe(
+        catchError(() => of([]))
+      );
+      
+      galleryItems$ = this.apiService.get<any[]>('gallery/my-gallery').pipe(
+        catchError(() => of([]))
+      );
+      
+      notifications$ = this.apiService.get<any[]>('notifications').pipe(
+        catchError(() => of([]))
+      );
     }
 
     return forkJoin({
       orders: orders$,
       clients: clients$,
-      invoices: invoices$
+      invoices: invoices$,
+      galleryItems: galleryItems$,
+      notifications: notifications$
     }).pipe(
-      map(({ orders, clients, invoices }) => this.processDashboardData(orders, clients, invoices)),
+      map(({ orders, clients, invoices, galleryItems, notifications }) => 
+        this.processDashboardData(orders, clients, invoices, galleryItems, notifications, user.role)
+      ),
       catchError(error => {
         console.error('Error fetching dashboard data:', error);
         return of(this.getEmptyDashboardData());
@@ -87,7 +127,14 @@ export class DashboardService {
     );
   }
 
-  private processDashboardData(orders: Order[], clients: any[] = [], invoices: any[] = []): DashboardData {
+  private processDashboardData(
+    orders: Order[], 
+    clients: any[] = [], 
+    invoices: any[] = [],
+    galleryItems: any[] = [],
+    notifications: any[] = [],
+    userRole?: string
+  ): DashboardData {
     // Calculate client statistics
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -101,7 +148,7 @@ export class DashboardService {
     if (invoices.length > 0) {
       totalRevenue = invoices
         .filter(inv => inv.status === 'Paid')
-        .reduce((sum, inv) => sum + (inv.amount || 0), 0);
+        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
     } else {
       // Fallback: calculate from completed orders if price field exists
       totalRevenue = orders
@@ -121,6 +168,104 @@ export class DashboardService {
       averageDeliveryTime = deliveryTimes.reduce((sum, time) => sum + time, 0) / deliveryTimes.length;
     }
 
+    // Calculate client-specific statistics
+    let activeOrders = 0;
+    let ordersAwaitingApproval = 0;
+    let pendingInvoices = 0;
+    let dueAmount = 0;
+    let amountPaidThisMonth = 0;
+
+    // Client analytics variables
+    let ordersThisMonth = 0;
+    let ordersThisWeek = 0;
+    let ordersToday = 0;
+    let completedOrdersThisMonth = 0;
+    let lifetimeSpend = 0;
+    let monthlySpend = 0;
+    let averageOrderValue = 0;
+    let ordersByWeek: { weekLabel: string; count: number }[] = [];
+
+    if (userRole === 'Client') {
+      // Active orders (InProgress, PreviewDelivered, RevisionRequested)
+      activeOrders = orders.filter(o => 
+        o.status === OrderStatus.InProgress || 
+        o.status === OrderStatus.PreviewDelivered || 
+        o.status === OrderStatus.RevisionRequested
+      ).length;
+
+      // Orders awaiting approval (PreviewDelivered, PriceApprovalPending)
+      ordersAwaitingApproval = orders.filter(o => 
+        o.status === OrderStatus.PreviewDelivered || 
+        o.status === OrderStatus.PriceApprovalPending
+      ).length;
+
+      // Invoice statistics
+      pendingInvoices = invoices.filter(inv => 
+        inv.status === 'Pending' || inv.status === 'Overdue'
+      ).length;
+
+      dueAmount = invoices
+        .filter(inv => inv.status === 'Pending' || inv.status === 'Overdue')
+        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
+
+      amountPaidThisMonth = invoices
+        .filter(inv => {
+          if (inv.status !== 'Paid' || !inv.paidDate) return false;
+          const paidDate = new Date(inv.paidDate);
+          return paidDate >= startOfMonth;
+        })
+        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
+
+      // --- Client Analytics & Productivity ---
+      const today = new Date();
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const dayOfWeek = today.getDay(); // 0=Sun
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - dayOfWeek);
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      // Orders this month (by creation date)
+      ordersThisMonth = orders.filter(o => new Date(o.createdAt) >= startOfMonth).length;
+
+      // Orders this week (by creation date)
+      ordersThisWeek = orders.filter(o => new Date(o.createdAt) >= startOfWeek).length;
+
+      // Orders today (by creation date)
+      ordersToday = orders.filter(o => new Date(o.createdAt) >= startOfToday).length;
+
+      // Completed orders this month (by updatedAt or createdAt — closest to completion date)
+      completedOrdersThisMonth = orders.filter(o => {
+        if (o.status !== OrderStatus.Completed) return false;
+        const completionDate = new Date(o.updatedAt || o.createdAt);
+        return completionDate >= startOfMonth;
+      }).length;
+
+      // Lifetime spend (sum of prices on all non-cancelled orders)
+      lifetimeSpend = orders
+        .filter(o => o.status !== OrderStatus.Cancelled && o.status !== OrderStatus.CancelledByUser && o.status !== OrderStatus.CancelledByAdmin)
+        .reduce((sum, o) => sum + (o.price || 0), 0);
+
+      // Monthly spend (orders created this month)
+      monthlySpend = orders
+        .filter(o => {
+          const created = new Date(o.createdAt);
+          return created >= startOfMonth &&
+            o.status !== OrderStatus.Cancelled && o.status !== OrderStatus.CancelledByUser && o.status !== OrderStatus.CancelledByAdmin;
+        })
+        .reduce((sum, o) => sum + (o.price || 0), 0);
+
+      // Average order value
+      const nonCancelledOrders = orders.filter(o =>
+        o.status !== OrderStatus.Cancelled && o.status !== OrderStatus.CancelledByUser && o.status !== OrderStatus.CancelledByAdmin
+      );
+      averageOrderValue = nonCancelledOrders.length > 0
+        ? nonCancelledOrders.reduce((sum, o) => sum + (o.price || 0), 0) / nonCancelledOrders.length
+        : 0;
+
+      // Orders by week (last 8 weeks) for trend chart
+      ordersByWeek = this.calculateOrdersByWeek(orders, 8);
+    }
+
     // Calculate statistics
     const stats: DashboardStats = {
       totalOrders: orders.length,
@@ -130,7 +275,21 @@ export class DashboardService {
       totalClients: clients.length,
       newClientsThisMonth: newClientsThisMonth,
       totalRevenue: totalRevenue,
-      averageDeliveryTime: Math.round(averageDeliveryTime * 10) / 10 // Round to 1 decimal
+      averageDeliveryTime: Math.round(averageDeliveryTime * 10) / 10, // Round to 1 decimal
+      // Client-specific stats
+      activeOrders,
+      ordersAwaitingApproval,
+      pendingInvoices,
+      dueAmount,
+      amountPaidThisMonth,
+      // Client analytics
+      ordersThisMonth,
+      ordersThisWeek,
+      ordersToday,
+      completedOrdersThisMonth,
+      lifetimeSpend,
+      monthlySpend,
+      averageOrderValue
     };
 
     // Get recent orders (last 10, sorted by creation date)
@@ -176,13 +335,51 @@ export class DashboardService {
       .map(([packageName, revenue]) => ({ package: packageName, revenue }))
       .sort((a, b) => b.revenue - a.revenue);
 
+    // Full sorted order list for client history
+    const allOrdersSorted = [...orders]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
     return {
       stats,
       recentOrders,
+      allOrders: userRole === 'Client' ? allOrdersSorted : undefined,
       ordersByStatus,
       ordersByMonth,
-      revenueByPackage
+      revenueByPackage,
+      // Client-specific data
+      invoices: userRole === 'Client' ? invoices : undefined,
+      galleryItems: userRole === 'Client' ? galleryItems : undefined,
+      notifications: userRole === 'Client' ? notifications : undefined,
+      ordersByWeek: userRole === 'Client' ? ordersByWeek : undefined
     };
+  }
+
+  private calculateOrdersByWeek(orders: Order[], weeks: number): { weekLabel: string; count: number }[] {
+    const result: { weekLabel: string; count: number }[] = [];
+    const now = new Date();
+
+    for (let i = weeks - 1; i >= 0; i--) {
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - (now.getDay() + (i * 7)));
+      weekStart.setHours(0, 0, 0, 0);
+
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 7);
+
+      const count = orders.filter(o => {
+        const created = new Date(o.createdAt);
+        return created >= weekStart && created < weekEnd;
+      }).length;
+
+      const monthName = weekStart.toLocaleDateString('en-US', { month: 'short' });
+      const day = weekStart.getDate();
+      result.push({
+        weekLabel: `${monthName} ${day}`,
+        count
+      });
+    }
+
+    return result;
   }
 
   private getEmptyDashboardData(): DashboardData {
@@ -195,12 +392,29 @@ export class DashboardService {
         totalClients: 0,
         newClientsThisMonth: 0,
         totalRevenue: 0,
-        averageDeliveryTime: 0
+        averageDeliveryTime: 0,
+        activeOrders: 0,
+        ordersAwaitingApproval: 0,
+        pendingInvoices: 0,
+        dueAmount: 0,
+        amountPaidThisMonth: 0,
+        ordersThisMonth: 0,
+        ordersThisWeek: 0,
+        ordersToday: 0,
+        completedOrdersThisMonth: 0,
+        lifetimeSpend: 0,
+        monthlySpend: 0,
+        averageOrderValue: 0
       },
       recentOrders: [],
+      allOrders: [],
       ordersByStatus: [],
       ordersByMonth: [],
-      revenueByPackage: []
+      revenueByPackage: [],
+      invoices: [],
+      galleryItems: [],
+      notifications: [],
+      ordersByWeek: []
     };
   }
 }

@@ -10,7 +10,7 @@ public interface IOrderService
     Task<List<OrderResponseDto>> GetOrdersByDesignerAsync(Guid designerId);
     Task<List<OrderResponseDto>> GetAllOrdersAsync(string? userRole);
     Task<OrderResponseDto> AssignOrderToDesignerAsync(Guid orderId, Guid designerId, Guid assignedBy);
-    Task<OrderResponseDto> UpdateOrderStatusAsync(Guid orderId, UpdateOrderStatusRequestDto request, Guid userId);
+    Task<OrderResponseDto> UpdateOrderStatusAsync(Guid orderId, UpdateOrderStatusRequestDto request, Guid userId, string? userRole = null);
     Task<OrderResponseDto> RequestPriceApprovalAsync(Guid orderId, RequestPriceApprovalDto request, Guid requestedBy);
     Task<OrderResponseDto> ApprovePriceAsync(Guid orderId, ApprovePriceDto request, Guid approvedBy);
     Task<OrderResponseDto> ApproveOrderAsync(Guid orderId, Guid approvedBy);

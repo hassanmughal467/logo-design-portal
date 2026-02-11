@@ -269,7 +269,11 @@ public class OrderService : IOrderService
 
         var previousStatus = order.Status;
         order.DesignerId = designer.Id;
-        order.Status = OrderStatus.InProgress;
+        // Fixed: Only change status if order is waiting for admin approval
+        if (order.Status == OrderStatus.WaitingForAdminApproval)
+        {
+            order.Status = OrderStatus.InProgress;
+        }
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = assignedBy;
 
@@ -291,9 +295,11 @@ public class OrderService : IOrderService
         return await GetOrderByIdAsync(orderId, assignedBy, "SuperAdmin");
     }
 
-    public async Task<OrderResponseDto> UpdateOrderStatusAsync(Guid orderId, UpdateOrderStatusRequestDto request, Guid userId)
+    public async Task<OrderResponseDto> UpdateOrderStatusAsync(Guid orderId, UpdateOrderStatusRequestDto request, Guid userId, string? userRole = null)
     {
         var order = await _context.LogoOrders
+            .Include(o => o.Client)
+                .ThenInclude(c => c.User)
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
@@ -304,6 +310,16 @@ public class OrderService : IOrderService
         if (!Enum.TryParse<OrderStatus>(request.Status, out var newStatus))
         {
             throw new InvalidOperationException("Invalid status.");
+        }
+
+        // Role-based status transition validation
+        if (!string.IsNullOrEmpty(userRole))
+        {
+            var allowedStatuses = GetAllowedStatusesForRole(userRole, order.Status, order.Client?.UserId == userId);
+            if (!allowedStatuses.Contains(newStatus))
+            {
+                throw new InvalidOperationException($"You don't have permission to change status to '{newStatus}'. Allowed statuses for {userRole}: {string.Join(", ", allowedStatuses)}");
+            }
         }
 
         var previousStatus = order.Status;
@@ -392,7 +408,8 @@ public class OrderService : IOrderService
             throw new InvalidOperationException("Order not found.");
         }
 
-        if (order.Client.UserId != approvedBy)
+        // Null check to prevent NullReferenceException
+        if (order.Client == null || order.Client.UserId != approvedBy)
         {
             throw new UnauthorizedAccessException("Only the client can approve the price.");
         }
@@ -402,6 +419,7 @@ public class OrderService : IOrderService
 
         if (request.Approved)
         {
+            // Fixed: Use ProposedPrice when approved
             order.Price = order.ProposedPrice ?? order.Price;
             order.Status = OrderStatus.WaitingForAdminApproval;
         }
@@ -916,5 +934,59 @@ public class OrderService : IOrderService
         {
             return false;
         }
+    }
+
+    private List<OrderStatus> GetAllowedStatusesForRole(string userRole, OrderStatus currentStatus, bool isOrderOwner)
+    {
+        var allowedStatuses = new List<OrderStatus>();
+
+        switch (userRole)
+        {
+            case "Client":
+                // Clients can only:
+                // - Request revisions when preview is delivered
+                // - Approve final when preview is delivered
+                if (currentStatus == OrderStatus.PreviewDelivered)
+                {
+                    allowedStatuses.Add(OrderStatus.RevisionRequested);
+                    allowedStatuses.Add(OrderStatus.FinalApproved);
+                }
+                // Clients can cancel their own orders in certain statuses
+                if (isOrderOwner && (currentStatus == OrderStatus.WaitingForAdminApproval || 
+                                     currentStatus == OrderStatus.PriceApprovalPending ||
+                                     currentStatus == OrderStatus.Pending))
+                {
+                    allowedStatuses.Add(OrderStatus.Cancelled);
+                }
+                break;
+
+            case "Designer":
+                // Designers can only:
+                // - Mark as PreviewDelivered when uploading files (usually handled by file upload)
+                // - Update to PreviewDelivered if in InProgress or RevisionRequested
+                if (currentStatus == OrderStatus.InProgress || currentStatus == OrderStatus.RevisionRequested)
+                {
+                    allowedStatuses.Add(OrderStatus.PreviewDelivered);
+                }
+                break;
+
+            case "Admin":
+            case "SuperAdmin":
+                // Admins and SuperAdmins have full control - can set any status
+                allowedStatuses.AddRange(Enum.GetValues<OrderStatus>());
+                break;
+
+            default:
+                // Unknown role - no permissions
+                break;
+        }
+
+        // Always allow keeping the same status (no change)
+        if (!allowedStatuses.Contains(currentStatus))
+        {
+            allowedStatuses.Add(currentStatus);
+        }
+
+        return allowedStatuses;
     }
 }

@@ -132,7 +132,8 @@ public class OrdersController : ControllerBase
         try
         {
             var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var order = await _orderService.UpdateOrderStatusAsync(id, request, userId);
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            var order = await _orderService.UpdateOrderStatusAsync(id, request, userId, userRole);
             return Ok(order);
         }
         catch (InvalidOperationException ex)

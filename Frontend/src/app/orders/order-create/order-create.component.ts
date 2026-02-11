@@ -15,6 +15,7 @@ import { catchError } from 'rxjs/operators';
 })
 export class OrderCreateComponent implements OnInit, OnChanges {
   @Input() visible: boolean = false;
+  @Input() prefillData: any = null; // For quick reorder
   @Output() visibleChange = new EventEmitter<boolean>();
   @Output() orderCreated = new EventEmitter<any>();
 
@@ -56,8 +57,29 @@ export class OrderCreateComponent implements OnInit, OnChanges {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['visible'] && changes['visible'].currentValue) {
-      this.resetForm();
+      if (this.prefillData) {
+        this.prefillForm(this.prefillData);
+      } else {
+        this.resetForm();
+      }
     }
+  }
+
+  private prefillForm(data: any): void {
+    this.orderForm.patchValue({
+      title: data.title || '',
+      description: data.description || '',
+      price: data.price || 0,
+      priority: data.priority || 2,
+      deadline: null, // Always reset deadline for reorders
+      instructions: data.instructions || '',
+      requiredFormats: data.requiredFormats || '',
+      requirements: data.requirements || '',
+      colorPreferences: data.colorPreferences || '',
+      stylePreferences: data.stylePreferences || ''
+    });
+    this.orderForm.markAsUntouched();
+    this.selectedFiles = [];
   }
 
   resetForm(): void {

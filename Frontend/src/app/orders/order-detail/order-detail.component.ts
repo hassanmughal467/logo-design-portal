@@ -440,7 +440,6 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       rejectLabel: 'Cancel',
       acceptButtonStyleClass: 'p-button-primary',
       rejectButtonStyleClass: 'p-button-text',
-      styleClass: 'approve-logo-confirm-dialog',
       accept: () => {
         console.log('Approval confirmed, calling API...');
         this.apiService.post(`revisions/orders/${this.order!.id}/approve-logo`, {})

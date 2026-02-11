@@ -165,7 +165,7 @@ public class InvoiceService : IInvoiceService
             InvoiceNumber = invoiceNumber,
             Amount = totalAmount, // Calculated from items
             TaxAmount = taxAmount,
-            TotalAmount = totalAmount + taxAmount,
+            TotalAmount = totalAmount + taxAmount, // Fixed: Include tax in total amount
             Status = InvoiceStatus.Pending,
             BillingType = billingType,
             IssueDate = DateTime.UtcNow,

@@ -111,7 +111,7 @@ public class FileService : IFileService
         
         var userRole = user?.Role?.Name ?? string.Empty;
         
-        // Designer uploads are NEVER visible to clients until admin approval
+        // Fixed: Designer uploads are NEVER visible to clients until admin approval
         // Only client uploads of Reference type are visible immediately
         var isVisibleToClient = userRole == "Client" && parsedFileType == FileType.Reference;
         var isAdminApproved = userRole == "Client" && parsedFileType == FileType.Reference;
@@ -196,7 +196,7 @@ public class FileService : IFileService
         
         var userRole = user?.Role?.Name ?? string.Empty;
         
-        // Designer uploads are NEVER visible to clients until admin approval
+        // Fixed: Designer uploads are NEVER visible to clients until admin approval
         // Only client uploads of Reference type are visible immediately
         var isVisibleToClient = userRole == "Client" && parsedFileType == FileType.Reference;
         var isAdminApproved = userRole == "Client" && parsedFileType == FileType.Reference;

@@ -15,6 +15,13 @@ import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { ChartModule } from 'primeng/chart';
 import { ButtonModule } from 'primeng/button';
 import { TooltipModule } from 'primeng/tooltip';
+import { DialogModule } from 'primeng/dialog';
+import { TabViewModule } from 'primeng/tabview';
+import { InputTextModule } from 'primeng/inputtext';
+import { FormsModule } from '@angular/forms';
+import { CheckboxModule } from 'primeng/checkbox';
+import { DropdownModule } from 'primeng/dropdown';
+import { PanelModule } from 'primeng/panel';
 
 @NgModule({
   declarations: [
@@ -22,6 +29,7 @@ import { TooltipModule } from 'primeng/tooltip';
   ],
   imports: [
     CommonModule,
+    FormsModule,
     DashboardRoutingModule,
     LayoutModule,
     SharedModule,
@@ -33,7 +41,13 @@ import { TooltipModule } from 'primeng/tooltip';
     ProgressSpinnerModule,
     ChartModule,
     ButtonModule,
-    TooltipModule
+    TooltipModule,
+    DialogModule,
+    TabViewModule,
+    InputTextModule,
+    CheckboxModule,
+    DropdownModule,
+    PanelModule
   ]
 })
 export class DashboardModule { }
