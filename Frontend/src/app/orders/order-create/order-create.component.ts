@@ -24,11 +24,12 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   uploadingFiles = false;
   minDate: Date = new Date();
   selectedFiles: File[] = [];
+  isDragOver = false;
   priorityOptions = [
-    { label: 'Low', value: 1 },
-    { label: 'Normal (Medium)', value: 2 },
-    { label: 'High', value: 3 },
-    { label: 'Urgent', value: 4 }
+    { label: 'Low', value: 1, description: 'No rush — standard queue' },
+    { label: 'Normal', value: 2, description: 'Standard timeline' },
+    { label: 'High', value: 3, description: 'Important — faster delivery' },
+    { label: 'Urgent', value: 4, description: 'Rush order — fastest delivery' }
   ];
 
   constructor(
@@ -39,7 +40,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   ) {
     this.orderForm = this.fb.group({
       title: ['', [Validators.required, Validators.minLength(3)]],
-      description: ['', [Validators.required, Validators.minLength(10)]],
+      description: ['', [Validators.required]],
       price: [0, [Validators.required, Validators.min(0.01)]],
       priority: [2], // Default to Medium (2)
       deadline: [null],
@@ -177,28 +178,101 @@ export class OrderCreateComponent implements OnInit, OnChanges {
     });
   }
 
-  onFileSelect(event: any): void {
-    const files: File[] = Array.from(event.files || []);
+  onNativeFileSelect(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files) return;
     
-    // Validate file sizes (max 10MB each)
+    const files: File[] = Array.from(input.files);
+    this.addFiles(files);
+    
+    // Reset the input so the same file can be selected again
+    input.value = '';
+  }
+
+  onDragOver(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver = true;
+  }
+
+  onDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver = false;
+  }
+
+  onDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver = false;
+    
+    if (event.dataTransfer?.files) {
+      const files: File[] = Array.from(event.dataTransfer.files);
+      this.addFiles(files);
+    }
+  }
+
+  private addFiles(files: File[]): void {
     const maxSize = 10 * 1024 * 1024; // 10MB
-    const invalidFiles = files.filter(file => file.size > maxSize);
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.pdf', '.ai', '.eps', '.psd', '.webp'];
     
-    if (invalidFiles.length > 0) {
+    const invalidSize = files.filter(f => f.size > maxSize);
+    const invalidType = files.filter(f => {
+      const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+      return !allowedExtensions.includes(ext) && !f.type.startsWith('image/');
+    });
+    
+    if (invalidSize.length > 0) {
       this.messageService.add({
         severity: 'error',
-        summary: 'Error',
-        detail: 'Some files exceed the 10MB limit and were not added'
+        summary: 'File Too Large',
+        detail: `${invalidSize.length} file(s) exceed the 10MB limit`
       });
     }
     
-    // Add valid files
-    const validFiles = files.filter(file => file.size <= maxSize);
+    if (invalidType.length > 0) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Invalid File Type',
+        detail: `${invalidType.length} file(s) have unsupported formats`
+      });
+    }
+    
+    // Filter to valid files and avoid duplicates
+    const validFiles = files.filter(f => {
+      const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+      const validSize = f.size <= maxSize;
+      const validType = allowedExtensions.includes(ext) || f.type.startsWith('image/');
+      const notDuplicate = !this.selectedFiles.some(existing => existing.name === f.name && existing.size === f.size);
+      return validSize && validType && notDuplicate;
+    });
+    
     this.selectedFiles = [...this.selectedFiles, ...validFiles];
   }
 
   removeFile(index: number): void {
     this.selectedFiles.splice(index, 1);
+  }
+
+  clearAllFiles(): void {
+    this.selectedFiles = [];
+  }
+
+  getFileIcon(fileName: string): string {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    const iconMap: { [key: string]: string } = {
+      'pdf': 'pi-file-pdf',
+      'jpg': 'pi-image',
+      'jpeg': 'pi-image',
+      'png': 'pi-image',
+      'gif': 'pi-image',
+      'svg': 'pi-image',
+      'webp': 'pi-image',
+      'ai': 'pi-file',
+      'eps': 'pi-file',
+      'psd': 'pi-file'
+    };
+    return iconMap[ext] || 'pi-file';
   }
 
   private uploadFiles(orderId: string): void {

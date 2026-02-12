@@ -300,12 +300,12 @@
       </p-panel>
 
       <!-- COLLAPSIBLE: Invoices & Payments -->
-      <p-panel [toggleable]="true" [collapsed]="true" toggler="header" styleClass="dashboard-panel">
+      <p-panel [toggleable]="true" [(collapsed)]="invoicesPanelCollapsed" toggler="header" styleClass="dashboard-panel" id="invoices-panel">
         <ng-template pTemplate="header">
           <div class="panel-header-content">
             <i class="pi pi-money-bill"></i>
             <span>Invoices & Payments</span>
-            <p-tag *ngIf="getPendingInvoices().length > 0" class="panel-badge" [value]="getPendingInvoices().length + ' pending'" severity="warning" [rounded]="true"></p-tag>
+            <p-tag *ngIf="getUnpaidInvoices().length > 0" class="panel-badge" [value]="getUnpaidInvoices().length + ' unpaid'" severity="warning" [rounded]="true"></p-tag>
           </div>
         </ng-template>
         <div class="invoice-toolbar">
@@ -319,16 +319,48 @@
             <h4>Weekly Summary</h4>
             <p class="summary-total">Total: {{ formatCurrency(getWeeklySummary().total) }}</p>
             <p class="summary-paid">Paid: {{ formatCurrency(getWeeklySummary().paid) }}</p>
-            <p class="summary-pending">Pending: {{ formatCurrency(getWeeklySummary().pending) }}</p>
+            <p class="summary-pending">Unpaid: {{ formatCurrency(getWeeklySummary().pending) }}</p>
           </div>
           <div class="summary-card">
             <h4>Monthly Summary</h4>
             <p class="summary-total">Total: {{ formatCurrency(getMonthlySummary().total) }}</p>
             <p class="summary-paid">Paid: {{ formatCurrency(getMonthlySummary().paid) }}</p>
-            <p class="summary-pending">Pending: {{ formatCurrency(getMonthlySummary().pending) }}</p>
+            <p class="summary-pending">Unpaid: {{ formatCurrency(getMonthlySummary().pending) }}</p>
           </div>
         </div>
         <p-tabView [(activeIndex)]="selectedInvoiceTabIndex">
+          <p-tabPanel header="Unpaid" leftIcon="pi pi-exclamation-circle">
+            <div class="invoice-actions-bar">
+              <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getUnpaidInvoices().length === 0"
+                (onClick)="selectedInvoices = getUnpaidInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
+            </div>
+            <p-table [value]="getUnpaidInvoices()" [paginator]="true" [rows]="10"
+              [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
+                  <th>Invoice #</th><th>Amount</th><th>Status</th><th>Due Date</th><th>Actions</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-invoice>
+                <tr>
+                  <td><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
+                  <td>{{ invoice.invoiceNumber }}</td>
+                  <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
+                  <td>
+                    <p-tag [value]="invoice.status" [severity]="invoice.status === 'Overdue' ? 'danger' : 'warning'" [rounded]="true"></p-tag>
+                  </td>
+                  <td>
+                    <span [class.overdue]="invoice.status === 'Overdue'">{{ formatDate(invoice.dueDate) }}</span>
+                  </td>
+                  <td><p-button label="Pay" icon="pi pi-money-bill" 
+                    [styleClass]="'p-button-sm ' + (invoice.status === 'Overdue' ? 'p-button-danger' : 'p-button-success')"
+                    (onClick)="openPaymentDialog(invoice)"></p-button></td>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="6">No unpaid invoices</td></tr></ng-template>
+            </p-table>
+          </p-tabPanel>
           <p-tabPanel header="Pending" leftIcon="pi pi-clock">
             <div class="invoice-actions-bar">
               <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getPendingInvoices().length === 0"
@@ -509,7 +541,7 @@
               <h3>Orders by Status</h3>
             </div>
             <div class="chart-container">
-              <p-chart type="doughnut" [data]="statusChartData" [options]="statusChartOptions" [style]="{'height': '300px'}"></p-chart>
+              <p-chart type="doughnut" [data]="statusChartData" [options]="statusChartOptions" [style]="{'width': '100%', 'height': '100%'}"></p-chart>
             </div>
           </div>
         </div>
@@ -520,7 +552,7 @@
               <h3>Orders Trend (Last 6 Months)</h3>
             </div>
             <div class="chart-container">
-              <p-chart type="line" [data]="monthlyChartData" [options]="monthlyChartOptions" [style]="{'height': '300px'}"></p-chart>
+              <p-chart type="line" [data]="monthlyChartData" [options]="monthlyChartOptions" [style]="{'width': '100%', 'height': '100%'}"></p-chart>
             </div>
           </div>
         </div>
@@ -531,7 +563,7 @@
               <h3>Revenue by Package</h3>
             </div>
             <div class="chart-container">
-              <p-chart type="bar" [data]="revenueChartData" [options]="revenueChartOptions" [style]="{'height': '300px'}"></p-chart>
+              <p-chart type="bar" [data]="revenueChartData" [options]="revenueChartOptions" [style]="{'width': '100%', 'height': '100%'}"></p-chart>
             </div>
           </div>
         </div>
@@ -664,7 +696,7 @@
   <app-order-detail *ngIf="selectedOrderId" [orderId]="selectedOrderId" [(visible)]="showOrderDetailModal" (orderUpdated)="onOrderUpdated()"></app-order-detail>
 
   <!-- Payment Dialog -->
-  <p-dialog [(visible)]="showPaymentDialog" header="Process Payment" [modal]="true" [style]="{width: '500px'}" *ngIf="user?.role === 'Client'">
+  <p-dialog [(visible)]="showPaymentDialog" header="Process Payment" [modal]="true" [style]="{width: '500px'}" [draggable]="false" [resizable]="false" *ngIf="user?.role === 'Client'">
     <div class="payment-dialog">
       <p>Process payment for {{ selectedInvoices.length }} invoice(s)?</p>
       <div class="payment-summary" *ngIf="selectedInvoices.length > 0">
@@ -683,7 +715,7 @@
 
   <!-- Activity Timeline Dialog -->
   <p-dialog [(visible)]="showTimelineDialog" [header]="'Activity Timeline: ' + timelineOrderTitle" [modal]="true"
-    [style]="{width: '600px', maxHeight: '80vh'}" [closable]="true" styleClass="timeline-dialog">
+    [style]="{width: '600px', maxHeight: '80vh'}" [closable]="true" [draggable]="false" [resizable]="false" styleClass="timeline-dialog">
     <div class="timeline-container">
       <div *ngIf="loadingTimeline" class="timeline-loading">
         <p-progressSpinner strokeWidth="4" animationDuration="1s" [style]="{width: '40px', height: '40px'}"></p-progressSpinner>
@@ -716,7 +748,7 @@
   </p-dialog>
 
   <!-- Change Password Dialog -->
-  <p-dialog [(visible)]="showChangePasswordDialog" header="Change Password" [modal]="true" [style]="{width: '450px'}" *ngIf="user?.role === 'Client'">
+  <p-dialog [(visible)]="showChangePasswordDialog" header="Change Password" [modal]="true" [style]="{width: '450px'}" [draggable]="false" [resizable]="false" *ngIf="user?.role === 'Client'">
     <div class="password-dialog">
       <div class="field">
         <label for="currentPwd">Current Password</label>

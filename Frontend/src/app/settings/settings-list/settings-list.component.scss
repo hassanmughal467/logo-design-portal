@@ -316,31 +316,9 @@
   }
 
   .dialog-content {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
+    /* Generic form-group styles inherited from global styles.scss */
 
     .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-
-      label {
-        font-weight: 500;
-        color: #334155;
-        font-size: 0.875rem;
-      }
-
-      .full-width {
-        width: 100%;
-      }
-
-      .checkbox-label {
-        margin-left: 0.5rem;
-        font-weight: normal;
-        cursor: pointer;
-      }
-
       .password-requirements {
         display: block;
         margin-top: 0.75rem;

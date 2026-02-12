@@ -357,118 +357,79 @@
     }
   }
 
-  // ═══ DIALOG STYLES ═══
+  // ═══ DIALOG OVERRIDES ═══
   ::ng-deep {
-    .assign-designer-dialog,
-    .change-status-dialog {
-      .p-dialog-content {
-        padding: 1.5rem;
-        overflow: visible;
-      }
-
-      .dialog-content {
-        .form-group {
-          margin-bottom: 1.5rem;
-
-          label {
-            display: block;
-            margin-bottom: 0.75rem;
-            font-weight: 600;
-            color: var(--text-color);
-            font-size: 0.95rem;
-
-            .required { color: #e74c3c; margin-left: 0.25rem; }
-          }
-
-          .p-help {
-            display: block;
-            margin-top: 0.5rem;
-            font-size: 0.875rem;
-            color: var(--text-color-secondary);
-            font-style: italic;
-          }
-        }
-      }
-
-      .p-dropdown {
-        width: 100%;
-        .p-dropdown-label { width: 100%; padding: 0.75rem; }
-        .p-dropdown-trigger { width: 2.5rem; }
-      }
-
-      .p-dropdown-panel {
-        z-index: 10001 !important;
-        min-width: 100%;
-        .p-dropdown-items-wrapper { max-height: 200px; }
-      }
-
-      .p-dialog-footer {
-        display: flex;
-        justify-content: flex-end;
-        gap: 0.75rem;
-        padding: 1rem 1.5rem;
-        border-top: 1px solid var(--surface-border);
-      }
+    /* Dropdowns inside dialogs need overflow visible */
+    .assign-designer-dialog .p-dialog-content,
+    .change-status-dialog .p-dialog-content {
+      overflow: visible !important;
     }
 
-    // Upload File Dialog Styles
-    .upload-file-dialog {
-      .p-dialog-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 12px 12px 0 0;
-        padding: 1.5rem;
-        .p-dialog-title { font-weight: 600; font-size: 1.25rem; }
-        .p-dialog-header-icon { color: white; }
-      }
-      .p-dialog-content { padding: 0; }
+    /* Upload File Dialog - no padding content (branded header via styleClass in HTML) */
+    .upload-file-dialog .p-dialog-content {
+      padding: 0 !important;
     }
   }
 
   .upload-dialog-content {
-    padding: 2rem;
+    padding: 1.5rem;
 
     .upload-header {
       display: flex;
       align-items: center;
       gap: 1rem;
-      margin-bottom: 2rem;
-      padding-bottom: 1.5rem;
-      border-bottom: 2px solid #f0f0f0;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--surface-border);
 
-      .upload-icon { font-size: 2.5rem; color: #667eea; }
-      h3 { margin: 0; font-size: 1.5rem; font-weight: 600; color: #2c3e50; }
-      .upload-subtitle { margin: 0.25rem 0 0 0; color: #6c757d; font-size: 0.9rem; }
+      .upload-icon {
+        font-size: 2rem;
+        color: var(--primary-color);
+      }
+
+      h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-color);
+      }
+
+      .upload-subtitle {
+        margin: 0.15rem 0 0 0;
+        color: var(--text-color-secondary);
+        font-size: 0.85rem;
+      }
     }
 
     .form-group {
-      margin-bottom: 1.5rem;
+      margin-bottom: 1.25rem;
 
       .file-label {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        margin-bottom: 0.75rem;
+        margin-bottom: 0.65rem;
         font-weight: 600;
-        color: #2c3e50;
+        color: var(--text-color);
         font-size: 0.95rem;
-        i { color: #667eea; }
-        .required { color: #e74c3c; margin-left: 0.25rem; }
+
+        i {
+          color: var(--primary-color);
+        }
+
+        .required {
+          color: #e74c3c;
+          margin-left: 0.15rem;
+        }
       }
 
       .upload-button-custom {
         ::ng-deep .p-button {
           width: 100%;
-          padding: 1rem;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          border: none;
+          padding: 0.85rem;
           border-radius: 8px;
           font-weight: 600;
-          transition: all 0.3s ease;
-          &:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-          }
+          transition: all 0.2s ease;
         }
       }
 
@@ -476,88 +437,162 @@
         display: flex;
         align-items: flex-start;
         gap: 0.5rem;
-        margin-top: 0.75rem;
-        font-size: 0.875rem;
-        color: #6c757d;
+        margin-top: 0.65rem;
+        font-size: 0.825rem;
+        color: var(--text-color-secondary);
         line-height: 1.6;
-        padding: 0.75rem;
-        background: #f8f9fa;
+        padding: 0.65rem 0.85rem;
+        background: var(--surface-ground);
         border-radius: 8px;
-        border-left: 3px solid #667eea;
-        i { color: #667eea; margin-top: 0.125rem; }
+        border-left: 3px solid var(--primary-color);
+
+        i {
+          color: var(--primary-color);
+          margin-top: 0.15rem;
+        }
       }
 
       .selected-files-container {
-        margin-top: 1.5rem;
-        border: 2px dashed #667eea;
-        border-radius: 12px;
-        padding: 1rem;
-        background: #f8f9ff;
+        margin-top: 1rem;
+        border: 1px solid var(--surface-border);
+        border-radius: 10px;
+        overflow: hidden;
 
         .files-header {
-          margin-bottom: 0.75rem;
-          padding-bottom: 0.75rem;
-          border-bottom: 1px solid #e0e0e0;
-          .files-count { font-weight: 600; color: #667eea; font-size: 0.95rem; }
+          padding: 0.65rem 0.85rem;
+          background: var(--surface-ground);
+          border-bottom: 1px solid var(--surface-border);
+
+          .files-count {
+            font-weight: 600;
+            color: var(--primary-color);
+            font-size: 0.85rem;
+          }
         }
 
-        .file-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .file-list {
+          display: flex;
+          flex-direction: column;
+        }
 
         .file-item {
           display: flex;
           align-items: center;
-          gap: 1rem;
-          padding: 1rem;
-          background: white;
-          border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-          transition: all 0.2s ease;
-          &:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); transform: translateX(4px); }
+          gap: 0.85rem;
+          padding: 0.75rem 0.85rem;
+          background: var(--surface-card);
+          border-bottom: 1px solid var(--surface-border);
+          transition: background 0.15s ease;
+
+          &:last-child {
+            border-bottom: none;
+          }
+
+          &:hover {
+            background: var(--surface-ground);
+          }
 
           .file-icon {
-            width: 40px; height: 40px;
-            display: flex; align-items: center; justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 8px; color: white; font-size: 1.25rem;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--primary-color);
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            flex-shrink: 0;
           }
 
           .file-details {
-            flex: 1; display: flex; flex-direction: column; gap: 0.25rem;
-            .file-name { font-weight: 500; color: #2c3e50; word-break: break-word; }
-            .file-size { font-size: 0.875rem; color: #6c757d; }
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            min-width: 0;
+
+            .file-name {
+              font-weight: 500;
+              color: var(--text-color);
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .file-size {
+              font-size: 0.8rem;
+              color: var(--text-color-secondary);
+            }
           }
 
           .remove-file-btn {
-            background: transparent; border: none; color: #e74c3c;
-            cursor: pointer; padding: 0.5rem; border-radius: 50%;
-            transition: all 0.2s ease; display: flex; align-items: center;
-            justify-content: center; width: 32px; height: 32px;
-            &:hover { background: #fee; transform: scale(1.1); }
-            i { font-size: 1rem; }
+            background: transparent;
+            border: none;
+            color: var(--text-color-secondary);
+            cursor: pointer;
+            padding: 0.35rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            flex-shrink: 0;
+
+            &:hover {
+              background: #fef2f2;
+              color: #ef4444;
+            }
+
+            i {
+              font-size: 0.85rem;
+            }
           }
         }
       }
 
       .upload-success-message {
-        margin-top: 1.5rem;
-        padding: 1rem 1.5rem;
-        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-        border: 2px solid #28a745;
-        border-radius: 12px;
+        margin-top: 1rem;
+        padding: 0.85rem 1.15rem;
+        background: rgba(16, 185, 129, 0.08);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        border-radius: 10px;
         animation: slideDown 0.3s ease-out;
 
         @keyframes slideDown {
-          from { opacity: 0; transform: translateY(-10px); }
+          from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
         }
 
         .success-content {
-          display: flex; align-items: flex-start; gap: 1rem;
-          i { color: #28a745; font-size: 1.5rem; margin-top: 0.125rem; }
+          display: flex;
+          align-items: flex-start;
+          gap: 0.85rem;
+
+          i {
+            color: #10b981;
+            font-size: 1.25rem;
+            margin-top: 0.1rem;
+          }
+
           div {
             flex: 1;
-            strong { display: block; color: #155724; font-size: 1rem; margin-bottom: 0.25rem; }
-            p { margin: 0; color: #155724; font-size: 0.9rem; line-height: 1.5; }
+
+            strong {
+              display: block;
+              color: #065f46;
+              font-size: 0.95rem;
+              margin-bottom: 0.15rem;
+            }
+
+            p {
+              margin: 0;
+              color: #065f46;
+              font-size: 0.85rem;
+              line-height: 1.5;
+            }
           }
         }
       }
@@ -566,73 +601,92 @@
     .dialog-footer {
       display: flex;
       justify-content: flex-end;
-      gap: 1rem;
-      padding: 1.5rem;
-      border-top: 2px solid #f0f0f0;
-
-      ::ng-deep .p-button {
-        padding: 0.75rem 2rem; font-weight: 600; border-radius: 8px; transition: all 0.3s ease;
-        &.p-button-primary {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;
-          &:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4); }
-        }
-        &.p-button-success {
-          background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border: none;
-          &:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(40, 167, 69, 0.4); }
-        }
-        &:hover:not(:disabled) { transform: translateY(-1px); }
-      }
+      gap: 0.75rem;
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--surface-border);
     }
   }
 
-  // Confirmation Dialog
+  // Confirmation Dialog Content
   ::ng-deep .upload-confirm-dialog {
-    .p-dialog-header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white; border-radius: 12px 12px 0 0; padding: 1.5rem;
-      .p-dialog-title { font-weight: 600; }
-      .p-dialog-header-icon { color: white; }
-    }
-    .p-dialog-content { padding: 2rem; }
-
     .confirm-dialog-content {
       text-align: center;
 
       .confirm-icon {
-        width: 80px; height: 80px; margin: 0 auto 1.5rem;
-        display: flex; align-items: center; justify-content: center;
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
-        border-radius: 50%; color: #f59f00; font-size: 2.5rem;
+        border-radius: 50%;
+        color: #f59f00;
+        font-size: 2rem;
       }
 
       .confirm-message {
-        font-size: 1.1rem; color: #2c3e50; margin-bottom: 1rem; line-height: 1.6;
-        strong { color: #667eea; }
+        font-size: 1.05rem;
+        color: var(--text-color);
+        margin-bottom: 0.75rem;
+        line-height: 1.6;
+
+        strong {
+          color: var(--primary-color);
+        }
       }
 
       .confirm-note {
-        font-size: 0.9rem; color: #6c757d; margin-bottom: 1.5rem; font-style: italic;
+        font-size: 0.875rem;
+        color: var(--text-color-secondary);
+        margin-bottom: 1.25rem;
+        font-style: italic;
       }
 
       .confirm-files-preview {
-        text-align: left; margin-top: 1.5rem; padding: 1rem;
-        background: #f8f9fa; border-radius: 8px; border-left: 3px solid #667eea;
+        text-align: left;
+        margin-top: 1.25rem;
+        padding: 1rem;
+        background: var(--surface-ground);
+        border-radius: 10px;
+        border-left: 3px solid var(--primary-color);
 
-        .preview-header { font-weight: 600; color: #2c3e50; margin-bottom: 0.75rem; font-size: 0.95rem; }
-        .preview-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 200px; overflow-y: auto; }
+        .preview-header {
+          font-weight: 600;
+          color: var(--text-color);
+          margin-bottom: 0.75rem;
+          font-size: 0.9rem;
+        }
+
+        .preview-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          max-height: 200px;
+          overflow-y: auto;
+        }
+
         .preview-item {
-          display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem;
-          background: white; border-radius: 6px; font-size: 0.9rem;
-          i { color: #667eea; }
-          .preview-size { margin-left: auto; color: #6c757d; font-size: 0.85rem; }
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+          padding: 0.5rem 0.65rem;
+          background: var(--surface-card);
+          border-radius: 8px;
+          font-size: 0.875rem;
+          border: 1px solid var(--surface-border);
+
+          i {
+            color: var(--primary-color);
+          }
+
+          .preview-size {
+            margin-left: auto;
+            color: var(--text-color-secondary);
+            font-size: 0.8rem;
+          }
         }
       }
-    }
-
-    .p-dialog-footer {
-      padding: 1.5rem; border-top: 1px solid #e0e0e0;
-      display: flex; justify-content: flex-end; gap: 1rem;
-      ::ng-deep .p-button { padding: 0.75rem 2rem; font-weight: 600; border-radius: 8px; }
     }
   }
 

@@ -52,6 +52,8 @@
   [header]="selectedItem.orderTitle || 'Preview'" 
   [modal]="true"
   [style]="{width: '90vw', maxWidth: '1200px'}"
+  [draggable]="false"
+  [resizable]="false"
   *ngIf="selectedItem"
 >
   <div class="preview-dialog">

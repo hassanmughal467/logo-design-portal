@@ -209,8 +209,7 @@
 
   // Reset Password Dialog Styles
   ::ng-deep {
-    .p-dialog {
-      .reset-password-content {
+    .reset-password-content {
         padding: 0.5rem 0;
 
         .user-info-section {
@@ -334,12 +333,11 @@
         }
       }
 
-      .dialog-footer {
-        display: flex;
-        justify-content: flex-end;
-        gap: 0.75rem;
-        padding-top: 0.5rem;
-      }
+    .dialog-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      padding-top: 0.5rem;
     }
 
     // View User Details Dialog Styles

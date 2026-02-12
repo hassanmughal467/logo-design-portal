@@ -242,9 +242,9 @@
                   pTooltip="Change Status" tooltipPosition="top">
                 </p-button>
 
-                <!-- Admin: Generate Invoice -->
+                <!-- Admin: Generate Invoice (only for Completed orders without existing invoice) -->
                 <p-button
-                  *ngIf="canGenerateInvoice()"
+                  *ngIf="canGenerateInvoice(order)"
                   icon="pi pi-file-pdf"
                   styleClass="p-button-text p-button-rounded p-button-sm"
                   (onClick)="generateInvoice(order)"
@@ -385,9 +385,9 @@
     [style]="{width: '600px'}"
     [closable]="true"
     [draggable]="false"
-    [resizable]="true"
+    [resizable]="false"
     header="Upload Files"
-    styleClass="upload-file-dialog">
+    styleClass="upload-file-dialog branded-header-dialog">
     <div class="upload-dialog-content">
       <div class="upload-header">
         <i class="pi pi-cloud-upload upload-icon"></i>
@@ -475,8 +475,9 @@
     [style]="{width: '500px'}"
     [closable]="true"
     [draggable]="false"
+    [resizable]="false"
     header="Confirm File Upload"
-    styleClass="upload-confirm-dialog">
+    styleClass="upload-confirm-dialog branded-header-dialog">
     <div class="confirm-dialog-content">
       <div class="confirm-icon"><i class="pi pi-exclamation-triangle"></i></div>
       <p class="confirm-message">You are about to upload <strong>{{ selectedFiles.length }}</strong> file(s).</p>

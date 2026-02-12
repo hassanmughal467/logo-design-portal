@@ -173,6 +173,14 @@
               </p-button>
               <p-button 
                 *ngIf="!invoice.isLocked"
+                icon="pi pi-pencil" 
+                styleClass="p-button-text p-button-rounded p-button-sm"
+                (onClick)="openEditDialog(invoice)"
+                pTooltip="Edit Invoice"
+                tooltipPosition="top">
+              </p-button>
+              <p-button 
+                *ngIf="!invoice.isLocked"
                 icon="pi pi-send" 
                 styleClass="p-button-text p-button-rounded p-button-sm"
                 (onClick)="sendInvoice(invoice.id)"
@@ -203,7 +211,9 @@
     [modal]="true" 
     [style]="{width: '550px'}"
     header="Generate Invoice"
-    [closable]="true">
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false">
     <div class="dialog-content">
       <div class="form-group">
         <label>Billing Type</label>
@@ -254,7 +264,9 @@
     [modal]="true" 
     [style]="{width: '700px'}"
     [header]="selectedInvoice ? 'Invoice ' + selectedInvoice.invoiceNumber : 'Invoice Details'"
-    [closable]="true">
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false">
     <div class="invoice-detail" *ngIf="selectedInvoice">
       <div class="detail-section">
         <h4>Invoice Information</h4>
@@ -344,6 +356,106 @@
         icon="pi pi-times"
         (onClick)="showDetailDialog = false"
         styleClass="p-button-text">
+      </p-button>
+    </ng-template>
+  </p-dialog>
+
+  <!-- Edit Invoice Dialog -->
+  <p-dialog 
+    [(visible)]="showEditDialog" 
+    [modal]="true" 
+    [style]="{width: '650px'}"
+    header="Edit Invoice"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false">
+    <div class="dialog-content" *ngIf="editInvoice">
+      <div class="form-group">
+        <label>Invoice #</label>
+        <input pInputText [value]="editInvoice.invoiceNumber" [disabled]="true" class="full-width" />
+      </div>
+
+      <div class="form-group">
+        <label>Billing Type</label>
+        <p-dropdown 
+          [options]="billingTypes"
+          [(ngModel)]="editBillingType"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select billing type"
+          class="full-width">
+        </p-dropdown>
+      </div>
+
+      <div class="form-group">
+        <label>Due Date</label>
+        <p-calendar 
+          [(ngModel)]="editDueDate"
+          [showIcon]="true"
+          dateFormat="yy-mm-dd"
+          placeholder="Select due date"
+          class="full-width">
+        </p-calendar>
+      </div>
+
+      <div class="form-group">
+        <label>Tax Amount ($)</label>
+        <p-inputNumber 
+          [(ngModel)]="editTaxAmount"
+          mode="currency"
+          currency="USD"
+          locale="en-US"
+          [min]="0"
+          class="full-width">
+        </p-inputNumber>
+      </div>
+
+      <div class="form-group">
+        <label>Payment Method</label>
+        <input pInputText [(ngModel)]="editPaymentMethod" placeholder="e.g. Bank Transfer, PayPal" class="full-width" />
+      </div>
+
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea pInputTextarea [(ngModel)]="editNotes" rows="3" placeholder="Invoice notes..." class="full-width"></textarea>
+      </div>
+
+      <!-- Editable Invoice Items -->
+      <div class="form-group" *ngIf="editItems && editItems.length > 0">
+        <label>Invoice Items</label>
+        <div class="edit-items-list">
+          <div class="edit-item-row" *ngFor="let item of editItems; let i = index">
+            <div class="edit-item-desc">
+              <label>Description</label>
+              <input pInputText [(ngModel)]="item.description" class="full-width" />
+            </div>
+            <div class="edit-item-amount">
+              <label>Amount</label>
+              <p-inputNumber 
+                [(ngModel)]="item.amount"
+                mode="currency"
+                currency="USD"
+                locale="en-US"
+                [min]="0"
+                class="full-width">
+              </p-inputNumber>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button 
+        label="Cancel" 
+        icon="pi pi-times"
+        (onClick)="showEditDialog = false"
+        styleClass="p-button-text">
+      </p-button>
+      <p-button 
+        label="Save Changes" 
+        icon="pi pi-check"
+        (onClick)="saveInvoice()"
+        styleClass="p-button-primary">
       </p-button>
     </ng-template>
   </p-dialog>

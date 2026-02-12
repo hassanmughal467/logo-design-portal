@@ -18,9 +18,10 @@
   }
 }
 
-.order-detail-dialog {
+/* Order detail uses full-width content (padding:0) with internal scrolling */
+::ng-deep .order-detail-dialog {
   .p-dialog-content {
-    padding: 0;
+    padding: 0 !important;
     overflow-y: auto;
     max-height: calc(90vh - 100px);
   }
@@ -190,91 +191,12 @@
   }
 }
 
-.dialog-content {
-  .form-group {
-    margin-bottom: 1.5rem;
+/* Dialog content styles now handled by global styles.scss */
 
-    label {
-      display: block;
-      margin-bottom: 0.75rem;
-      font-weight: 600;
-      color: var(--text-color);
-      font-size: 0.95rem;
-
-      .required {
-        color: #e74c3c;
-        margin-left: 0.25rem;
-      }
-    }
-
-    .p-help {
-      display: block;
-      margin-top: 0.5rem;
-      font-size: 0.875rem;
-      color: var(--text-color-secondary);
-      font-style: italic;
-    }
-  }
-
-  .file-checkbox-list {
-    max-height: 300px;
-    overflow-y: auto;
-
-    .file-checkbox-item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem;
-      border-bottom: 1px solid #e0e0e0;
-    }
-  }
-}
-
-// Fix confirmation dialog width
-::ng-deep {
-  .approve-logo-confirm-dialog,
-  .p-confirm-dialog {
-    .p-dialog {
-      width: 500px !important;
-      max-width: 90vw;
-    }
-  }
-
-  .assign-designer-dialog {
-    .p-dialog-content {
-      padding: 1.5rem;
-      overflow: visible;
-    }
-
-    .p-dropdown {
-      width: 100%;
-
-      .p-dropdown-label {
-        width: 100%;
-        padding: 0.75rem;
-      }
-
-      .p-dropdown-trigger {
-        width: 2.5rem;
-      }
-    }
-
-    .p-dropdown-panel {
-      z-index: 10001 !important;
-      min-width: 100%;
-
-      .p-dropdown-items-wrapper {
-        max-height: 200px;
-      }
-    }
-
-    .p-dialog-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.75rem;
-      padding: 1rem 1.5rem;
-      border-top: 1px solid var(--surface-border);
-    }
+/* Assign designer dialog - dropdown needs overflow visible */
+::ng-deep .assign-designer-dialog {
+  .p-dialog-content {
+    overflow: visible !important;
   }
 }
 

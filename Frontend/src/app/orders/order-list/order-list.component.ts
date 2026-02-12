@@ -381,7 +381,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
     return {
       id: backendOrder.id || backendOrder.Id,
       clientId: backendOrder.clientId || backendOrder.ClientId || '',
-      designerId: backendOrder.designerId || backendOrder.DesignerId,
+      designerId: (backendOrder.designer || backendOrder.Designer)?.userId || (backendOrder.designer || backendOrder.Designer)?.UserId || backendOrder.designerId || backendOrder.DesignerId,
       title: backendOrder.title || backendOrder.Title || '',
       description: backendOrder.description || backendOrder.Description || '',
       status: status,
@@ -486,7 +486,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
   formatRelativeDate(date: Date | string | undefined): string {
     if (!date) return 'N/A';
     try {
-      const dateObj = new Date(date);
+      const dateStr = typeof date === 'string' ? date : date.toISOString();
+      const dateObj = new Date(dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z');
       if (isNaN(dateObj.getTime())) return 'N/A';
       const now = new Date();
       const diffMs = now.getTime() - dateObj.getTime();
@@ -560,8 +561,10 @@ export class OrderListComponent implements OnInit, OnDestroy {
     return this.isAdmin || this.isSuperAdmin || this.isDesigner;
   }
 
-  canGenerateInvoice(): boolean {
-    return this.isAdmin || this.isSuperAdmin;
+  canGenerateInvoice(order: Order): boolean {
+    return (this.isAdmin || this.isSuperAdmin) 
+      && order.status === OrderStatus.Completed 
+      && !order.hasInvoice;
   }
 
   // Client-specific actions
@@ -855,6 +858,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoice generated successfully' });
+          this.loadOrders(); // Refresh to update hasInvoice flag
         },
         error: (error) => {
           this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to generate invoice' });

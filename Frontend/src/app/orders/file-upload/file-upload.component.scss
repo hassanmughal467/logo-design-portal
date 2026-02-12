@@ -307,74 +307,55 @@
   }
 }
 
-// Confirmation Dialog Styles
+// Confirmation Dialog Content Styles (header/footer from global style)
 ::ng-deep .upload-confirm-dialog {
-  .p-dialog-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 12px 12px 0 0;
-    padding: 1.5rem;
-
-    .p-dialog-title {
-      font-weight: 600;
-    }
-
-    .p-dialog-header-icon {
-      color: white;
-    }
-  }
-
-  .p-dialog-content {
-    padding: 2rem;
-  }
-
   .confirm-dialog-content {
     text-align: center;
 
     .confirm-icon {
-      width: 80px;
-      height: 80px;
-      margin: 0 auto 1.5rem;
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 1.25rem;
       display: flex;
       align-items: center;
       justify-content: center;
       background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
       border-radius: 50%;
       color: #f59f00;
-      font-size: 2.5rem;
+      font-size: 2rem;
     }
 
     .confirm-message {
-      font-size: 1.1rem;
-      color: #2c3e50;
-      margin-bottom: 1rem;
+      font-size: 1.05rem;
+      color: var(--text-color);
+      margin-bottom: 0.75rem;
       line-height: 1.6;
 
       strong {
-        color: #667eea;
+        color: var(--primary-color);
       }
     }
 
     .confirm-note {
-      font-size: 0.9rem;
-      color: #6c757d;
-      margin-bottom: 1.5rem;
+      font-size: 0.875rem;
+      color: var(--text-color-secondary);
+      margin-bottom: 1.25rem;
       font-style: italic;
     }
 
     .confirm-files-preview {
       text-align: left;
-      margin-top: 1.5rem;
+      margin-top: 1.25rem;
       padding: 1rem;
-      background: #f8f9fa;
-      border-radius: 8px;
-      border-left: 3px solid #667eea;
+      background: var(--surface-ground);
+      border-radius: 10px;
+      border-left: 3px solid var(--primary-color);
 
       .preview-header {
         font-weight: 600;
-        color: #2c3e50;
+        color: var(--text-color);
         margin-bottom: 0.75rem;
-        font-size: 0.95rem;
+        font-size: 0.9rem;
       }
 
       .preview-list {
@@ -388,36 +369,23 @@
       .preview-item {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        padding: 0.5rem;
-        background: white;
-        border-radius: 6px;
-        font-size: 0.9rem;
+        gap: 0.65rem;
+        padding: 0.5rem 0.65rem;
+        background: var(--surface-card);
+        border-radius: 8px;
+        font-size: 0.875rem;
+        border: 1px solid var(--surface-border);
 
         i {
-          color: #667eea;
+          color: var(--primary-color);
         }
 
         .preview-size {
           margin-left: auto;
-          color: #6c757d;
-          font-size: 0.85rem;
+          color: var(--text-color-secondary);
+          font-size: 0.8rem;
         }
       }
-    }
-  }
-
-  .p-dialog-footer {
-    padding: 1.5rem;
-    border-top: 1px solid #e0e0e0;
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-
-    ::ng-deep .p-button {
-      padding: 0.75rem 2rem;
-      font-weight: 600;
-      border-radius: 8px;
     }
   }
 }

@@ -19,6 +19,7 @@ export interface DashboardStats {
   ordersAwaitingApproval?: number;
   pendingInvoices?: number;
   dueAmount?: number;
+  overdueAmount?: number;
   amountPaidThisMonth?: number;
   // Client analytics & productivity
   ordersThisMonth?: number;
@@ -173,6 +174,7 @@ export class DashboardService {
     let ordersAwaitingApproval = 0;
     let pendingInvoices = 0;
     let dueAmount = 0;
+    let overdueAmount = 0;
     let amountPaidThisMonth = 0;
 
     // Client analytics variables
@@ -204,8 +206,14 @@ export class DashboardService {
         inv.status === 'Pending' || inv.status === 'Overdue'
       ).length;
 
+      // Due amount = total unpaid (Pending + Overdue)
       dueAmount = invoices
         .filter(inv => inv.status === 'Pending' || inv.status === 'Overdue')
+        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
+
+      // Overdue amount = only overdue invoices
+      overdueAmount = invoices
+        .filter(inv => inv.status === 'Overdue')
         .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
 
       amountPaidThisMonth = invoices
@@ -240,19 +248,19 @@ export class DashboardService {
         return completionDate >= startOfMonth;
       }).length;
 
-      // Lifetime spend (sum of prices on all non-cancelled orders)
-      lifetimeSpend = orders
-        .filter(o => o.status !== OrderStatus.Cancelled && o.status !== OrderStatus.CancelledByUser && o.status !== OrderStatus.CancelledByAdmin)
-        .reduce((sum, o) => sum + (o.price || 0), 0);
+      // Lifetime spend (sum of paid invoice amounts only)
+      lifetimeSpend = invoices
+        .filter(inv => inv.status === 'Paid')
+        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
 
-      // Monthly spend (orders created this month)
-      monthlySpend = orders
-        .filter(o => {
-          const created = new Date(o.createdAt);
-          return created >= startOfMonth &&
-            o.status !== OrderStatus.Cancelled && o.status !== OrderStatus.CancelledByUser && o.status !== OrderStatus.CancelledByAdmin;
+      // Monthly spend (paid invoices this month)
+      monthlySpend = invoices
+        .filter(inv => {
+          if (inv.status !== 'Paid' || !inv.paidDate) return false;
+          const paidDate = new Date(inv.paidDate);
+          return paidDate >= startOfMonth;
         })
-        .reduce((sum, o) => sum + (o.price || 0), 0);
+        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
 
       // Average order value
       const nonCancelledOrders = orders.filter(o =>
@@ -281,6 +289,7 @@ export class DashboardService {
       ordersAwaitingApproval,
       pendingInvoices,
       dueAmount,
+      overdueAmount,
       amountPaidThisMonth,
       // Client analytics
       ordersThisMonth,
@@ -397,6 +406,7 @@ export class DashboardService {
         ordersAwaitingApproval: 0,
         pendingInvoices: 0,
         dueAmount: 0,
+        overdueAmount: 0,
         amountPaidThisMonth: 0,
         ordersThisMonth: 0,
         ordersThisWeek: 0,

@@ -94,6 +94,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   notifications: any[] = [];
   filteredGalleryItems: any[] = [];
   gallerySearchTerm = '';
+  invoicesPanelCollapsed = true;
   selectedInvoiceTabIndex = 0;
   selectedInvoices: any[] = [];
   showPaymentDialog = false;
@@ -269,27 +270,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // Productivity & Spend row
       this.clientProductivityMetrics = [
         { label: 'Completed This Month', value: data.stats.completedOrdersThisMonth || 0, icon: 'pi pi-check-circle', color: 'success', clickable: true, route: '/orders' },
-        { label: 'Lifetime Spend', value: data.stats.lifetimeSpend || 0, icon: 'pi pi-wallet', color: 'primary', isCurrency: true },
-        { label: 'Monthly Spend', value: data.stats.monthlySpend || 0, icon: 'pi pi-chart-line', color: 'info', isCurrency: true },
-        { label: 'Avg Order Value', value: data.stats.averageOrderValue || 0, icon: 'pi pi-percentage', color: 'warning', isCurrency: true }
+        { label: 'Lifetime Spend', value: data.stats.lifetimeSpend || 0, icon: 'pi pi-wallet', color: 'primary', isCurrency: true, clickable: true, route: '/invoices' },
+        { label: 'Monthly Spend', value: data.stats.monthlySpend || 0, icon: 'pi pi-chart-line', color: 'info', isCurrency: true, clickable: true, route: '/invoices' },
+        { label: 'Avg Order Value', value: data.stats.averageOrderValue || 0, icon: 'pi pi-percentage', color: 'warning', isCurrency: true, clickable: true, route: '/orders' }
       ];
 
       // Quick Status row (existing cards, trimmed)
       this.clientFinancialCards = [
         { label: 'Active Orders', value: data.stats.activeOrders || 0, icon: 'pi pi-shopping-cart', color: 'info', clickable: true, route: '/orders' },
         { label: 'Awaiting Approval', value: data.stats.ordersAwaitingApproval || 0, icon: 'pi pi-hourglass', color: 'warning', clickable: true, route: '/orders' },
-        { label: 'Pending Invoices', value: data.stats.pendingInvoices || 0, icon: 'pi pi-file', color: 'danger' },
-        { label: 'Due Amount', value: data.stats.dueAmount || 0, icon: 'pi pi-dollar', color: 'danger', isCurrency: true },
-        { label: 'Paid This Month', value: data.stats.amountPaidThisMonth || 0, icon: 'pi pi-money-bill', color: 'success', isCurrency: true }
+        { label: 'Pending Invoices', value: data.stats.pendingInvoices || 0, icon: 'pi pi-file', color: 'danger', clickable: true, route: '#invoices-panel' },
+        { label: 'Due Amount', value: data.stats.overdueAmount || 0, icon: 'pi pi-dollar', color: 'danger', isCurrency: true, clickable: true, route: '#invoices-panel' },
+        { label: 'Paid This Month', value: data.stats.amountPaidThisMonth || 0, icon: 'pi pi-money-bill', color: 'success', isCurrency: true, clickable: true, route: '#invoices-panel' }
       ];
 
       // Compact summary bar (always visible at top)
       this.summaryMetrics = [
         { label: 'Total Orders', value: data.stats.totalOrders, icon: 'pi pi-list', color: 'primary', isCurrency: false, route: '/orders' },
-        { label: 'Active', value: data.stats.activeOrders || 0, icon: 'pi pi-spin pi-spinner', color: 'info', isCurrency: false, route: '/orders' },
-        { label: 'Pending Invoices', value: data.stats.pendingInvoices || 0, icon: 'pi pi-file', color: 'warning', isCurrency: false },
-        { label: 'Due Amount', value: data.stats.dueAmount || 0, icon: 'pi pi-dollar', color: 'danger', isCurrency: true },
-        { label: 'Lifetime Spend', value: data.stats.lifetimeSpend || 0, icon: 'pi pi-wallet', color: 'success', isCurrency: true }
+        { label: 'Active', value: data.stats.activeOrders || 0, icon: 'pi pi-sync', color: 'info', isCurrency: false, route: '/orders' },
+        { label: 'Pending Invoices', value: data.stats.pendingInvoices || 0, icon: 'pi pi-file', color: 'warning', isCurrency: false, route: '#invoices-panel' },
+        { label: 'Due Amount', value: data.stats.overdueAmount || 0, icon: 'pi pi-dollar', color: 'danger', isCurrency: true, route: '#invoices-panel' },
+        { label: 'Lifetime Spend', value: data.stats.lifetimeSpend || 0, icon: 'pi pi-wallet', color: 'success', isCurrency: true, route: '#invoices-panel' }
       ];
 
       // Keep stats empty for client (we use the grouped arrays above)
@@ -406,12 +407,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.statusChartOptions = {
       responsive: true,
       maintainAspectRatio: false,
+      layout: {
+        padding: {
+          bottom: 10
+        }
+      },
       plugins: {
         legend: {
           position: 'bottom',
           labels: {
-            padding: 15,
-            usePointStyle: true
+            padding: 16,
+            usePointStyle: true,
+            pointStyleWidth: 10,
+            boxWidth: 8,
+            boxHeight: 8,
+            font: {
+              size: 12
+            }
           }
         },
         tooltip: {
@@ -706,7 +718,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   navigateToRoute(route: string): void {
+    if (route === '#invoices-panel') {
+      this.scrollToInvoicesPanel();
+      return;
+    }
     this.router.navigate([route]);
+  }
+
+  scrollToInvoicesPanel(): void {
+    // Expand the panel if collapsed
+    this.invoicesPanelCollapsed = false;
+    // Scroll to the panel after it expands
+    setTimeout(() => {
+      const el = document.getElementById('invoices-panel');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 200);
   }
 
   // Client-specific methods
@@ -790,6 +818,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     window.open(url, '_blank');
   }
 
+  getUnpaidInvoices(): any[] {
+    return this.invoices.filter(inv => inv.status === 'Pending' || inv.status === 'Overdue');
+  }
+
   getPendingInvoices(): any[] {
     return this.invoices.filter(inv => inv.status === 'Pending');
   }
@@ -871,10 +903,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private getInvoicesForCurrentTab(): any[] {
     switch (this.selectedInvoiceTabIndex) {
       case 0:
-        return this.getPendingInvoices();
+        return this.getUnpaidInvoices();
       case 1:
-        return this.getDueInvoices();
+        return this.getPendingInvoices();
       case 2:
+        return this.getDueInvoices();
+      case 3:
         return this.getPaidInvoices();
       default:
         return [];
@@ -900,19 +934,51 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    const tabNames = ['pending', 'due', 'paid'];
+    const tabNames = ['unpaid', 'pending', 'due', 'paid'];
     link.download = `invoices_${tabNames[this.selectedInvoiceTabIndex] || 'all'}_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     window.URL.revokeObjectURL(url);
   }
 
   private downloadPDF(invoices: any[]): void {
-    // In a real implementation, this would call a backend endpoint to generate PDF
-    this.messageService.add({
-      severity: 'info',
-      summary: 'Info',
-      detail: 'PDF download will be implemented with backend support'
-    });
+    // Map tab index to status for the backend filter
+    const statusMap: { [key: number]: string } = {
+      0: '', // Unpaid = all non-paid
+      1: 'Pending',
+      2: 'Overdue',
+      3: 'Paid'
+    };
+    const status = statusMap[this.selectedInvoiceTabIndex] ?? '';
+    const endpoint = status ? `invoices/report?status=${status}` : 'invoices/report';
+
+    this.apiService.getBlob(endpoint)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          const tabNames = ['unpaid', 'pending', 'due', 'paid'];
+          link.download = `invoices_${tabNames[this.selectedInvoiceTabIndex] || 'all'}_${new Date().toISOString().split('T')[0]}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Invoice report PDF downloaded successfully'
+          });
+        },
+        error: (error) => {
+          console.error('Error downloading invoice report PDF:', error);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to download invoice report PDF'
+          });
+        }
+      });
   }
 
   getWeeklySummary(): { total: number; paid: number; pending: number } {
@@ -1092,7 +1158,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             newStatus: log.newStatus ? this.formatStatus(log.newStatus) : undefined,
             performedBy: this.sanitizePerformedBy(log.performedBy),
             note: log.note,
-            createdAt: new Date(log.createdAt),
+            createdAt: new Date(log.createdAt?.endsWith?.('Z') ? log.createdAt : log.createdAt + 'Z'),
             icon: this.getTimelineIcon(log.action),
             color: this.getTimelineColor(log.action)
           }))
@@ -1323,7 +1389,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   formatRelativeDate(date: Date | string | null): string {
     if (!date) return 'N/A';
-    const d = new Date(date);
+    const dateStr = typeof date === 'string' ? date : date.toISOString();
+    // Backend returns UTC dates — ensure we parse as UTC
+    const d = new Date(dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z');
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));

@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IFileService, FileService>();
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<IInvoiceService, InvoiceService>();
+        services.AddScoped<IInvoicePdfService, InvoicePdfService>();
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<IReviewService, ReviewService>();
         services.AddScoped<ISettingsService, SettingsService>();

@@ -427,23 +427,7 @@
     }
   }
 
-  .dialog-content {
-    .form-group {
-      margin-bottom: 1.5rem;
-
-      label {
-        display: block;
-        font-size: 0.875rem;
-        color: #334155;
-        font-weight: 500;
-        margin-bottom: 0.5rem;
-      }
-
-      .full-width {
-        width: 100%;
-      }
-    }
-  }
+  /* Dialog content form-group styles inherited from global styles.scss */
 }
 
 // Responsive

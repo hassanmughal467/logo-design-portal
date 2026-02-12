@@ -52,6 +52,9 @@ export interface Order {
   refundedAt?: Date;
   refundAmount?: number;
   refundReason?: string;
+  
+  // Invoice fields
+  hasInvoice?: boolean;
 }
 
 export enum OrderStatus {

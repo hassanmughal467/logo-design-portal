@@ -265,6 +265,92 @@ public class InvoiceService : IInvoiceService
         return invoices.Select(MapToInvoiceResponseDto).ToList();
     }
 
+    public async Task<InvoiceResponseDto> UpdateInvoiceAsync(Guid invoiceId, UpdateInvoiceRequestDto request, Guid updatedBy)
+    {
+        var invoice = await _context.Invoices
+            .Include(i => i.InvoiceOrders)
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
+
+        if (invoice == null)
+        {
+            throw new InvalidOperationException("Invoice not found.");
+        }
+
+        if (invoice.Status == InvoiceStatus.Paid)
+        {
+            throw new InvalidOperationException("Cannot edit a paid invoice.");
+        }
+
+        // Update invoice fields
+        if (request.BillingType.HasValue)
+        {
+            invoice.BillingType = request.BillingType.Value;
+        }
+
+        if (request.TaxAmount.HasValue)
+        {
+            invoice.TaxAmount = request.TaxAmount.Value;
+            invoice.TotalAmount = invoice.Amount + invoice.TaxAmount;
+        }
+
+        if (request.DueDate.HasValue)
+        {
+            invoice.DueDate = request.DueDate.Value;
+            
+            // If due date is in the future and invoice was overdue, reset to pending
+            if (invoice.DueDate > DateTime.UtcNow && invoice.Status == InvoiceStatus.Overdue)
+            {
+                invoice.Status = InvoiceStatus.Pending;
+            }
+        }
+
+        if (request.PaymentMethod != null)
+        {
+            invoice.PaymentMethod = request.PaymentMethod;
+        }
+
+        if (request.Notes != null)
+        {
+            invoice.Notes = request.Notes;
+        }
+
+        // Update individual items if provided
+        if (request.Items != null && request.Items.Any())
+        {
+            foreach (var itemUpdate in request.Items)
+            {
+                var existingItem = invoice.InvoiceOrders.FirstOrDefault(io => io.Id == itemUpdate.Id);
+                if (existingItem != null)
+                {
+                    if (itemUpdate.Description != null)
+                    {
+                        existingItem.Description = itemUpdate.Description;
+                    }
+                    if (itemUpdate.Amount.HasValue)
+                    {
+                        existingItem.Amount = itemUpdate.Amount.Value;
+                    }
+                    existingItem.UpdatedAt = DateTime.UtcNow;
+                    existingItem.UpdatedBy = updatedBy;
+                }
+            }
+
+            // Recalculate totals from items
+            invoice.Amount = invoice.InvoiceOrders.Sum(io => io.Amount);
+            invoice.TotalAmount = invoice.Amount + invoice.TaxAmount;
+        }
+
+        invoice.UpdatedAt = DateTime.UtcNow;
+        invoice.UpdatedBy = updatedBy;
+
+        // Create audit log
+        await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Updated, updatedBy, "Invoice updated");
+
+        await _context.SaveChangesAsync();
+
+        return await GetInvoiceByIdAsync(invoiceId) ?? throw new InvalidOperationException("Failed to update invoice.");
+    }
+
     public async Task<InvoiceResponseDto> MarkInvoiceAsPaidAsync(Guid invoiceId, string? paymentMethod, Guid? performedBy)
     {
         var invoice = await _context.Invoices
@@ -502,11 +588,11 @@ public class InvoiceService : IInvoiceService
         {
             TotalInvoices = invoices.Count,
             PaidInvoices = invoices.Count(i => i.Status == InvoiceStatus.Paid),
-            DueInvoices = invoices.Count(i => i.Status == InvoiceStatus.Pending),
+            DueInvoices = invoices.Count(i => i.Status != InvoiceStatus.Paid), // Unpaid = Pending + Overdue
             OverdueInvoices = invoices.Count(i => i.Status == InvoiceStatus.Overdue),
             TotalAmount = invoices.Sum(i => i.TotalAmount),
             PaidAmount = invoices.Where(i => i.Status == InvoiceStatus.Paid).Sum(i => i.TotalAmount),
-            DueAmount = invoices.Where(i => i.Status == InvoiceStatus.Pending).Sum(i => i.TotalAmount),
+            DueAmount = invoices.Where(i => i.Status != InvoiceStatus.Paid).Sum(i => i.TotalAmount), // Unpaid = Pending + Overdue
             OverdueAmount = invoices.Where(i => i.Status == InvoiceStatus.Overdue).Sum(i => i.TotalAmount)
         };
 

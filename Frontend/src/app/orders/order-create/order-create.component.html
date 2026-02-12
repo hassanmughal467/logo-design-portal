@@ -4,7 +4,7 @@
   [style]="{width: '90vw', maxWidth: '800px'}"
   [closable]="true"
   [draggable]="false"
-  [resizable]="true"
+  [resizable]="false"
   header="Create New Order"
   (onHide)="closeModal()"
   styleClass="order-create-dialog">
@@ -40,7 +40,7 @@
             placeholder="Describe your logo requirements..."
           ></textarea>
           <small class="p-error" *ngIf="f['description'].invalid && f['description'].touched">
-            Description is required (minimum 10 characters)
+            Description is required
           </small>
         </div>
 
@@ -71,14 +71,24 @@
             optionLabel="label"
             optionValue="value"
             placeholder="Select priority"
-            [styleClass]="'w-full'"
-          ></p-dropdown>
-          <small class="p-help">
-            <strong>Low:</strong> No rush<br>
-            <strong>Normal:</strong> Standard timeline<br>
-            <strong>High:</strong> Important, faster delivery<br>
-            <strong>Urgent:</strong> Rush order, fastest delivery
-          </small>
+            [styleClass]="'w-full priority-dropdown'"
+          >
+            <ng-template let-item pTemplate="item">
+              <div class="priority-option">
+                <span class="priority-dot" [ngClass]="'priority-' + item.value"></span>
+                <div class="priority-info">
+                  <span class="priority-label">{{ item.label }}</span>
+                  <span class="priority-desc">{{ item.description }}</span>
+                </div>
+              </div>
+            </ng-template>
+            <ng-template let-item pTemplate="selectedItem">
+              <div class="priority-selected" *ngIf="item">
+                <span class="priority-dot" [ngClass]="'priority-' + item.value"></span>
+                <span class="priority-label">{{ item.label }}</span>
+              </div>
+            </ng-template>
+          </p-dropdown>
         </div>
 
         <!-- Deadline -->
@@ -157,38 +167,36 @@
 
         <!-- File Upload -->
         <div class="form-group full-width">
-          <label for="fileUpload">Reference Files (Optional)</label>
-          <p-fileUpload
-            #fileUpload
-            id="fileUpload"
-            mode="basic"
-            [multiple]="true"
-            [auto]="false"
-            accept="image/*,.pdf,.ai,.eps,.psd,.svg"
-            [maxFileSize]="10000000"
-            (onSelect)="onFileSelect($event)"
-            chooseLabel="Choose Files"
-            [showUploadButton]="false"
-            [showCancelButton]="false"
-            styleClass="w-full"
-          ></p-fileUpload>
-          <small class="p-help">
-            Upload reference images or documents (max 10MB per file). Allowed types: JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD
-          </small>
+          <label>Reference Files (Optional)</label>
+          <div class="file-upload-area" (click)="fileInput.click()" (dragover)="onDragOver($event)" (drop)="onDrop($event)" (dragleave)="onDragLeave($event)" [class.drag-over]="isDragOver">
+            <input 
+              #fileInput 
+              type="file" 
+              multiple 
+              accept="image/*,.pdf,.ai,.eps,.psd,.svg"
+              (change)="onNativeFileSelect($event)"
+              style="display: none"
+            />
+            <i class="pi pi-cloud-upload upload-icon"></i>
+            <p class="upload-text">Drag & drop files here or <span class="browse-link">browse</span></p>
+            <small class="upload-hint">Max 10MB per file · JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD</small>
+          </div>
           
           <!-- Selected Files List -->
           <div class="selected-files" *ngIf="selectedFiles.length > 0">
+            <div class="files-header">
+              <span class="files-count">{{ selectedFiles.length }} file(s) selected</span>
+              <button type="button" class="clear-all-btn" (click)="clearAllFiles()">Clear All</button>
+            </div>
             <div class="file-item" *ngFor="let file of selectedFiles; let i = index">
-              <span class="file-name">
-                <i class="pi pi-file"></i>
-                {{ file.name }}
-              </span>
+              <i class="pi" [ngClass]="getFileIcon(file.name)"></i>
+              <span class="file-name">{{ file.name }}</span>
               <span class="file-size">{{ formatFileSize(file.size) }}</span>
               <button 
                 type="button"
                 class="remove-file-btn"
-                [pTooltip]="'Remove file'"
-                (click)="removeFile(i)"
+                pTooltip="Remove file"
+                (click)="removeFile(i); $event.stopPropagation()"
                 aria-label="Remove file"
               >
                 <i class="pi pi-times"></i>

@@ -10,6 +10,9 @@ import { CardModule } from 'primeng/card';
 import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { InputTextModule } from 'primeng/inputtext';
+import { InputTextareaModule } from 'primeng/inputtextarea';
+import { InputNumberModule } from 'primeng/inputnumber';
+import { CalendarModule } from 'primeng/calendar';
 import { DropdownModule } from 'primeng/dropdown';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { DialogModule } from 'primeng/dialog';
@@ -25,6 +28,9 @@ import { DialogModule } from 'primeng/dialog';
     TagModule,
     TooltipModule,
     InputTextModule,
+    InputTextareaModule,
+    InputNumberModule,
+    CalendarModule,
     DropdownModule,
     MultiSelectModule,
     DialogModule

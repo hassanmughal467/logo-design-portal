@@ -41,4 +41,7 @@ public class OrderResponseDto
     public DateTime? RefundedAt { get; set; }
     public decimal? RefundAmount { get; set; }
     public string? RefundReason { get; set; }
+    
+    // Invoice fields
+    public bool HasInvoice { get; set; }
 }

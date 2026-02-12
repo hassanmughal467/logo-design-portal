@@ -207,7 +207,7 @@
               <td>{{ file.versionNumber }}</td>
               <td>
                 <p-tag 
-                  [value]="file.isVisibleToClient ? 'Visible' : 'Hidden'" 
+                  [value]="file.isVisibleToClient ? 'Active' : 'Hidden'" 
                   [severity]="file.isVisibleToClient ? 'success' : 'warning'"
                 ></p-tag>
               </td>
@@ -324,6 +324,8 @@
   header="Price Approval" 
   [modal]="true"
   [style]="{width: '500px'}"
+  [draggable]="false"
+  [resizable]="false"
 >
   <div class="dialog-content">
     <div class="form-group" *ngIf="isAdmin">
@@ -446,6 +448,8 @@
   header="Send Files to Client" 
   [modal]="true"
   [style]="{width: '500px'}"
+  [draggable]="false"
+  [resizable]="false"
 >
   <div class="dialog-content">
     <p>Select files to send to client:</p>
@@ -481,6 +485,8 @@
   header="Request Revision" 
   [modal]="true"
   [style]="{width: '700px'}"
+  [draggable]="false"
+  [resizable]="false"
 >
   <div class="dialog-content">
     <div class="warning-message" style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin-bottom: 20px;">
@@ -553,6 +559,8 @@
   header="Add Comment" 
   [modal]="true"
   [style]="{width: '500px'}"
+  [draggable]="false"
+  [resizable]="false"
 >
   <div class="dialog-content">
     <div class="form-group">

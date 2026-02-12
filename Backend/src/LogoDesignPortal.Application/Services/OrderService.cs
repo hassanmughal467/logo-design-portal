@@ -115,6 +115,10 @@ public class OrderService : IOrderService
         }
 
         var response = _mapper.Map<OrderResponseDto>(order);
+
+        // Check if order already has an invoice
+        response.HasInvoice = await _context.InvoiceOrders
+            .AnyAsync(io => io.OrderId == orderId);
         
         // Mask client info for Admin and Designer
         if (userRole == "Admin" || userRole == "Designer")
@@ -163,7 +167,22 @@ public class OrderService : IOrderService
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync();
 
-        return _mapper.Map<List<OrderResponseDto>>(orders);
+        var response = _mapper.Map<List<OrderResponseDto>>(orders);
+
+        // Check which orders already have invoices
+        var clientOrderIds = orders.Select(o => o.Id).ToList();
+        var clientOrderIdsWithInvoices = await _context.InvoiceOrders
+            .Where(io => io.OrderId.HasValue && clientOrderIds.Contains(io.OrderId.Value))
+            .Select(io => io.OrderId!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var order in response)
+        {
+            order.HasInvoice = clientOrderIdsWithInvoices.Contains(order.Id);
+        }
+
+        return response;
     }
 
     public async Task<List<OrderResponseDto>> GetOrdersByDesignerAsync(Guid designerId)
@@ -214,6 +233,19 @@ public class OrderService : IOrderService
             .ToListAsync();
 
         var response = _mapper.Map<List<OrderResponseDto>>(orders);
+
+        // Check which orders already have invoices
+        var orderIds = orders.Select(o => o.Id).ToList();
+        var orderIdsWithInvoices = await _context.InvoiceOrders
+            .Where(io => io.OrderId.HasValue && orderIds.Contains(io.OrderId.Value))
+            .Select(io => io.OrderId!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var order in response)
+        {
+            order.HasInvoice = orderIdsWithInvoices.Contains(order.Id);
+        }
 
         // Mask client info based on role
         if (userRole == "Admin")

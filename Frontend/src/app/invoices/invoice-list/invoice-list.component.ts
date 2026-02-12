@@ -66,6 +66,16 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   showDetailDialog = false;
   selectedInvoice: Invoice | null = null;
 
+  // Edit invoice dialog
+  showEditDialog = false;
+  editInvoice: Invoice | null = null;
+  editBillingType: number = 1;
+  editDueDate: Date | null = null;
+  editTaxAmount: number = 0;
+  editPaymentMethod: string = '';
+  editNotes: string = '';
+  editItems: { id: string; description: string; amount: number }[] = [];
+
   // Statistics
   invoiceStats = {
     total: 0,
@@ -146,8 +156,33 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   downloadInvoice(invoiceId: string): void {
-    // Download invoice PDF
-    window.open(`http://localhost:5000/api/invoices/${invoiceId}/download`, '_blank');
+    this.apiService.getBlob(`invoices/${invoiceId}/download`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `Invoice-${invoiceId}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Invoice PDF downloaded successfully'
+          });
+        },
+        error: (error) => {
+          console.error('Error downloading invoice PDF:', error);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to download invoice PDF'
+          });
+        }
+      });
   }
 
   openGenerateDialog(): void {
@@ -237,6 +272,64 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       });
   }
 
+  openEditDialog(invoice: Invoice): void {
+    this.editInvoice = invoice;
+    this.editBillingType = invoice.billingType;
+    this.editDueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
+    this.editTaxAmount = invoice.taxAmount || 0;
+    this.editPaymentMethod = invoice.paymentMethod || '';
+    this.editNotes = invoice.notes || '';
+    this.editItems = (invoice.items || []).map(item => ({
+      id: item.id,
+      description: item.description,
+      amount: item.amount
+    }));
+    this.showEditDialog = true;
+  }
+
+  saveInvoice(): void {
+    if (!this.editInvoice) return;
+
+    const request: any = {
+      billingType: this.editBillingType,
+      dueDate: this.editDueDate,
+      taxAmount: this.editTaxAmount,
+      paymentMethod: this.editPaymentMethod,
+      notes: this.editNotes
+    };
+
+    // Include item updates if any
+    if (this.editItems.length > 0) {
+      request.items = this.editItems.map(item => ({
+        id: item.id,
+        description: item.description,
+        amount: item.amount
+      }));
+    }
+
+    this.apiService.put(`invoices/${this.editInvoice.id}`, request)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Invoice updated successfully'
+          });
+          this.showEditDialog = false;
+          this.loadInvoices();
+          this.loadStatistics();
+        },
+        error: (error) => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.error?.error || 'Failed to update invoice'
+          });
+        }
+      });
+  }
+
   getStatusSeverity(status: string): string {
     const severityMap: { [key: string]: string } = {
       'Paid': 'success',
@@ -286,7 +379,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.invoiceStats = {
       total: invoices.length,
       paid: invoices.filter(i => i.status === 'Paid').length,
-      unpaid: invoices.filter(i => i.status !== 'Paid' && i.status !== 'Overdue').length,
+      unpaid: invoices.filter(i => i.status !== 'Paid').length, // Unpaid includes Overdue
       overdue: invoices.filter(i => i.status === 'Overdue').length,
       totalAmount: invoices.reduce((sum, i) => sum + (i.totalAmount || i.amount), 0),
       paidAmount: invoices.filter(i => i.status === 'Paid').reduce((sum, i) => sum + (i.totalAmount || i.amount), 0),
