@@ -142,18 +142,21 @@ _ = Task.Run(async () =>
             
             logger.LogInformation("Initializing database...");
             
-            // Use async method and add timeout
-            var canConnect = await context.Database.CanConnectAsync();
-            if (!canConnect)
+            // Apply pending migrations
+            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+            if (pendingMigrations.Any())
             {
-                logger.LogInformation("Database does not exist. Creating database...");
-                await context.Database.EnsureCreatedAsync();
-                logger.LogInformation("Database created successfully.");
+                logger.LogInformation("Applying pending migrations...");
+                await context.Database.MigrateAsync();
+                logger.LogInformation("Migrations applied successfully.");
             }
             else
             {
-                logger.LogInformation("Database connection verified.");
+                logger.LogInformation("Database is up to date.");
             }
+
+            // Seed payment settings with dummy values if they don't exist
+            await SeedPaymentSettingsAsync(context, logger);
 
             // Seed or reset SuperAdmin user
             var superAdminRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
@@ -196,3 +199,64 @@ _ = Task.Run(async () =>
 });
 
 app.Run();
+
+// Helper method to seed payment settings
+static async Task SeedPaymentSettingsAsync(ApplicationDbContext context, ILogger logger)
+{
+    try
+    {
+        var superAdmin = await context.Users.FirstOrDefaultAsync(u => u.Email == "superadmin@logodesign.com");
+        var createdBy = superAdmin?.Id ?? Guid.Empty;
+
+        // Payment settings to seed
+        var paymentSettings = new[]
+        {
+            // PayPal Settings
+            new { Key = "PayPalClientId", Value = "DUMMY_PAYPAL_CLIENT_ID_FOR_TESTING", Category = "Payment" },
+            new { Key = "PayPalClientSecret", Value = "DUMMY_PAYPAL_CLIENT_SECRET_FOR_TESTING", Category = "Payment" },
+            new { Key = "PayPalUseSandbox", Value = "true", Category = "Payment" },
+            
+            // Wise Settings
+            new { Key = "WiseApiKey", Value = "DUMMY_WISE_API_KEY_FOR_TESTING", Category = "Payment" },
+            new { Key = "WiseProfileId", Value = "DUMMY_WISE_PROFILE_ID_FOR_TESTING", Category = "Payment" },
+            
+            // Bank Details
+            new { Key = "BankName", Value = "Demo Bank", Category = "Payment" },
+            new { Key = "AccountHolderName", Value = "Hawk Merchandising", Category = "Payment" },
+            new { Key = "AccountNumber", Value = "1234567890", Category = "Payment" },
+            new { Key = "IBAN", Value = "GB82WEST12345698765432", Category = "Payment" },
+            new { Key = "SWIFT", Value = "DEMOBANK123", Category = "Payment" },
+            new { Key = "RoutingNumber", Value = "123456789", Category = "Payment" },
+            new { Key = "BranchAddress", Value = "123 Main Street, City, Country", Category = "Payment" },
+            new { Key = "BankCurrency", Value = "USD", Category = "Payment" }
+        };
+
+        foreach (var setting in paymentSettings)
+        {
+            var existing = await context.Settings
+                .FirstOrDefaultAsync(s => s.Key == setting.Key && s.Category == setting.Category && !s.IsDeleted);
+
+            if (existing == null)
+            {
+                context.Settings.Add(new Settings
+                {
+                    Id = Guid.NewGuid(),
+                    Key = setting.Key,
+                    Value = setting.Value,
+                    Category = setting.Category,
+                    Description = $"Dummy {setting.Key} for testing purposes",
+                    CreatedBy = createdBy,
+                    CreatedAt = DateTime.UtcNow
+                });
+                logger.LogInformation($"Seeded payment setting: {setting.Key}");
+            }
+        }
+
+        await context.SaveChangesAsync();
+        logger.LogInformation("Payment settings seeded successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Error seeding payment settings. They may need to be configured manually.");
+    }
+}

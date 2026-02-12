@@ -315,6 +315,24 @@ public class OrdersController : ControllerBase
         }
     }
 
+    [HttpPut("{id}/allow-uploads")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetAllowUploads(Guid id, [FromBody] SetAllowUploadsRequestDto request)
+    {
+        try
+        {
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var order = await _orderService.SetAllowUploadsAsync(id, request.AllowUploads, userId);
+            return Ok(order);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpGet("{id}/logs")]
     [Authorize]
     [ProducesResponseType(typeof(List<OrderLogResponseDto>), StatusCodes.Status200OK)]

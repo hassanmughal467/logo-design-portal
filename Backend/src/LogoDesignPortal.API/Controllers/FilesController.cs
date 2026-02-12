@@ -128,6 +128,28 @@ public class FilesController : ControllerBase
         }
     }
 
+    [HttpGet]
+    [ProducesResponseType(typeof(List<FileResponseDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllFiles()
+    {
+        try
+        {
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            var files = await _fileService.GetAllFilesAsync(userId, userRole);
+            return Ok(files);
+        }
+        catch (FormatException)
+        {
+            return Unauthorized(new { error = "Invalid user identifier." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting all files");
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "An error occurred while retrieving files." });
+        }
+    }
+
     [HttpGet("order/{orderId}")]
     [ProducesResponseType(typeof(List<FileUploadResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetOrderFiles(Guid orderId)
