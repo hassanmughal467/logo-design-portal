@@ -28,6 +28,10 @@ public static class DependencyInjection
         services.AddScoped<IRevisionService, RevisionService>();
         services.AddScoped<IGalleryService, GalleryService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
+        services.AddScoped<IPaymentService, PaymentService>();
+        
+        // Add HttpClient for PaymentService
+        services.AddHttpClient();
 
         return services;
     }

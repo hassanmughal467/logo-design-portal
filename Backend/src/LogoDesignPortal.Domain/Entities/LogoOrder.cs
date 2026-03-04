@@ -39,6 +39,9 @@ public class LogoOrder : BaseEntity
     public decimal? RefundAmount { get; set; }
     public string? RefundReason { get; set; }
 
+    // Upload control fields
+    public bool AllowUploads { get; set; } = true; // Admin can disable uploads for completed orders
+
     // Navigation properties
     public ClientProfile Client { get; set; } = null!;
     public DesignerProfile? Designer { get; set; }

@@ -21,4 +21,5 @@ public interface IOrderService
     Task<OrderResponseDto> UnarchiveOrderAsync(Guid orderId, Guid userId);
     Task<OrderResponseDto> RefundOrderAsync(Guid orderId, RefundOrderRequestDto request, Guid userId);
     Task<List<OrderLogResponseDto>> GetOrderLogsAsync(Guid orderId);
+    Task<OrderResponseDto> SetAllowUploadsAsync(Guid orderId, bool allowUploads, Guid userId);
 }

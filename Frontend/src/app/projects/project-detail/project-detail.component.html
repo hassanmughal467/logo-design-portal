@@ -239,7 +239,8 @@
           [options]="['Pending', 'InProgress', 'Review', 'Completed', 'Cancelled']"
           [(ngModel)]="newStatus"
           placeholder="Select status"
-          class="full-width">
+          class="full-width"
+          appendTo="body">
         </p-dropdown>
       </div>
     </div>
@@ -248,13 +249,13 @@
         label="Cancel" 
         icon="pi pi-times"
         (onClick)="showStatusDialog = false"
-        styleClass="p-button-text">
+        styleClass="p-button-outlined p-button-secondary modal-footer-btn">
       </p-button>
       <p-button 
         label="Update Status" 
         icon="pi pi-check"
         (onClick)="changeStatus()"
-        styleClass="p-button-primary">
+        styleClass="p-button-primary modal-footer-btn">
       </p-button>
     </ng-template>
   </p-dialog>

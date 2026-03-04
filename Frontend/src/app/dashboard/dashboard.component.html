@@ -79,7 +79,9 @@
         </div>
       </div>
 
-      <!-- COLLAPSIBLE: Detailed Analytics -->
+      <!-- HIDDEN: Detailed Analytics - Now available as separate page (/analytics) -->
+      <!-- Uncomment below to restore Detailed Analytics panel in dashboard -->
+      <!--
       <p-panel [toggleable]="true" [collapsed]="true" toggler="header" styleClass="dashboard-panel">
         <ng-template pTemplate="header">
           <div class="panel-header-content">
@@ -131,8 +133,11 @@
           </div>
         </div>
       </p-panel>
+      -->
 
-      <!-- COLLAPSIBLE: Financial Overview -->
+      <!-- HIDDEN: Financial Overview - Now available as separate page (/financial) -->
+      <!-- Uncomment below to restore Financial Overview panel in dashboard -->
+      <!--
       <p-panel [toggleable]="true" [collapsed]="true" toggler="header" styleClass="dashboard-panel">
         <ng-template pTemplate="header">
           <div class="panel-header-content">
@@ -185,6 +190,7 @@
           </div>
         </div>
       </p-panel>
+      -->
 
       <!-- COLLAPSIBLE: Order History (expanded by default) -->
       <p-panel [toggleable]="true" [collapsed]="false" toggler="header" styleClass="dashboard-panel">
@@ -257,7 +263,9 @@
         </p-table>
       </p-panel>
 
-      <!-- COLLAPSIBLE: File Gallery -->
+      <!-- HIDDEN: File Gallery - No longer needed on overview -->
+      <!-- Uncomment below to restore File Gallery panel in dashboard -->
+      <!--
       <p-panel [toggleable]="true" [collapsed]="true" toggler="header" styleClass="dashboard-panel">
         <ng-template pTemplate="header">
           <div class="panel-header-content">
@@ -298,9 +306,12 @@
           </div>
         </div>
       </p-panel>
+      -->
 
-      <!-- COLLAPSIBLE: Invoices & Payments -->
-      <p-panel [toggleable]="true" [(collapsed)]="invoicesPanelCollapsed" toggler="header" styleClass="dashboard-panel" id="invoices-panel">
+       <!-- HIDDEN: Invoices & Payments - Now available as separate page (/invoices) -->
+       <!-- Uncomment below to restore Invoices & Payments panel in dashboard -->
+       <!--
+       <p-panel [toggleable]="true" [(collapsed)]="invoicesPanelCollapsed" toggler="header" styleClass="dashboard-panel" id="invoices-panel">
         <ng-template pTemplate="header">
           <div class="panel-header-content">
             <i class="pi pi-money-bill"></i>
@@ -431,8 +442,11 @@
           </p-tabPanel>
         </p-tabView>
       </p-panel>
+      -->
 
-      <!-- COLLAPSIBLE: Notifications -->
+      <!-- HIDDEN: Notifications - No longer needed -->
+      <!-- Uncomment below to restore Notifications panel in dashboard -->
+      <!--
       <p-panel [toggleable]="true" [collapsed]="true" toggler="header" styleClass="dashboard-panel">
         <ng-template pTemplate="header">
           <div class="panel-header-content">
@@ -458,6 +472,7 @@
           </div>
         </div>
       </p-panel>
+      -->
 
       <!-- COLLAPSIBLE: Account & Security -->
       <p-panel [toggleable]="true" [collapsed]="true" toggler="header" styleClass="dashboard-panel">
@@ -696,21 +711,44 @@
   <app-order-detail *ngIf="selectedOrderId" [orderId]="selectedOrderId" [(visible)]="showOrderDetailModal" (orderUpdated)="onOrderUpdated()"></app-order-detail>
 
   <!-- Payment Dialog -->
-  <p-dialog [(visible)]="showPaymentDialog" header="Process Payment" [modal]="true" [style]="{width: '500px'}" [draggable]="false" [resizable]="false" *ngIf="user?.role === 'Client'">
+  <p-dialog 
+    [(visible)]="showPaymentDialog" 
+    header="Process Payment" 
+    [modal]="true" 
+    [style]="{width: '90%', maxWidth: '700px'}" 
+    [draggable]="false" 
+    [resizable]="false"
+    [closable]="true"
+    *ngIf="user?.role === 'Client'">
     <div class="payment-dialog">
-      <p>Process payment for {{ selectedInvoices.length }} invoice(s)?</p>
-      <div class="payment-summary" *ngIf="selectedInvoices.length > 0">
-        <p><strong>Total Amount:</strong> {{ formatCurrency(getSelectedInvoicesTotal()) }}</p>
+      <!-- Multiple invoices - show summary and manual payment option -->
+      <div *ngIf="selectedInvoices.length > 1" class="multiple-invoices-payment">
+        <p>Process payment for {{ selectedInvoices.length }} invoice(s)?</p>
+        <div class="payment-summary">
+          <p><strong>Total Amount:</strong> {{ formatCurrency(getSelectedInvoicesTotal()) }}</p>
+        </div>
+        <div class="field">
+          <label for="paymentMethod">Payment Method</label>
+          <input id="paymentMethod" type="text" pInputText [(ngModel)]="paymentMethod" placeholder="e.g., Bank Transfer, PayPal, etc." />
+        </div>
+        <div class="payment-actions">
+          <p-button label="Cancel" icon="pi pi-times" styleClass="p-button-text" (onClick)="cancelPayment()"></p-button>
+          <p-button label="Mark as Paid" icon="pi pi-check" styleClass="p-button-primary" (onClick)="processPayment()"></p-button>
+        </div>
       </div>
-      <div class="field">
-        <label for="paymentMethod">Payment Method</label>
-        <input id="paymentMethod" type="text" pInputText [(ngModel)]="paymentMethod" placeholder="e.g., Bank Transfer, Credit Card, etc." />
+
+      <!-- Single invoice - show payment component -->
+      <div *ngIf="selectedInvoices.length === 1">
+        <app-payment
+          [invoiceId]="selectedInvoices[0].id"
+          [invoiceNumber]="selectedInvoices[0].invoiceNumber"
+          [amount]="selectedInvoices[0].totalAmount || selectedInvoices[0].amount"
+          [currency]="'USD'"
+          (paymentComplete)="onPaymentComplete()"
+          (paymentCancelled)="cancelPayment()">
+        </app-payment>
       </div>
     </div>
-    <ng-template pTemplate="footer">
-      <p-button label="Cancel" icon="pi pi-times" styleClass="p-button-text" (onClick)="cancelPayment()"></p-button>
-      <p-button label="Process Payment" icon="pi pi-check" styleClass="p-button-primary" (onClick)="processPayment()"></p-button>
-    </ng-template>
   </p-dialog>
 
   <!-- Activity Timeline Dialog -->
@@ -764,8 +802,8 @@
       </div>
     </div>
     <ng-template pTemplate="footer">
-      <p-button label="Cancel" icon="pi pi-times" styleClass="p-button-text" (onClick)="showChangePasswordDialog = false"></p-button>
-      <p-button label="Change Password" icon="pi pi-check" styleClass="p-button-primary" [loading]="changingPassword" (onClick)="changePassword()"></p-button>
+      <p-button label="Cancel" icon="pi pi-times" styleClass="p-button-outlined p-button-secondary modal-footer-btn" (onClick)="showChangePasswordDialog = false"></p-button>
+      <p-button label="Change Password" icon="pi pi-check" styleClass="p-button-primary modal-footer-btn" [loading]="changingPassword" (onClick)="changePassword()"></p-button>
     </ng-template>
   </p-dialog>
 </div>

@@ -11,6 +11,13 @@
     </div>
     
     <div class="card-body">
+      <div *ngIf="order && ((order.status === 'Completed' || order.status === 'FinalApproved') && (userRole !== 'Admin' && userRole !== 'SuperAdmin' && order.allowUploads !== true) || (order.status !== 'Completed' && order.status !== 'FinalApproved' && order.allowUploads === false))" 
+           class="upload-disabled-message" 
+           style="padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin-bottom: 1rem;">
+        <i class="pi pi-exclamation-triangle" style="margin-right: 0.5rem;"></i>
+        <strong>File uploads are disabled for this order.</strong>
+        <p style="margin: 0.5rem 0 0 0;">{{ (order.status === 'Completed' || order.status === 'FinalApproved') ? 'This order has been completed. Please contact an administrator if you need to upload files.' : 'Please contact an administrator to enable uploads.' }}</p>
+      </div>
       <form [formGroup]="uploadForm" (ngSubmit)="onSubmit($event)" (submit)="$event.preventDefault()">
         <div class="form-group">
           <label for="fileType">
@@ -26,6 +33,7 @@
             placeholder="Select file type"
             styleClass="w-full"
             [disabled]="uploadForm.get('fileType')?.disabled || false"
+            appendTo="body"
           ></p-dropdown>
           <small class="p-help">
             <i class="pi pi-info-circle"></i>
@@ -53,6 +61,7 @@
             [showUploadButton]="false"
             [showCancelButton]="false"
             styleClass="w-full upload-button"
+            [disabled]="uploadForm.disabled || (order && (((order.status === 'Completed' || order.status === 'FinalApproved') && (userRole !== 'Admin' && userRole !== 'SuperAdmin' && order.allowUploads !== true)) || (order.status !== 'Completed' && order.status !== 'FinalApproved' && order.allowUploads === false)))"
           ></p-fileUpload>
           <small class="p-help">
             <i class="pi pi-info-circle"></i>
@@ -185,13 +194,13 @@
       label="Cancel" 
       icon="pi pi-times" 
       (onClick)="cancelUpload()"
-      [styleClass]="'p-button-outlined p-button-secondary'"
+      [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'"
     ></p-button>
     <p-button 
       label="Confirm Upload" 
       icon="pi pi-check" 
       (onClick)="confirmUpload()"
-      [styleClass]="'p-button-primary'"
+      [styleClass]="'p-button-primary modal-footer-btn'"
       [loading]="uploadingFiles"
     ></p-button>
   </ng-template>

@@ -322,7 +322,10 @@
           optionValue="value"
           placeholder="Select a designer"
           [filter]="true"
+          filterPlaceholder="Search designer..."
           [showClear]="true"
+          appendTo="body"
+          [scrollHeight]="'300px'"
           styleClass="w-full">
         </p-dropdown>
         <small class="p-help" *ngIf="availableDesigners.length === 0">
@@ -332,9 +335,9 @@
     </div>
     <ng-template pTemplate="footer">
       <p-button label="Cancel" icon="pi pi-times"
-        (onClick)="showAssignDialog = false" styleClass="p-button-text"></p-button>
+        (onClick)="showAssignDialog = false" styleClass="p-button-outlined p-button-secondary modal-footer-btn"></p-button>
       <p-button label="Assign" icon="pi pi-check"
-        (onClick)="assignDesigner()" [disabled]="!selectedDesignerId" styleClass="p-button-primary"></p-button>
+        (onClick)="assignDesigner()" [disabled]="!selectedDesignerId" styleClass="p-button-primary modal-footer-btn"></p-button>
     </ng-template>
   </p-dialog>
 
@@ -362,7 +365,8 @@
           filterPlaceholder="Search status..."
           styleClass="w-full"
           [scrollHeight]="'300px'"
-          [autoDisplayFirst]="false">
+          [autoDisplayFirst]="false"
+          appendTo="body">
         </p-dropdown>
         <small class="p-help" *ngIf="availableStatuses.length > 0 && availableStatuses.length < statuses.length">
           <i class="pi pi-info-circle"></i>
@@ -372,9 +376,9 @@
     </div>
     <ng-template pTemplate="footer">
       <p-button label="Cancel" icon="pi pi-times"
-        (onClick)="showStatusDialog = false" styleClass="p-button-text"></p-button>
+        (onClick)="showStatusDialog = false" styleClass="p-button-outlined p-button-secondary modal-footer-btn"></p-button>
       <p-button label="Update Status" icon="pi pi-check"
-        (onClick)="changeStatus()" [disabled]="!newStatus" styleClass="p-button-primary"></p-button>
+        (onClick)="changeStatus()" [disabled]="!newStatus" styleClass="p-button-primary modal-footer-btn"></p-button>
     </ng-template>
   </p-dialog>
 
@@ -456,14 +460,14 @@
     <ng-template pTemplate="footer">
       <div class="dialog-footer">
         <p-button label="Cancel" icon="pi pi-times"
-          (onClick)="closeUploadDialog()" styleClass="p-button-outlined p-button-secondary"
+          (onClick)="closeUploadDialog()" styleClass="p-button-outlined p-button-secondary modal-footer-btn"
           [disabled]="uploadingFiles"></p-button>
         <p-button *ngIf="!uploadSuccess || selectedFiles.length > 0"
           [label]="selectedFiles.length > 0 ? 'Submit ' + selectedFiles.length + ' File(s)' : 'Submit Files'"
           icon="pi pi-upload" (onClick)="submitFiles()" [loading]="uploadingFiles"
-          [disabled]="selectedFiles.length === 0 || uploadingFiles" styleClass="p-button-primary"></p-button>
+          [disabled]="selectedFiles.length === 0 || uploadingFiles" styleClass="p-button-primary modal-footer-btn"></p-button>
         <p-button *ngIf="uploadSuccess && selectedFiles.length === 0"
-          label="Done" icon="pi pi-check" (onClick)="closeUploadDialog()" styleClass="p-button-success"></p-button>
+          label="Done" icon="pi pi-check" (onClick)="closeUploadDialog()" styleClass="p-button-success modal-footer-btn"></p-button>
       </div>
     </ng-template>
   </p-dialog>
@@ -494,8 +498,8 @@
       </div>
     </div>
     <ng-template pTemplate="footer">
-      <p-button label="Cancel" icon="pi pi-times" (onClick)="cancelUpload()" styleClass="p-button-outlined p-button-secondary"></p-button>
-      <p-button label="Confirm Upload" icon="pi pi-check" (onClick)="confirmUpload()" styleClass="p-button-primary" [loading]="uploadingFiles"></p-button>
+      <p-button label="Cancel" icon="pi pi-times" (onClick)="cancelUpload()" styleClass="p-button-outlined p-button-secondary modal-footer-btn"></p-button>
+      <p-button label="Confirm Upload" icon="pi pi-check" (onClick)="confirmUpload()" styleClass="p-button-primary modal-footer-btn" [loading]="uploadingFiles"></p-button>
     </ng-template>
   </p-dialog>
 </div>

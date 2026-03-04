@@ -8,6 +8,7 @@ using LogoDesignPortal.Domain.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace LogoDesignPortal.Application.Services;
 
@@ -15,30 +16,38 @@ public class FileService : IFileService
 {
     private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
+    private readonly ILogger<FileService> _logger;
     private readonly string _fileStoragePath;
     private readonly string _temporaryStoragePath;
     private readonly string _permanentStoragePath;
     private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
 
-    public FileService(IApplicationDbContext context, IConfiguration configuration, IMapper mapper)
+    public FileService(IApplicationDbContext context, IConfiguration configuration, IMapper mapper, ILogger<FileService> logger)
     {
         _context = context;
         _mapper = mapper;
+        _logger = logger;
         _fileStoragePath = configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
         _temporaryStoragePath = Path.Combine(_fileStoragePath, "Temporary");
         _permanentStoragePath = Path.Combine(_fileStoragePath, "Permanent");
         
-        if (!Directory.Exists(_fileStoragePath))
+        EnsureDirectoriesExist();
+    }
+
+    private void EnsureDirectoriesExist()
+    {
+        try
         {
-            Directory.CreateDirectory(_fileStoragePath);
+            if (!Directory.Exists(_fileStoragePath))
+                Directory.CreateDirectory(_fileStoragePath);
+            if (!Directory.Exists(_temporaryStoragePath))
+                Directory.CreateDirectory(_temporaryStoragePath);
+            if (!Directory.Exists(_permanentStoragePath))
+                Directory.CreateDirectory(_permanentStoragePath);
         }
-        if (!Directory.Exists(_temporaryStoragePath))
+        catch (UnauthorizedAccessException ex)
         {
-            Directory.CreateDirectory(_temporaryStoragePath);
-        }
-        if (!Directory.Exists(_permanentStoragePath))
-        {
-            Directory.CreateDirectory(_permanentStoragePath);
+            _logger.LogWarning(ex, "Cannot create file storage directories at {Path}. File uploads will fail until write permissions are granted to the IIS App Pool identity (e.g. IIS AppPool\\HawkBE) for this path.", _fileStoragePath);
         }
     }
 
@@ -50,6 +59,12 @@ public class FileService : IFileService
         if (order == null)
         {
             throw new InvalidOperationException("Order not found.");
+        }
+
+        // Check if uploads are allowed for this order
+        if (!order.AllowUploads)
+        {
+            throw new InvalidOperationException("File uploads are disabled for this order. Please contact an administrator to enable uploads.");
         }
 
         if (file.Length > MaxFileSize)
@@ -167,6 +182,12 @@ public class FileService : IFileService
         if (order == null)
         {
             throw new InvalidOperationException("Order not found.");
+        }
+
+        // Check if uploads are allowed for this order
+        if (!order.AllowUploads)
+        {
+            throw new InvalidOperationException("File uploads are disabled for this order. Please contact an administrator to enable uploads.");
         }
 
         if (files == null || files.Length == 0)
@@ -460,6 +481,78 @@ public class FileService : IFileService
             if (file.ApprovedByUser != null)
             {
                 fileDto.ApprovedByName = $"{file.ApprovedByUser.FirstName} {file.ApprovedByUser.LastName}";
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<List<FileResponseDto>> GetAllFilesAsync(Guid? userId, string? userRole)
+    {
+        IQueryable<LogoFile> filesQuery = _context.LogoFiles
+            .Include(f => f.Order)
+                .ThenInclude(o => o.Client)
+                    .ThenInclude(c => c.User)
+            .Include(f => f.Order)
+                .ThenInclude(o => o.Designer)
+            .Include(f => f.ApprovedByUser)
+            .Where(f => !f.IsDeleted && f.Order != null && !f.Order.IsDeleted);
+
+        // Filter files based on role
+        if (userRole == "Client")
+        {
+            // Clients can only see files from their own orders that are visible
+            // Include Final files (which are always visible after approval) or files explicitly marked as visible
+            filesQuery = filesQuery
+                .Where(f => f.Order.Client != null && 
+                           f.Order.Client.User != null &&
+                           f.Order.Client.UserId == userId && 
+                           (f.IsVisibleToClient || f.FileType == FileType.Final));
+        }
+        else if (userRole == "Designer")
+        {
+            // Designers can see files from orders assigned to them
+            var designer = await _context.DesignerProfiles
+                .FirstOrDefaultAsync(d => d.UserId == userId && !d.IsDeleted);
+
+            if (designer != null)
+            {
+                filesQuery = filesQuery.Where(f => f.Order.DesignerId == designer.Id);
+            }
+            else
+            {
+                // No designer profile found, return empty list
+                return new List<FileResponseDto>();
+            }
+        }
+        // Admin and SuperAdmin can see all files (no additional filtering)
+
+        var files = await filesQuery.ToListAsync();
+
+        var result = _mapper.Map<List<FileResponseDto>>(files);
+        
+        // Populate user names
+        foreach (var fileDto in result)
+        {
+            var file = files.First(f => f.Id == fileDto.Id);
+            var uploadedByUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == file.UploadedBy);
+            if (uploadedByUser != null)
+            {
+                fileDto.UploadedByName = $"{uploadedByUser.FirstName} {uploadedByUser.LastName}";
+            }
+            if (file.ApprovedByUser != null)
+            {
+                fileDto.ApprovedByName = $"{file.ApprovedByUser.FirstName} {file.ApprovedByUser.LastName}";
+            }
+        }
+
+        // Hide uploaded by information from designers
+        if (userRole == "Designer")
+        {
+            foreach (var fileDto in result)
+            {
+                fileDto.UploadedBy = Guid.Empty;
+                fileDto.UploadedByName = string.Empty;
             }
         }
 

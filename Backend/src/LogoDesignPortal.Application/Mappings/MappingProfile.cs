@@ -5,6 +5,7 @@ using LogoDesignPortal.Application.DTOs.Files;
 using LogoDesignPortal.Application.DTOs.Gallery;
 using LogoDesignPortal.Application.DTOs.Notifications;
 using LogoDesignPortal.Application.DTOs.Orders;
+using LogoDesignPortal.Application.DTOs.Payments;
 using LogoDesignPortal.Application.DTOs.Revisions;
 using LogoDesignPortal.Application.DTOs.Users;
 using LogoDesignPortal.Domain.Entities;
@@ -79,5 +80,10 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.FileType, opt => opt.MapFrom(src => src.FileType.ToString()))
             .ForMember(dest => dest.UploadedByName, opt => opt.Ignore())
             .ForMember(dest => dest.ApprovedByName, opt => opt.Ignore());
+
+        // Payment mappings
+        CreateMap<Payment, PaymentResponseDto>()
+            .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()))
+            .ForMember(dest => dest.InvoiceNumber, opt => opt.MapFrom(src => src.Invoice.InvoiceNumber));
     }
 }

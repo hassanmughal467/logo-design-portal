@@ -40,7 +40,7 @@
             placeholder="Describe your logo requirements..."
           ></textarea>
           <small class="p-error" *ngIf="f['description'].invalid && f['description'].touched">
-            Description is required
+            {{ f['description'].errors?.['minlength'] ? 'Description must be at least 10 characters' : 'Description is required' }}
           </small>
         </div>
 
@@ -72,7 +72,7 @@
             optionValue="value"
             placeholder="Select priority"
             [styleClass]="'w-full priority-dropdown'"
-          >
+            appendTo="body">
             <ng-template let-item pTemplate="item">
               <div class="priority-option">
                 <span class="priority-dot" [ngClass]="'priority-' + item.value"></span>
@@ -101,7 +101,8 @@
             dateFormat="yy-mm-dd"
             [minDate]="minDate"
             styleClass="w-full"
-          ></p-calendar>
+            appendTo="body">
+          </p-calendar>
         </div>
 
         <!-- Instructions -->

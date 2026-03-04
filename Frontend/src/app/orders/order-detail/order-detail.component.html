@@ -161,10 +161,17 @@
         <div class="tab-header">
           <h3>Order Files</h3>
           <p-button 
-            *ngIf="isDesigner || isAdmin"
+            *ngIf="canUploadFiles()"
             label="Upload File" 
             icon="pi pi-upload" 
             (onClick)="router.navigate(['/orders', order.id, 'upload'])"
+          ></p-button>
+          <p-button 
+            *ngIf="canToggleUploads()"
+            [label]="order.allowUploads ? 'Disable Uploads' : 'Enable Uploads'" 
+            [icon]="order.allowUploads ? 'pi pi-lock' : 'pi pi-unlock'" 
+            (onClick)="toggleUploads()"
+            [styleClass]="order.allowUploads ? 'p-button-warn' : 'p-button-success'"
           ></p-button>
           <p-button 
             *ngIf="canApproveLogo()"
@@ -398,8 +405,10 @@
         optionValue="value"
         placeholder="Select a designer"
         [filter]="true"
+        filterPlaceholder="Search designer..."
         [showClear]="true"
-        [styleClass]="'w-full'"
+        appendTo="body"
+        [scrollHeight]="'300px'"
         styleClass="w-full">
       </p-dropdown>
       <small class="p-help" *ngIf="availableDesigners.length === 0">
@@ -412,14 +421,14 @@
       label="Cancel" 
       icon="pi pi-times" 
       (onClick)="showAssignDialog = false"
-      [styleClass]="'p-button-text'">
+      [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'">
     </p-button>
     <p-button 
       label="Assign" 
       icon="pi pi-check" 
       (onClick)="assignDesigner()"
       [disabled]="!selectedDesignerId"
-      [styleClass]="'p-button-primary'">
+      [styleClass]="'p-button-primary modal-footer-btn'">
     </p-button>
   </ng-template>
 </p-dialog>
@@ -466,16 +475,17 @@
   </div>
   <ng-template pTemplate="footer">
     <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showSendFilesDialog = false"
+      [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'"
+    ></p-button>
+    <p-button 
       label="Send" 
       icon="pi pi-send" 
       (onClick)="sendFilesToClient()"
       [disabled]="selectedFileIds.length === 0"
-    ></p-button>
-    <p-button 
-      label="Cancel" 
-      icon="pi pi-times" 
-      (onClick)="showSendFilesDialog = false"
-      [styleClass]="'p-button-text'"
+      [styleClass]="'p-button-primary modal-footer-btn'"
     ></p-button>
   </ng-template>
 </p-dialog>
@@ -540,16 +550,17 @@
   </div>
   <ng-template pTemplate="footer">
     <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showRevisionDialog = false"
+      [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'"
+    ></p-button>
+    <p-button 
       label="Request Revision" 
       icon="pi pi-refresh" 
       (onClick)="createRevision()"
       [disabled]="!revisionInstructions.trim()"
-    ></p-button>
-    <p-button 
-      label="Cancel" 
-      icon="pi pi-times" 
-      (onClick)="showRevisionDialog = false"
-      [styleClass]="'p-button-text'"
+      [styleClass]="'p-button-primary modal-footer-btn'"
     ></p-button>
   </ng-template>
 </p-dialog>
@@ -583,16 +594,17 @@
   </div>
   <ng-template pTemplate="footer">
     <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showCommentDialog = false"
+      [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'"
+    ></p-button>
+    <p-button 
       label="Post" 
       icon="pi pi-check" 
       (onClick)="createComment()"
       [disabled]="!commentContent.trim()"
-    ></p-button>
-    <p-button 
-      label="Cancel" 
-      icon="pi pi-times" 
-      (onClick)="showCommentDialog = false"
-      [styleClass]="'p-button-text'"
+      [styleClass]="'p-button-primary modal-footer-btn'"
     ></p-button>
   </ng-template>
 </p-dialog>
@@ -631,7 +643,7 @@
       label="Cancel" 
       icon="pi pi-times" 
       (onClick)="showCancelOrderDialog = false"
-      [styleClass]="'p-button-text'"
+      [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'"
     ></p-button>
     <p-button 
       label="Confirm Cancellation" 
@@ -639,6 +651,7 @@
       (onClick)="confirmCancelOrder()"
       severity="danger"
       [disabled]="!cancellationReason.trim()"
+      [styleClass]="'modal-footer-btn'"
     ></p-button>
   </ng-template>
 </p-dialog>
@@ -677,12 +690,13 @@
       label="Cancel" 
       icon="pi pi-times" 
       (onClick)="showArchiveConfirmDialog = false"
-      [styleClass]="'p-button-text'"
+      [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'"
     ></p-button>
     <p-button 
       label="Archive Order" 
       icon="pi pi-archive" 
       (onClick)="confirmArchiveOrder()"
+      [styleClass]="'p-button-primary modal-footer-btn'"
     ></p-button>
   </ng-template>
 </p-dialog>
@@ -732,7 +746,7 @@
       label="Cancel" 
       icon="pi pi-times" 
       (onClick)="showRefundDialog = false"
-      [styleClass]="'p-button-text'"
+      [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'"
     ></p-button>
     <p-button 
       label="Process Refund" 
@@ -740,6 +754,7 @@
       (onClick)="confirmRefundOrder()"
       severity="warning"
       [disabled]="!refundReason.trim() || refundAmount <= 0"
+      [styleClass]="'modal-footer-btn'"
     ></p-button>
   </ng-template>
 </p-dialog>

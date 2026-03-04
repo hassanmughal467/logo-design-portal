@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -14,56 +14,56 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "InvoiceEmail",
                 table: "Users",
-                type: "nvarchar(256)",
+                type: "varchar(256)",
                 maxLength: 256,
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "SecondaryEmail",
                 table: "Users",
-                type: "nvarchar(256)",
+                type: "varchar(256)",
                 maxLength: 256,
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "Cell",
                 table: "ClientProfiles",
-                type: "nvarchar(20)",
+                type: "varchar(20)",
                 maxLength: 20,
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "ContactName",
                 table: "ClientProfiles",
-                type: "nvarchar(200)",
+                type: "varchar(200)",
                 maxLength: 200,
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "Fax",
                 table: "ClientProfiles",
-                type: "nvarchar(20)",
+                type: "varchar(20)",
                 maxLength: 20,
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "Reference",
                 table: "ClientProfiles",
-                type: "nvarchar(200)",
+                type: "varchar(200)",
                 maxLength: 200,
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "State",
                 table: "ClientProfiles",
-                type: "nvarchar(100)",
+                type: "varchar(100)",
                 maxLength: 100,
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "Website",
                 table: "ClientProfiles",
-                type: "nvarchar(500)",
+                type: "varchar(500)",
                 maxLength: 500,
                 nullable: true);
 

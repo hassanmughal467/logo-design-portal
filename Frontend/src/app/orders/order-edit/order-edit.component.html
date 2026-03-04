@@ -64,6 +64,7 @@
         optionValue="value"
         placeholder="Select priority"
         [styleClass]="'w-full'"
+        appendTo="body"
       ></p-dropdown>
       <small class="p-help">
         <strong>Low:</strong> No rush<br>
@@ -85,6 +86,7 @@
         dateFormat="yy-mm-dd"
         [minDate]="minDate"
         styleClass="w-full"
+        appendTo="body"
       ></p-calendar>
     </div>
   </div>
@@ -169,7 +171,7 @@
       label="Cancel" 
       icon="pi pi-times" 
       (onClick)="onCancel()"
-      [styleClass]="'p-button-text'"
+      [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'"
       [disabled]="loading"
     ></p-button>
   </div>

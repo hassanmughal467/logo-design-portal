@@ -39,6 +39,11 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid email or password.");
         }
 
+        if (string.IsNullOrEmpty(user.PasswordHash))
+        {
+            throw new UnauthorizedAccessException("Invalid email or password.");
+        }
+
         // Check if account is locked
         if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.UtcNow)
         {
@@ -126,6 +131,18 @@ public class AuthService : IAuthService
         };
 
         _context.Users.Add(user);
+
+        // Create ClientProfile so the client can create orders immediately (CompanyName is required in RegisterRequestDto)
+        var clientProfile = new ClientProfile
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            CompanyName = request.CompanyName.Trim(),
+            ContactName = $"{user.FirstName} {user.LastName}".Trim(),
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.ClientProfiles.Add(clientProfile);
+
         await _context.SaveChangesAsync();
 
         // Generate tokens

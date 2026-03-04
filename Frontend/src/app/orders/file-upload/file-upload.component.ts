@@ -21,6 +21,7 @@ export class FileUploadComponent implements OnInit {
   userRole: string | null = null;
   uploadSuccess = false;
   uploadedFilesCount = 0;
+  order: any = null;
 
   fileTypes = [
     { label: 'Reference', value: FileType.Reference },
@@ -53,6 +54,9 @@ export class FileUploadComponent implements OnInit {
     const user = this.authService.getCurrentUser();
     this.userRole = user?.role || null;
     
+    // Load order to check status and upload permissions
+    this.loadOrder();
+    
     if (user?.role === 'Client') {
       // Clients can only upload reference files
       this.uploadForm.patchValue({ fileType: FileType.Reference });
@@ -61,6 +65,62 @@ export class FileUploadComponent implements OnInit {
       // Designers can upload preview or final
       this.uploadForm.patchValue({ fileType: FileType.Preview });
     }
+  }
+
+  loadOrder(): void {
+    if (!this.orderId) return;
+    
+    this.loading = true;
+    this.apiService.get<any>(`orders/${this.orderId}`)
+      .subscribe({
+        next: (order) => {
+          this.order = order;
+          this.loading = false;
+          
+          // Check if order is completed or final approved
+          const isCompleted = order.status === 'Completed' || order.status === 'FinalApproved';
+          
+          // Check if uploads are disabled
+          if (isCompleted) {
+            // For completed orders, only allow if admin has explicitly enabled uploads
+            if (this.userRole !== 'Admin' && this.userRole !== 'SuperAdmin') {
+              // Clients and designers cannot upload on completed orders unless admin enabled it
+              if (order.allowUploads !== true) {
+                this.messageService.add({
+                  severity: 'warn',
+                  summary: 'Upload Disabled',
+                  detail: 'File uploads are disabled for this completed order. Please contact an administrator if you need to upload files.'
+                });
+                this.uploadForm.disable();
+              }
+            } else if (order.allowUploads === false) {
+              // Admin can see the form but it's disabled
+              this.messageService.add({
+                severity: 'info',
+                summary: 'Upload Disabled',
+                detail: 'File uploads are currently disabled for this completed order. You can enable them from the order details page.'
+              });
+              this.uploadForm.disable();
+            }
+          } else if (order.allowUploads === false) {
+            // For non-completed orders, check allowUploads flag
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'Upload Disabled',
+              detail: 'File uploads are disabled for this order. Please contact an administrator to enable uploads.'
+            });
+            this.uploadForm.disable();
+          }
+        },
+        error: (error) => {
+          this.loading = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load order information'
+          });
+        }
+      });
   }
 
   onFileSelect(event: any): void {

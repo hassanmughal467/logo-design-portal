@@ -80,8 +80,21 @@ const routes: Routes = [
   {
     path: 'invoices',
     loadChildren: () => import('./invoices/invoices.module').then(m => m.InvoicesModule),
-    canActivate: [AuthGuard, RoleGuard],
-    data: { roles: ['SuperAdmin', 'Admin'] }
+    canActivate: [AuthGuard]
+  },
+  
+  // Analytics (lazy loaded)
+  {
+    path: 'analytics',
+    loadChildren: () => import('./analytics/analytics.module').then(m => m.AnalyticsModule),
+    canActivate: [AuthGuard]
+  },
+  
+  // Financial Overview (lazy loaded)
+  {
+    path: 'financial',
+    loadChildren: () => import('./financial/financial.module').then(m => m.FinancialModule),
+    canActivate: [AuthGuard]
   },
   
   // Messages (lazy loaded)

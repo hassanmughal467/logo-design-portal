@@ -55,6 +55,9 @@ export interface Order {
   
   // Invoice fields
   hasInvoice?: boolean;
+  
+  // Upload control fields
+  allowUploads?: boolean;
 }
 
 export enum OrderStatus {

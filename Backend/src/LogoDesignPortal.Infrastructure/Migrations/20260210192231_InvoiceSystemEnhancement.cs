@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -11,9 +11,12 @@ namespace LogoDesignPortal.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // MySQL: Disable FK checks to allow dropping index, then re-enable
+            migrationBuilder.Sql("SET FOREIGN_KEY_CHECKS = 0;");
             migrationBuilder.DropIndex(
                 name: "IX_InvoiceOrders_InvoiceId_OrderId",
                 table: "InvoiceOrders");
+            migrationBuilder.Sql("SET FOREIGN_KEY_CHECKS = 1;");
 
             migrationBuilder.AddColumn<int>(
                 name: "BillingType",
@@ -25,10 +28,10 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AlterColumn<Guid>(
                 name: "OrderId",
                 table: "InvoiceOrders",
-                type: "uniqueidentifier",
+                type: "char(36)",
                 nullable: true,
                 oldClrType: typeof(Guid),
-                oldType: "uniqueidentifier");
+                oldType: "char(36)");
 
             migrationBuilder.AddColumn<decimal>(
                 name: "Amount",
@@ -42,18 +45,17 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "Description",
                 table: "InvoiceOrders",
-                type: "nvarchar(500)",
+                type: "varchar(500)",
                 maxLength: 500,
                 nullable: false,
                 defaultValue: "");
 
-            // Populate existing InvoiceOrders with data from related Orders
+            // Populate existing InvoiceOrders with data from related Orders (MySQL)
             migrationBuilder.Sql(@"
-                UPDATE io
-                SET io.Amount = o.Price,
-                    io.Description = ISNULL(o.Title, 'Logo Design - Order #' + SUBSTRING(CAST(o.Id AS NVARCHAR(36)), 1, 8))
-                FROM InvoiceOrders io
+                UPDATE InvoiceOrders io
                 INNER JOIN LogoOrders o ON io.OrderId = o.Id
+                SET io.Amount = o.Price,
+                    io.Description = IFNULL(o.Title, CONCAT('Logo Design - Order #', LEFT(o.Id, 8)))
                 WHERE io.OrderId IS NOT NULL;
             ");
 
@@ -61,18 +63,18 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "InvoiceLogs",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    InvoiceId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
+                    InvoiceId = table.Column<Guid>(type: "char(36)", nullable: false),
                     Action = table.Column<int>(type: "int", nullable: false),
-                    PerformedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    Notes = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    UpdatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    DeletedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    PerformedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    Notes = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -218,12 +220,12 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 column: "CreatedAt",
                 value: new DateTime(2026, 2, 10, 19, 22, 30, 922, DateTimeKind.Utc).AddTicks(1242));
 
+            // MySQL does not support filtered indexes; use standard unique index
             migrationBuilder.CreateIndex(
                 name: "IX_InvoiceOrders_InvoiceId_OrderId",
                 table: "InvoiceOrders",
                 columns: new[] { "InvoiceId", "OrderId" },
-                unique: true,
-                filter: "[OrderId] IS NOT NULL");
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_InvoiceLogs_CreatedAt",
@@ -261,11 +263,11 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AlterColumn<Guid>(
                 name: "OrderId",
                 table: "InvoiceOrders",
-                type: "uniqueidentifier",
+                type: "char(36)",
                 nullable: false,
                 defaultValue: new Guid("00000000-0000-0000-0000-000000000000"),
                 oldClrType: typeof(Guid),
-                oldType: "uniqueidentifier",
+                oldType: "char(36)",
                 oldNullable: true);
 
             migrationBuilder.UpdateData(

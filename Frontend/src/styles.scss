@@ -77,6 +77,15 @@
   --border-radius-sm: 4px;
   --border-radius-lg: 12px;
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Modal/Dialog Standard Spacing */
+  --modal-header-padding: 1.25rem 1.75rem;
+  --modal-content-padding: 1.5rem 1.75rem;
+  --modal-footer-padding: 1rem 1.75rem;
+  --modal-form-gap: 1.25rem;
+  --modal-field-margin: 1.25rem;
+  --modal-input-padding: 0.7rem 0.9rem;
+  --modal-dropdown-padding: 0.7rem 0.9rem;
   
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
@@ -89,6 +98,10 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+html {
+  overflow-y: scroll;
 }
 
 body {
@@ -196,13 +209,13 @@ body {
    ═══════════════════════════════════════════════════════════════ */
 
 .p-dialog {
-  border-radius: 14px !important;
+  border-radius: 12px !important;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15) !important;
   border: 1px solid var(--surface-border);
 
   .p-dialog-header {
-    padding: 1.25rem 1.5rem !important;
+    padding: var(--modal-header-padding) !important;
     border-bottom: 1px solid var(--surface-border);
     background: var(--surface-card) !important;
 
@@ -232,18 +245,51 @@ body {
   }
 
   .p-dialog-content {
-    padding: 1.5rem !important;
+    padding: var(--modal-content-padding) !important;
     color: var(--text-color);
     line-height: 1.6;
   }
 
   .p-dialog-footer {
-    padding: 1rem 1.5rem !important;
+    padding: var(--modal-footer-padding) !important;
     border-top: 1px solid var(--surface-border);
     background: var(--surface-card) !important;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+}
+
+/* Dialog footer wrapper: Cancel left, actions right, same line */
+.p-dialog .p-dialog-footer .dialog-footer {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  flex-wrap: wrap !important;
+  width: 100% !important;
+}
+
+.p-dialog .p-dialog-footer .deactivate-dialog-footer {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  flex-wrap: nowrap !important;
+  width: 100% !important;
+}
+
+/* Modal footer buttons: consistent size, responsive, Cancel left / actions right */
+.modal-footer-btn {
+  font-size: 0.9rem !important;
+  padding: 0.5rem 1rem !important;
+  min-height: 2.25rem !important;
+
+  @media (max-width: 576px) {
+    font-size: 0.85rem !important;
+    padding: 0.45rem 0.75rem !important;
+    min-height: 2rem !important;
   }
 }
 
@@ -283,9 +329,10 @@ body {
 .p-dialog .dialog-content,
 .p-dialog .p-dialog-content {
 
-  /* Form Group: label + input/textarea/dropdown */
-  .form-group {
-    margin-bottom: 1.5rem;
+  /* Form Group / Form Field: label + input/textarea/dropdown - Standard spacing */
+  .form-group,
+  .form-field {
+    margin-bottom: var(--modal-field-margin);
 
     &:last-child {
       margin-bottom: 0;
@@ -293,7 +340,7 @@ body {
 
     label {
       display: block;
-      margin-bottom: 0.6rem;
+      margin-bottom: 0.5rem;
       font-weight: 600;
       font-size: 0.925rem;
       color: var(--text-color);
@@ -315,17 +362,18 @@ body {
     .p-dropdown,
     .p-inputnumber,
     .p-multiselect,
+    .p-calendar,
     input[pInputText],
     textarea[pInputTextarea],
     textarea {
       width: 100%;
-      border-radius: 8px;
+      border-radius: var(--border-radius);
     }
 
     input[pInputText],
     textarea[pInputTextarea],
     textarea {
-      padding: 0.7rem 0.85rem;
+      padding: var(--modal-input-padding);
       font-size: 0.925rem;
       border: 1px solid var(--surface-border);
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -349,16 +397,27 @@ body {
       line-height: 1.5;
     }
 
-    /* Dropdown inside form-group */
-    .p-dropdown {
+    /* Dropdown - Standard padding and alignment */
+    .p-dropdown,
+    ::ng-deep .p-dropdown {
+      width: 100% !important;
+      border-radius: var(--border-radius);
+
       .p-dropdown-label {
-        padding: 0.7rem 0.85rem;
+        padding: var(--modal-dropdown-padding) !important;
         font-size: 0.925rem;
       }
 
       .p-dropdown-trigger {
         width: 2.75rem;
       }
+    }
+
+    /* InputNumber, Calendar - match input styling */
+    .p-inputnumber .p-inputtext,
+    .p-calendar .p-inputtext {
+      padding: var(--modal-input-padding);
+      font-size: 0.925rem;
     }
 
     /* Help text below fields */
@@ -393,9 +452,45 @@ body {
     }
   }
 
+  /* Form Grid / Edit Form Fields - consistent column gap and spacing */
+  .form-grid,
+  .edit-form-fields {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--modal-form-gap);
+    margin-bottom: var(--modal-field-margin);
+
+    .form-group,
+    .form-field {
+      margin-bottom: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+
+      &.full-width {
+        grid-column: 1 / -1;
+      }
+
+      label {
+        margin-bottom: 0;
+      }
+    }
+  }
+
+  /* Form Section Divider */
+  .form-section-divider {
+    grid-column: 1 / -1;
+    margin: 1rem 0 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--surface-border);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-color-secondary);
+  }
+
   /* PrimeNG .field class (used in dashboard Payment/Password dialogs) */
   .field {
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--modal-field-margin);
 
     &:last-child {
       margin-bottom: 0;
@@ -403,7 +498,7 @@ body {
 
     label {
       display: block;
-      margin-bottom: 0.6rem;
+      margin-bottom: 0.5rem;
       font-weight: 600;
       font-size: 0.925rem;
       color: var(--text-color);
@@ -412,8 +507,8 @@ body {
     input[pInputText],
     .p-inputtext {
       width: 100%;
-      padding: 0.7rem 0.85rem;
-      border-radius: 8px;
+      padding: var(--modal-input-padding);
+      border-radius: var(--border-radius);
       font-size: 0.925rem;
       border: 1px solid var(--surface-border);
 
@@ -569,26 +664,36 @@ body {
   width: 100% !important;
 }
 
-/* Global Dropdown Panel Styling */
+/* Global Dropdown Panel Styling - Standard padding */
 .p-dropdown-panel {
-  border-radius: 10px !important;
+  border-radius: var(--border-radius) !important;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12) !important;
   overflow: hidden;
   border: 1px solid var(--surface-border);
 
   .p-dropdown-items {
-    padding: 0.35rem;
+    padding: 0.5rem;
 
     .p-dropdown-item {
       border-radius: 6px;
-      margin-bottom: 1px;
-      padding: 0.6rem 0.85rem;
+      margin-bottom: 2px;
+      padding: 0.65rem 0.9rem;
+      font-size: 0.925rem;
       transition: background 0.15s ease;
 
       &.p-highlight {
         border-radius: 6px;
       }
     }
+  }
+}
+
+/* Dropdown inside dialogs - ensure consistent styling */
+.p-dialog .p-dropdown,
+.p-dialog .p-multiselect,
+.p-dialog .p-calendar {
+  .p-inputtext {
+    padding: var(--modal-input-padding) !important;
   }
 }
 

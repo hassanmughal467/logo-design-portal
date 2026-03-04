@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -31,14 +31,14 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "Instructions",
                 table: "LogoOrders",
-                type: "nvarchar(max)",
+                type: "longtext",
                 maxLength: 5000,
                 nullable: true);
 
             migrationBuilder.AddColumn<bool>(
                 name: "PriceApproved",
                 table: "LogoOrders",
-                type: "bit",
+                type: "tinyint(1)",
                 nullable: false,
                 defaultValue: false);
 
@@ -53,27 +53,27 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "RequiredFormats",
                 table: "LogoOrders",
-                type: "nvarchar(500)",
+                type: "varchar(500)",
                 maxLength: 500,
                 nullable: true);
 
             migrationBuilder.AddColumn<bool>(
                 name: "RequiresPriceApproval",
                 table: "LogoOrders",
-                type: "bit",
+                type: "tinyint(1)",
                 nullable: false,
                 defaultValue: false);
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "ApprovedAt",
                 table: "LogoFiles",
-                type: "datetime2",
+                type: "datetime(6)",
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
                 name: "ApprovedBy",
                 table: "LogoFiles",
-                type: "uniqueidentifier",
+                type: "char(36)",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
@@ -86,14 +86,14 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<bool>(
                 name: "IsAdminApproved",
                 table: "LogoFiles",
-                type: "bit",
+                type: "tinyint(1)",
                 nullable: false,
                 defaultValue: false);
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsVisibleToClient",
                 table: "LogoFiles",
-                type: "bit",
+                type: "tinyint(1)",
                 nullable: false,
                 defaultValue: false);
 
@@ -107,7 +107,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<Guid>(
                 name: "LogoOrderId",
                 table: "Invoices",
-                type: "uniqueidentifier",
+                type: "char(36)",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
@@ -121,24 +121,24 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "ClientGalleries",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    ClientId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OrderId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    FileId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    PreviewImagePath = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
-                    FileName = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    OriginalFileName = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    FilePath = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
-                    ContentType = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    Format = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    ApprovedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    UpdatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    DeletedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
+                    ClientId = table.Column<Guid>(type: "char(36)", nullable: false),
+                    OrderId = table.Column<Guid>(type: "char(36)", nullable: false),
+                    FileId = table.Column<Guid>(type: "char(36)", nullable: false),
+                    PreviewImagePath = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: false),
+                    FileName = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    OriginalFileName = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    FilePath = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: false),
+                    ContentType = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
+                    Format = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true),
+                    ApprovedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -167,16 +167,16 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "InvoiceOrders",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    InvoiceId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OrderId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    UpdatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    DeletedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
+                    InvoiceId = table.Column<Guid>(type: "char(36)", nullable: false),
+                    OrderId = table.Column<Guid>(type: "char(36)", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -199,21 +199,21 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "Notifications",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OrderId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    Title = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Message = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
+                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
+                    UserId = table.Column<Guid>(type: "char(36)", nullable: false),
+                    OrderId = table.Column<Guid>(type: "char(36)", nullable: true),
+                    Title = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
+                    Message = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: false),
                     Type = table.Column<int>(type: "int", nullable: false, defaultValue: 1),
-                    IsRead = table.Column<bool>(type: "bit", nullable: false),
-                    ReadAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    UpdatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    DeletedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    IsRead = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    ReadAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -236,17 +236,17 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "OrderComments",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OrderId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Content = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
-                    CreatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    IsInternal = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    DeletedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
+                    OrderId = table.Column<Guid>(type: "char(36)", nullable: false),
+                    Content = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: false),
+                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: false),
+                    IsInternal = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -269,19 +269,19 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "OrderRevisions",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OrderId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Instructions = table.Column<string>(type: "nvarchar(max)", maxLength: 5000, nullable: false),
-                    RequestedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    IsResolved = table.Column<bool>(type: "bit", nullable: false),
-                    ResolvedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    UpdatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    DeletedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
+                    OrderId = table.Column<Guid>(type: "char(36)", nullable: false),
+                    Instructions = table.Column<string>(type: "longtext", maxLength: 5000, nullable: false),
+                    RequestedBy = table.Column<Guid>(type: "char(36)", nullable: false),
+                    IsResolved = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    ResolvedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -298,22 +298,22 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "RevisionFiles",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    RevisionId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    FileName = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    OriginalFileName = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    FilePath = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
-                    ContentType = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
+                    RevisionId = table.Column<Guid>(type: "char(36)", nullable: false),
+                    FileName = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    OriginalFileName = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: false),
+                    FilePath = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: false),
+                    ContentType = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
                     FileSize = table.Column<long>(type: "bigint", nullable: false),
                     FileType = table.Column<int>(type: "int", nullable: false, defaultValue: 1),
-                    Description = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    UpdatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    DeletedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    Description = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -659,7 +659,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<bool>(
                 name: "IsPaid",
                 table: "Invoices",
-                type: "bit",
+                type: "tinyint(1)",
                 nullable: false,
                 defaultValue: false);
 

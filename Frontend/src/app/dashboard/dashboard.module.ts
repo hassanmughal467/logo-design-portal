@@ -6,6 +6,7 @@ import { LayoutModule } from '../layout/layout.module';
 import { SharedModule } from '../shared/shared.module';
 import { OrderDetailModule } from '../orders/order-detail/order-detail.module';
 import { OrderCreateModule } from '../orders/order-create/order-create.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 // PrimeNG
 import { CardModule } from 'primeng/card';
@@ -35,6 +36,7 @@ import { PanelModule } from 'primeng/panel';
     SharedModule,
     OrderDetailModule,
     OrderCreateModule,
+    PaymentsModule,
     CardModule,
     TableModule,
     TagModule,

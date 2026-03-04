@@ -861,7 +861,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Process payments
+    // Process payments (for multiple invoices or manual payment)
     const paymentPromises = this.selectedInvoices.map(invoice =>
       firstValueFrom(
         this.apiService.put(`invoices/${invoice.id}/mark-paid`, {
@@ -889,6 +889,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
           detail: error.error?.error || 'Failed to process payment'
         });
       });
+  }
+
+  onPaymentComplete(): void {
+    // Called when payment component completes payment
+    this.showPaymentDialog = false;
+    this.selectedInvoices = [];
+    this.paymentMethod = '';
+    this.loadDashboardData();
   }
 
   downloadInvoiceReport(format: 'csv' | 'pdf'): void {

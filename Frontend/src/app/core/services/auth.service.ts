@@ -5,6 +5,10 @@ import { Router } from '@angular/router';
 import { ApiService } from './api.service';
 import { LoginRequest, LoginResponse, RegisterRequest, User } from '@shared/models/user.model';
 
+const TOKEN_KEY = 'auth_token';
+const EXPIRES_AT_KEY = 'auth_expires_at';
+const USER_KEY = 'auth_user';
+
 @Injectable({
   providedIn: 'root'
 })
@@ -12,7 +16,7 @@ export class AuthService {
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
   
-  // Store access token in memory (more secure than localStorage)
+  // Token in memory for fast access; persisted in localStorage for refresh
   private accessToken: string | null = null;
   private tokenExpiry: number | null = null;
 
@@ -20,7 +24,7 @@ export class AuthService {
     private apiService: ApiService,
     private router: Router
   ) {
-    // Check if user is already logged in (on app refresh)
+    // Restore session from localStorage on app init (e.g. after refresh)
     this.loadUserFromStorage();
   }
 
@@ -55,25 +59,39 @@ export class AuthService {
     this.accessToken = null;
     this.tokenExpiry = null;
     this.currentUserSubject.next(null);
-    // Clear any stored data
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(EXPIRES_AT_KEY);
+    localStorage.removeItem(USER_KEY);
     sessionStorage.removeItem('user');
     this.router.navigate(['/login']);
   }
 
   getAccessToken(): string | null {
-    // Check if token is expired
-    if (this.tokenExpiry && Date.now() >= this.tokenExpiry) {
-      // Token expired, try to refresh
-      this.refreshToken().subscribe({
-        error: () => this.logout()
-      });
+    // Use in-memory token if available and not expired
+    if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
+      return this.accessToken;
+    }
+    // Fall back to localStorage (e.g. after refresh)
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    const storedExpiry = localStorage.getItem(EXPIRES_AT_KEY);
+    if (storedToken && storedExpiry) {
+      const expiry = parseInt(storedExpiry, 10);
+      if (Date.now() < expiry) {
+        this.accessToken = storedToken;
+        this.tokenExpiry = expiry;
+        return storedToken;
+      }
+      // Token expired - clear storage
+      this.clearStoredAuth();
       return null;
     }
-    return this.accessToken;
+    return null;
   }
 
   isAuthenticated(): boolean {
-    return !!this.getAccessToken() && !!this.currentUserSubject.value;
+    const token = this.getAccessToken();
+    const user = this.currentUserSubject.value;
+    return !!token && !!user;
   }
 
   getCurrentUser(): User | null {
@@ -111,38 +129,60 @@ export class AuthService {
   }
 
   private setAuthData(response: LoginResponse): void {
-    this.accessToken = response.token;  // Backend returns 'token' not 'accessToken'
-    // Parse expiresAt DateTime string from backend
+    this.accessToken = response.token;
     const expiresAt = new Date(response.expiresAt);
     this.tokenExpiry = expiresAt.getTime();
     
-    // Map backend user object to frontend User model
-    // Backend returns 'roleName' but frontend expects 'role'
     const user: User = {
       ...response.user,
       role: (response.user as any).roleName || (response.user as any).role || 'Client'
     };
     
-    // Store user in sessionStorage for persistence across page refreshes
+    // Persist in localStorage so session survives page refresh
+    localStorage.setItem(TOKEN_KEY, response.token);
+    localStorage.setItem(EXPIRES_AT_KEY, String(this.tokenExpiry));
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
     sessionStorage.setItem('user', JSON.stringify(user));
     this.currentUserSubject.next(user);
   }
 
+  private clearStoredAuth(): void {
+    this.accessToken = null;
+    this.tokenExpiry = null;
+    this.currentUserSubject.next(null);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(EXPIRES_AT_KEY);
+    localStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem('user');
+  }
+
   private loadUserFromStorage(): void {
-    const userStr = sessionStorage.getItem('user');
-    if (userStr) {
-      try {
-        const userData = JSON.parse(userStr);
-        // Map roleName to role if needed (for backward compatibility)
-        const user: User = {
-          ...userData,
-          role: userData.role || userData.roleName || 'Client'
-        };
-        this.currentUserSubject.next(user);
-        // Note: Token should be refreshed on app load for security
-      } catch (error) {
-        sessionStorage.removeItem('user');
-      }
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    const storedExpiry = localStorage.getItem(EXPIRES_AT_KEY);
+    const userStr = localStorage.getItem(USER_KEY) || sessionStorage.getItem('user');
+    
+    if (!storedToken || !storedExpiry || !userStr) {
+      this.clearStoredAuth();
+      return;
+    }
+    
+    const expiry = parseInt(storedExpiry, 10);
+    if (Date.now() >= expiry) {
+      this.clearStoredAuth();
+      return;
+    }
+    
+    try {
+      const userData = JSON.parse(userStr);
+      const user: User = {
+        ...userData,
+        role: userData.role || userData.roleName || 'Client'
+      };
+      this.accessToken = storedToken;
+      this.tokenExpiry = expiry;
+      this.currentUserSubject.next(user);
+    } catch {
+      this.clearStoredAuth();
     }
   }
 }

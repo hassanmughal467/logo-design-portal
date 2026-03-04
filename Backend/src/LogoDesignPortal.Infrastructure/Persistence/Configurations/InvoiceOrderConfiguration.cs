@@ -28,9 +28,8 @@ public class InvoiceOrderConfiguration : IEntityTypeConfiguration<InvoiceOrder>
             .HasForeignKey(e => e.OrderId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Index only when OrderId is not null (for order-based items)
+        // Unique index for (InvoiceId, OrderId) - MySQL doesn't support filtered indexes
         builder.HasIndex(e => new { e.InvoiceId, e.OrderId })
-            .IsUnique()
-            .HasFilter("[OrderId] IS NOT NULL");
+            .IsUnique();
     }
 }

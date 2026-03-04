@@ -31,6 +31,7 @@ export class UserListComponent implements OnInit, OnDestroy {
   resettingPassword = false;
   updatingUser = false;
   deletingUser = false;
+  deletePermanent = false;
   loadingUserDetails = false;
   selectedUsers: User[] = [];
   roles = Object.values(UserRole);
@@ -144,24 +145,21 @@ export class UserListComponent implements OnInit, OnDestroy {
       isAvailable: [true]
     });
 
-    // Update validators when role changes in edit form
+    // Update validators when role changes in edit form (only companyName required for Client when editing)
     this.editUserForm.get('role')?.valueChanges.subscribe(role => {
       if (role === 'Client') {
-        // Make Client mandatory fields required
-        this.editUserForm.get('invoiceEmail')?.setValidators([Validators.required, Validators.email]);
         this.editUserForm.get('companyName')?.setValidators([Validators.required]);
-        this.editUserForm.get('contactName')?.setValidators([Validators.required]);
-        this.editUserForm.get('phoneNumber')?.setValidators([Validators.required]);
-      } else {
-        // Remove required validators for non-Client roles
         this.editUserForm.get('invoiceEmail')?.setValidators([Validators.email]);
+        this.editUserForm.get('contactName')?.clearValidators();
+        this.editUserForm.get('phoneNumber')?.clearValidators();
+      } else {
         this.editUserForm.get('companyName')?.clearValidators();
+        this.editUserForm.get('invoiceEmail')?.setValidators([Validators.email]);
         this.editUserForm.get('contactName')?.clearValidators();
         this.editUserForm.get('phoneNumber')?.clearValidators();
       }
-      // Update validity
-      this.editUserForm.get('invoiceEmail')?.updateValueAndValidity({ emitEvent: false });
       this.editUserForm.get('companyName')?.updateValueAndValidity({ emitEvent: false });
+      this.editUserForm.get('invoiceEmail')?.updateValueAndValidity({ emitEvent: false });
       this.editUserForm.get('contactName')?.updateValueAndValidity({ emitEvent: false });
       this.editUserForm.get('phoneNumber')?.updateValueAndValidity({ emitEvent: false });
     });
@@ -311,6 +309,19 @@ export class UserListComponent implements OnInit, OnDestroy {
   isEditClientRole(): boolean {
     const role = this.editUserForm.get('role')?.value;
     return role === 'Client';
+  }
+
+  /** Apply role-based validators to edit form (ensures Update button enables correctly after patch) */
+  private applyEditRoleValidators(role: string): void {
+    if (role === 'Client') {
+      this.editUserForm.get('companyName')?.setValidators([Validators.required]);
+      this.editUserForm.get('invoiceEmail')?.setValidators([Validators.email]);
+    } else {
+      this.editUserForm.get('companyName')?.clearValidators();
+      this.editUserForm.get('invoiceEmail')?.setValidators([Validators.email]);
+    }
+    this.editUserForm.get('companyName')?.updateValueAndValidity({ emitEvent: false });
+    this.editUserForm.get('invoiceEmail')?.updateValueAndValidity({ emitEvent: false });
   }
 
   isEditDesignerRole(): boolean {
@@ -550,6 +561,9 @@ export class UserListComponent implements OnInit, OnDestroy {
             hourlyRate: (fullUser as any).designerProfile?.hourlyRate || null,
             isAvailable: (fullUser as any).designerProfile?.isAvailable !== undefined ? (fullUser as any).designerProfile.isAvailable : true
           });
+
+          // Apply role-based validators after patch (fixes Update button disabled when validators not yet applied)
+          this.applyEditRoleValidators(selectedRole || '');
           
           // Open dialog
           this.displayEditDialog = true;
@@ -684,25 +698,41 @@ export class UserListComponent implements OnInit, OnDestroy {
     this.displayDeleteDialog = true;
   }
 
-  deleteUser(): void {
+  deleteUser(permanent: boolean): void {
     if (!this.selectedUserForDelete) {
       return;
     }
 
     this.deletingUser = true;
-    this.apiService.delete(`users/${this.selectedUserForDelete.id}`)
+    this.deletePermanent = permanent;
+    const deletedUserId = this.selectedUserForDelete.id;
+    const endpoint = permanent
+      ? `users/${deletedUserId}?permanent=true`
+      : `users/${deletedUserId}`;
+
+    this.apiService.delete(endpoint)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
+          const msg = permanent
+            ? `User ${this.selectedUserForDelete?.email} has been permanently removed`
+            : `User ${this.selectedUserForDelete?.email} has been deactivated`;
           this.messageService.add({
             severity: 'success',
             summary: 'Success',
-            detail: `User ${this.selectedUserForDelete?.email} has been deleted successfully`
+            detail: msg
           });
           this.displayDeleteDialog = false;
           this.selectedUserForDelete = null;
           this.deletingUser = false;
-          this.loadUsers();
+          this.deletePermanent = false;
+
+          if (permanent) {
+            this.users = this.users.filter(u => u.id !== deletedUserId);
+            this.cdr.detectChanges();
+          } else {
+            this.loadUsers();
+          }
         },
         error: (error) => {
           console.error('Error deleting user:', error);
@@ -712,6 +742,29 @@ export class UserListComponent implements OnInit, OnDestroy {
             detail: error.error?.error || 'Failed to delete user'
           });
           this.deletingUser = false;
+          this.deletePermanent = false;
+        }
+      });
+  }
+
+  reactivateUser(user: User): void {
+    this.apiService.put(`users/${user.id}/activate`, {})
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: `User ${user.email} has been reactivated`
+          });
+          this.loadUsers();
+        },
+        error: (error) => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.error?.error || 'Failed to reactivate user'
+          });
         }
       });
   }

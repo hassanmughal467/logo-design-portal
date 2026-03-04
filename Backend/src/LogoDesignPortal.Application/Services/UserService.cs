@@ -70,8 +70,12 @@ public class UserService : IUserService
         _context.Users.Add(user);
 
         // Create profile based on role
-        if (role.Name == "Client" && !string.IsNullOrWhiteSpace(request.CompanyName))
+        if (role.Name == "Client")
         {
+            if (string.IsNullOrWhiteSpace(request.CompanyName))
+            {
+                throw new InvalidOperationException("Company name is required for Client role.");
+            }
             var clientProfile = new Domain.Entities.ClientProfile
             {
                 Id = Guid.NewGuid(),
@@ -245,18 +249,65 @@ public class UserService : IUserService
     {
         var users = await _context.Users
             .Include(u => u.Role)
+            .Include(u => u.ClientProfile)
+            .Include(u => u.DesignerProfile)
             .Where(u => !u.IsDeleted)
             .ToListAsync();
 
-        return users.Select(user => new UserResponseDto
+        return users.Select(user =>
         {
-            Id = user.Id,
-            Email = user.Email,
-            FirstName = user.FirstName,
-            LastName = user.LastName,
-            RoleName = user.Role?.Name ?? string.Empty,
-            IsActive = user.IsActive,
-            CreatedAt = user.CreatedAt
+            ClientProfileDto? clientProfileDto = null;
+            DesignerProfileDto? designerProfileDto = null;
+
+            if (user.ClientProfile != null && !user.ClientProfile.IsDeleted)
+            {
+                clientProfileDto = new ClientProfileDto
+                {
+                    Id = user.ClientProfile.Id,
+                    UserId = user.ClientProfile.UserId,
+                    CompanyName = user.ClientProfile.CompanyName ?? string.Empty,
+                    ContactName = user.ClientProfile.ContactName,
+                    PhoneNumber = user.ClientProfile.PhoneNumber,
+                    Cell = user.ClientProfile.Cell,
+                    Fax = user.ClientProfile.Fax,
+                    Address = user.ClientProfile.Address,
+                    City = user.ClientProfile.City,
+                    State = user.ClientProfile.State,
+                    Country = user.ClientProfile.Country,
+                    PostalCode = user.ClientProfile.PostalCode,
+                    Website = user.ClientProfile.Website,
+                    Reference = user.ClientProfile.Reference,
+                    Notes = user.ClientProfile.Notes
+                };
+            }
+
+            if (user.DesignerProfile != null && !user.DesignerProfile.IsDeleted)
+            {
+                designerProfileDto = new DesignerProfileDto
+                {
+                    Id = user.DesignerProfile.Id,
+                    UserId = user.DesignerProfile.UserId,
+                    Specialization = user.DesignerProfile.Specialization,
+                    Bio = user.DesignerProfile.Bio,
+                    HourlyRate = user.DesignerProfile.HourlyRate,
+                    IsAvailable = user.DesignerProfile.IsAvailable
+                };
+            }
+
+            return new UserResponseDto
+            {
+                Id = user.Id,
+                Email = user.Email,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                RoleName = user.Role?.Name ?? string.Empty,
+                IsActive = user.IsActive,
+                CreatedAt = user.CreatedAt,
+                SecondaryEmail = user.SecondaryEmail,
+                InvoiceEmail = user.InvoiceEmail,
+                ClientProfile = clientProfileDto,
+                DesignerProfile = designerProfileDto
+            };
         }).ToList();
     }
 
@@ -305,42 +356,41 @@ public class UserService : IUserService
         // Update or create profile based on role
         if (role.Name == "Client")
         {
+            if (string.IsNullOrWhiteSpace(request.CompanyName))
+            {
+                throw new InvalidOperationException("Company name is required for Client role.");
+            }
+
             var clientProfile = await _context.ClientProfiles
                 .FirstOrDefaultAsync(cp => cp.UserId == user.Id && !cp.IsDeleted);
 
             if (clientProfile == null)
             {
-                // Create new profile if it doesn't exist
-                if (!string.IsNullOrWhiteSpace(request.CompanyName))
+                // Create new profile
+                clientProfile = new Domain.Entities.ClientProfile
                 {
-                    clientProfile = new Domain.Entities.ClientProfile
-                    {
-                        Id = Guid.NewGuid(),
-                        UserId = user.Id,
-                        CompanyName = request.CompanyName,
-                        ContactName = request.ContactName,
-                        PhoneNumber = request.PhoneNumber,
-                        Cell = request.Cell,
-                        Fax = request.Fax,
-                        Address = request.Address,
-                        City = request.City,
-                        State = request.State,
-                        Country = request.Country,
-                        PostalCode = request.PostalCode,
-                        Website = request.Website,
-                        Reference = request.Reference,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _context.ClientProfiles.Add(clientProfile);
-                }
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    CompanyName = request.CompanyName!,
+                    ContactName = request.ContactName,
+                    PhoneNumber = request.PhoneNumber,
+                    Cell = request.Cell,
+                    Fax = request.Fax,
+                    Address = request.Address,
+                    City = request.City,
+                    State = request.State,
+                    Country = request.Country,
+                    PostalCode = request.PostalCode,
+                    Website = request.Website,
+                    Reference = request.Reference,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.ClientProfiles.Add(clientProfile);
             }
             else
             {
                 // Update existing profile
-                if (!string.IsNullOrWhiteSpace(request.CompanyName))
-                {
-                    clientProfile.CompanyName = request.CompanyName;
-                }
+                clientProfile.CompanyName = request.CompanyName!;
                 clientProfile.ContactName = request.ContactName;
                 clientProfile.PhoneNumber = request.PhoneNumber;
                 clientProfile.Cell = request.Cell;
@@ -608,6 +658,12 @@ public class UserService : IUserService
 
     public async Task<bool> DeleteUserAsync(Guid id, Guid deletedBy)
     {
+        return await SoftDeactivateUserAsync(id, deletedBy);
+    }
+
+    /// <summary>Soft delete: deactivates user (IsActive=false). User can be reactivated.</summary>
+    public async Task<bool> SoftDeactivateUserAsync(Guid id, Guid deactivatedBy)
+    {
         var user = await _context.Users
             .Include(u => u.Role)
             .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
@@ -617,24 +673,91 @@ public class UserService : IUserService
             throw new InvalidOperationException("User not found.");
         }
 
-        // Prevent deleting SuperAdmin users
         if (user.Role?.Name == "SuperAdmin")
         {
-            throw new InvalidOperationException("Cannot delete SuperAdmin users.");
+            throw new InvalidOperationException("Cannot deactivate SuperAdmin users.");
         }
 
-        // Prevent users from deleting themselves
-        if (user.Id == deletedBy)
+        if (user.Id == deactivatedBy)
         {
-            throw new InvalidOperationException("Cannot delete your own account.");
+            throw new InvalidOperationException("Cannot deactivate your own account.");
         }
 
-        // Soft deactivation instead of deletion
         user.IsActive = false;
         user.DeactivatedAt = DateTime.UtcNow;
-        user.DeactivatedBy = deletedBy;
+        user.DeactivatedBy = deactivatedBy;
+        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedBy = deactivatedBy;
+
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    /// <summary>Reactivate a soft-deactivated user (IsActive=true).</summary>
+    public async Task<bool> ReactivateUserAsync(Guid id)
+    {
+        var user = await _context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
+
+        if (user == null)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        user.IsActive = true;
+        user.DeactivatedAt = null;
+        user.DeactivatedBy = null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    /// <summary>Hard delete: marks user as IsDeleted. User is removed from lists and cannot be restored via UI.</summary>
+    public async Task<bool> HardDeleteUserAsync(Guid id, Guid deletedBy)
+    {
+        var user = await _context.Users
+            .Include(u => u.Role)
+            .Include(u => u.ClientProfile)
+            .Include(u => u.DesignerProfile)
+            .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
+
+        if (user == null)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        if (user.Role?.Name == "SuperAdmin")
+        {
+            throw new InvalidOperationException("Cannot permanently delete SuperAdmin users.");
+        }
+
+        if (user.Id == deletedBy)
+        {
+            throw new InvalidOperationException("Cannot permanently delete your own account.");
+        }
+
+        user.IsDeleted = true;
+        user.DeletedAt = DateTime.UtcNow;
+        user.DeletedBy = deletedBy;
+        user.IsActive = false;
         user.UpdatedAt = DateTime.UtcNow;
         user.UpdatedBy = deletedBy;
+
+        if (user.ClientProfile != null && !user.ClientProfile.IsDeleted)
+        {
+            user.ClientProfile.IsDeleted = true;
+            user.ClientProfile.DeletedAt = DateTime.UtcNow;
+            user.ClientProfile.DeletedBy = deletedBy;
+        }
+
+        if (user.DesignerProfile != null && !user.DesignerProfile.IsDeleted)
+        {
+            user.DesignerProfile.IsDeleted = true;
+            user.DesignerProfile.DeletedAt = DateTime.UtcNow;
+            user.DesignerProfile.DeletedBy = deletedBy;
+        }
 
         await _context.SaveChangesAsync();
         return true;

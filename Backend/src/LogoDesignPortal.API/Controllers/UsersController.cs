@@ -180,13 +180,40 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> DeleteUser(Guid id)
+    public async Task<IActionResult> DeleteUser(Guid id, [FromQuery] bool permanent = false)
     {
         try
         {
             var deletedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var result = await _userService.DeleteUserAsync(id, deletedBy);
-            return Ok(new { message = "User deactivated successfully." });
+            if (permanent)
+            {
+                await _userService.HardDeleteUserAsync(id, deletedBy);
+                return Ok(new { message = "User permanently removed from the system." });
+            }
+            else
+            {
+                await _userService.SoftDeactivateUserAsync(id, deletedBy);
+                return Ok(new { message = "User deactivated successfully. You can reactivate them later." });
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPut("{id}/activate")]
+    [Authorize(Roles = "SuperAdmin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ReactivateUser(Guid id)
+    {
+        try
+        {
+            await _userService.ReactivateUserAsync(id);
+            return Ok(new { message = "User reactivated successfully." });
         }
         catch (InvalidOperationException ex)
         {

@@ -68,141 +68,128 @@
   </div>
 
   <p-card styleClass="invoices-card">
-    <p-table 
-      [value]="invoices" 
-      [loading]="loading"
-      [paginator]="true"
-      [rows]="rows"
-      [first]="first"
-      (onPage)="first = $event.first"
-      [globalFilterFields]="['invoiceNumber', 'clientName']"
-      [rowsPerPageOptions]="[10, 25, 50]"
-      styleClass="p-datatable-striped"
-      [responsive]="true">
-      
-      <ng-template pTemplate="caption">
-        <div class="table-header">
-          <span class="p-input-icon-left">
-            <i class="pi pi-search"></i>
-            <input 
-              type="text" 
-              pInputText 
-              [(ngModel)]="globalFilter" 
-              placeholder="Search invoices..." 
-              class="search-input" />
-          </span>
-          <p-dropdown 
-            [options]="statuses" 
-            [(ngModel)]="selectedStatus"
-            placeholder="Filter by Status"
-            [showClear]="true"
-            styleClass="status-filter">
-          </p-dropdown>
+    <div class="invoice-toolbar">
+      <p-button label="Download CSV" icon="pi pi-download" styleClass="p-button-outlined p-button-sm"
+        (onClick)="downloadInvoiceReport('csv')"></p-button>
+      <p-button label="Download PDF" icon="pi pi-file-pdf" styleClass="p-button-outlined p-button-sm"
+        (onClick)="downloadInvoiceReport('pdf')"></p-button>
+    </div>
+    <div class="financial-summaries">
+      <div class="summary-card">
+        <h4>Weekly Summary</h4>
+        <p class="summary-total">Total: {{ formatCurrency(getWeeklySummary().total) }}</p>
+        <p class="summary-paid">Paid: {{ formatCurrency(getWeeklySummary().paid) }}</p>
+        <p class="summary-pending">Unpaid: {{ formatCurrency(getWeeklySummary().pending) }}</p>
+      </div>
+      <div class="summary-card">
+        <h4>Monthly Summary</h4>
+        <p class="summary-total">Total: {{ formatCurrency(getMonthlySummary().total) }}</p>
+        <p class="summary-paid">Paid: {{ formatCurrency(getMonthlySummary().paid) }}</p>
+        <p class="summary-pending">Unpaid: {{ formatCurrency(getMonthlySummary().pending) }}</p>
+      </div>
+    </div>
+    <p-tabView [(activeIndex)]="selectedInvoiceTabIndex">
+      <p-tabPanel header="Unpaid" leftIcon="pi pi-exclamation-circle">
+        <div class="invoice-actions-bar">
+          <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getUnpaidInvoices().length === 0"
+            (onClick)="selectedInvoices = getUnpaidInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
         </div>
-      </ng-template>
-
-      <ng-template pTemplate="header">
-        <tr>
-          <th pSortableColumn="invoiceNumber">
-            Invoice # <p-sortIcon field="invoiceNumber"></p-sortIcon>
-          </th>
-          <th>Client</th>
-          <th>Billing Type</th>
-          <th pSortableColumn="totalAmount">
-            Total Amount <p-sortIcon field="totalAmount"></p-sortIcon>
-          </th>
-          <th pSortableColumn="status">
-            Status <p-sortIcon field="status"></p-sortIcon>
-          </th>
-          <th pSortableColumn="dueDate">
-            Due Date <p-sortIcon field="dueDate"></p-sortIcon>
-          </th>
-          <th>Actions</th>
-        </tr>
-      </ng-template>
-
-      <ng-template pTemplate="body" let-invoice>
-        <tr>
-          <td>
-            <div class="invoice-number-cell">
-              <i class="pi pi-file-pdf"></i>
-              <span>{{ invoice.invoiceNumber }}</span>
-            </div>
-          </td>
-          <td>{{ invoice.clientName }}</td>
-          <td>
-            <p-tag 
-              [value]="invoice.billingTypeDisplay || getBillingTypeLabel(invoice.billingType)" 
-              [severity]="getBillingTypeSeverity(invoice.billingType)"
-              [rounded]="true">
-            </p-tag>
-          </td>
-          <td>
-            <span class="currency-text">{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</span>
-            <small *ngIf="invoice.taxAmount > 0" class="text-muted d-block">
-              (Tax: {{ formatCurrency(invoice.taxAmount) }})
-            </small>
-          </td>
-          <td>
-            <p-tag 
-              [value]="invoice.status" 
-              [severity]="getStatusSeverity(invoice.status)"
-              [rounded]="true">
-            </p-tag>
-          </td>
-          <td>
-            <span [class.overdue]="isOverdue(invoice.dueDate)">
-              {{ formatDate(invoice.dueDate) }}
-            </span>
-          </td>
-          <td>
-            <div class="action-buttons">
-              <p-button 
-                icon="pi pi-eye" 
-                styleClass="p-button-text p-button-rounded p-button-sm"
-                (onClick)="openDetailDialog(invoice)"
-                pTooltip="View Details"
-                tooltipPosition="top">
-              </p-button>
-              <p-button 
-                icon="pi pi-download" 
-                styleClass="p-button-text p-button-rounded p-button-sm"
-                (onClick)="downloadInvoice(invoice.id)"
-                pTooltip="Download PDF"
-                tooltipPosition="top">
-              </p-button>
-              <p-button 
-                *ngIf="!invoice.isLocked"
-                icon="pi pi-pencil" 
-                styleClass="p-button-text p-button-rounded p-button-sm"
-                (onClick)="openEditDialog(invoice)"
-                pTooltip="Edit Invoice"
-                tooltipPosition="top">
-              </p-button>
-              <p-button 
-                *ngIf="!invoice.isLocked"
-                icon="pi pi-send" 
-                styleClass="p-button-text p-button-rounded p-button-sm"
-                (onClick)="sendInvoice(invoice.id)"
-                pTooltip="Send Invoice"
-                tooltipPosition="top">
-              </p-button>
-            </div>
-          </td>
-        </tr>
-      </ng-template>
-
-      <ng-template pTemplate="emptymessage">
-        <tr>
-          <td colspan="7" class="empty-message">
-            <div class="empty-state">
-              <i class="pi pi-file-pdf empty-icon"></i>
-              <p>No invoices found</p>
-            </div>
-          </td>
-        </tr>
-      </ng-template>
-    </p-table>
+        <p-table [value]="getUnpaidInvoices()" [loading]="loading" [paginator]="true" [rows]="10"
+          [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
+          <ng-template pTemplate="header">
+            <tr>
+              <th style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
+              <th>Invoice #</th><th>Amount</th><th>Status</th><th>Due Date</th><th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-invoice>
+            <tr>
+              <td><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
+              <td>{{ invoice.invoiceNumber }}</td>
+              <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
+              <td>
+                <p-tag [value]="invoice.status" [severity]="invoice.status === 'Overdue' ? 'danger' : 'warning'" [rounded]="true"></p-tag>
+              </td>
+              <td>
+                <span [class.overdue]="invoice.status === 'Overdue'">{{ formatDate(invoice.dueDate) }}</span>
+              </td>
+              <td><p-button label="Pay" icon="pi pi-money-bill" 
+                [styleClass]="'p-button-sm ' + (invoice.status === 'Overdue' ? 'p-button-danger' : 'p-button-success')"
+                (onClick)="openPaymentDialog(invoice)"></p-button></td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="6">No unpaid invoices</td></tr></ng-template>
+        </p-table>
+      </p-tabPanel>
+      <p-tabPanel header="Pending" leftIcon="pi pi-clock">
+        <div class="invoice-actions-bar">
+          <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getPendingInvoices().length === 0"
+            (onClick)="selectedInvoices = getPendingInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
+        </div>
+        <p-table [value]="getPendingInvoices()" [loading]="loading" [paginator]="true" [rows]="10"
+          [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
+          <ng-template pTemplate="header">
+            <tr>
+              <th style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
+              <th>Invoice #</th><th>Amount</th><th>Due Date</th><th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-invoice>
+            <tr>
+              <td><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
+              <td>{{ invoice.invoiceNumber }}</td>
+              <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
+              <td>{{ formatDate(invoice.dueDate) }}</td>
+              <td><p-button label="Pay" icon="pi pi-money-bill" styleClass="p-button-sm p-button-success"
+                (onClick)="openPaymentDialog(invoice)"></p-button></td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="5">No pending invoices</td></tr></ng-template>
+        </p-table>
+      </p-tabPanel>
+      <p-tabPanel header="Due" leftIcon="pi pi-exclamation-triangle">
+        <div class="invoice-actions-bar">
+          <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getDueInvoices().length === 0"
+            (onClick)="selectedInvoices = getDueInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
+        </div>
+        <p-table [value]="getDueInvoices()" [loading]="loading" [paginator]="true" [rows]="10"
+          [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
+          <ng-template pTemplate="header">
+            <tr>
+              <th style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
+              <th>Invoice #</th><th>Amount</th><th>Due Date</th><th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-invoice>
+            <tr>
+              <td><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
+              <td>{{ invoice.invoiceNumber }}</td>
+              <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
+              <td><span class="overdue">{{ formatDate(invoice.dueDate) }}</span></td>
+              <td><p-button label="Pay" icon="pi pi-money-bill" styleClass="p-button-sm p-button-danger"
+                (onClick)="openPaymentDialog(invoice)"></p-button></td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="5">No due invoices</td></tr></ng-template>
+        </p-table>
+      </p-tabPanel>
+      <p-tabPanel header="Paid" leftIcon="pi pi-check-circle">
+        <p-table [value]="getPaidInvoices()" [loading]="loading" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
+          <ng-template pTemplate="header">
+            <tr><th>Invoice #</th><th>Amount</th><th>Paid Date</th><th>Payment Method</th></tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-invoice>
+            <tr>
+              <td>{{ invoice.invoiceNumber }}</td>
+              <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
+              <td>{{ formatDate(invoice.paidDate) }}</td>
+              <td>{{ invoice.paymentMethod || 'N/A' }}</td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="4">No paid invoices</td></tr></ng-template>
+        </p-table>
+      </p-tabPanel>
+    </p-tabView>
   </p-card>
 
   <!-- Generate Invoice Dialog -->
@@ -223,7 +210,8 @@
           optionLabel="label"
           optionValue="value"
           placeholder="Select billing type"
-          class="full-width">
+          class="full-width"
+          appendTo="body">
         </p-dropdown>
       </div>
       <div class="form-group">
@@ -236,7 +224,8 @@
           placeholder="Select completed orders"
           [filter]="true"
           [showClear]="true"
-          class="full-width">
+          class="full-width"
+          appendTo="body">
         </p-multiSelect>
         <small class="text-muted">You can select multiple orders to include in one invoice</small>
       </div>
@@ -246,14 +235,14 @@
         label="Cancel" 
         icon="pi pi-times"
         (onClick)="showGenerateDialog = false"
-        styleClass="p-button-text">
+        styleClass="p-button-outlined p-button-secondary modal-footer-btn">
       </p-button>
       <p-button 
         label="Generate Invoice" 
         icon="pi pi-check"
         (onClick)="generateInvoice()"
         [disabled]="selectedOrderIds.length === 0"
-        styleClass="p-button-primary">
+        styleClass="p-button-primary modal-footer-btn">
       </p-button>
     </ng-template>
   </p-dialog>
@@ -355,7 +344,7 @@
         label="Close" 
         icon="pi pi-times"
         (onClick)="showDetailDialog = false"
-        styleClass="p-button-text">
+        styleClass="p-button-outlined p-button-secondary modal-footer-btn">
       </p-button>
     </ng-template>
   </p-dialog>
@@ -383,7 +372,8 @@
           optionLabel="label"
           optionValue="value"
           placeholder="Select billing type"
-          class="full-width">
+          class="full-width"
+          appendTo="body">
         </p-dropdown>
       </div>
 
@@ -394,7 +384,8 @@
           [showIcon]="true"
           dateFormat="yy-mm-dd"
           placeholder="Select due date"
-          class="full-width">
+          class="full-width"
+          appendTo="body">
         </p-calendar>
       </div>
 
@@ -449,14 +440,54 @@
         label="Cancel" 
         icon="pi pi-times"
         (onClick)="showEditDialog = false"
-        styleClass="p-button-text">
+        styleClass="p-button-outlined p-button-secondary modal-footer-btn">
       </p-button>
       <p-button 
         label="Save Changes" 
         icon="pi pi-check"
         (onClick)="saveInvoice()"
-        styleClass="p-button-primary">
+        styleClass="p-button-primary modal-footer-btn">
       </p-button>
     </ng-template>
+  </p-dialog>
+
+  <!-- Payment Dialog -->
+  <p-dialog 
+    [(visible)]="showPaymentDialog" 
+    header="Process Payment" 
+    [modal]="true" 
+    [style]="{width: '90%', maxWidth: '700px'}" 
+    [draggable]="false" 
+    [resizable]="false"
+    [closable]="true">
+    <div class="payment-dialog">
+      <!-- Multiple invoices - show summary and manual payment option -->
+      <div *ngIf="selectedInvoices.length > 1" class="multiple-invoices-payment">
+        <p>Process payment for {{ selectedInvoices.length }} invoice(s)?</p>
+        <div class="payment-summary">
+          <p><strong>Total Amount:</strong> {{ formatCurrency(getSelectedInvoicesTotal()) }}</p>
+        </div>
+        <div class="field">
+          <label for="paymentMethod">Payment Method</label>
+          <input id="paymentMethod" type="text" pInputText [(ngModel)]="paymentMethod" placeholder="e.g., Bank Transfer, PayPal, etc." />
+        </div>
+        <div class="payment-actions">
+          <p-button label="Cancel" icon="pi pi-times" styleClass="p-button-outlined p-button-secondary modal-footer-btn" (onClick)="cancelPayment()"></p-button>
+          <p-button label="Mark as Paid" icon="pi pi-check" styleClass="p-button-primary modal-footer-btn" (onClick)="processPayment()"></p-button>
+        </div>
+      </div>
+
+      <!-- Single invoice - show payment component -->
+      <div *ngIf="selectedInvoices.length === 1">
+        <app-payment
+          [invoiceId]="selectedInvoices[0].id"
+          [invoiceNumber]="selectedInvoices[0].invoiceNumber"
+          [amount]="selectedInvoices[0].totalAmount || selectedInvoices[0].amount"
+          [currency]="'USD'"
+          (paymentComplete)="onPaymentComplete()"
+          (paymentCancelled)="cancelPayment()">
+        </app-payment>
+      </div>
+    </div>
   </p-dialog>
 </div>

@@ -2,75 +2,538 @@
   <div class="page-header">
     <div class="header-content">
       <h1 class="page-title">Files Management</h1>
-      <p class="page-subtitle">Upload, view, and manage files</p>
+      <p class="page-subtitle" *ngIf="!isSuperAdmin">Upload, view, and manage files grouped by logo</p>
+      <p class="page-subtitle" *ngIf="isSuperAdmin">Oversight, support, and auditing across all clients</p>
+    </div>
+    <div class="header-actions">
+      <p-button 
+        [icon]="viewMode === 'table' ? 'pi pi-th-large' : 'pi pi-list'"
+        [label]="viewMode === 'table' ? 'Grid View' : 'Table View'"
+        styleClass="p-button-outlined"
+        (onClick)="toggleViewMode()"
+        pTooltip="Switch between table and grid view"
+        tooltipPosition="bottom">
+      </p-button>
     </div>
   </div>
 
-  <p-card styleClass="files-card">
+  <!-- Search-First UI (Super Admin) -->
+  <div *ngIf="isSuperAdmin" class="search-first-container">
+    <p-card styleClass="search-card">
+      <div class="global-search-wrapper">
+        <span class="p-input-icon-left p-input-icon-right">
+          <i class="pi pi-search"></i>
+          <input 
+            type="text" 
+            pInputText 
+            [(ngModel)]="globalSearch"
+            (input)="onSearchChange()"
+            placeholder="Search files, clients, logos, or uploaders..." 
+            class="global-search-input" />
+          <i *ngIf="globalSearch" class="pi pi-times search-clear" (click)="globalSearch = ''; onSearchChange()"></i>
+        </span>
+        <div class="search-stats" *ngIf="!loading">
+          <span class="stat-item">{{ totalClients }} Client{{ totalClients !== 1 ? 's' : '' }}</span>
+          <span class="stat-divider">•</span>
+          <span class="stat-item">{{ totalFiles }} File{{ totalFiles !== 1 ? 's' : '' }}</span>
+        </div>
+      </div>
+    </p-card>
+  </div>
+
+  <!-- Filters -->
+  <p-card styleClass="filters-card" *ngIf="!loading">
+    <div class="filters-container">
+      <!-- Super Admin Filters -->
+      <div *ngIf="isSuperAdmin" class="filter-row">
+        <div class="filter-item">
+          <label>CLIENT</label>
+          <p-dropdown 
+            [options]="clientOptions" 
+            [(ngModel)]="clientFilter"
+            (onChange)="onFilterChange()"
+            optionLabel="label" 
+            optionValue="value"
+            [showClear]="true"
+            placeholder="All Clients"
+            styleClass="filter-dropdown"
+            appendTo="body">
+          </p-dropdown>
+        </div>
+        
+        <div class="filter-item filter-item-logo-name">
+          <label>LOGO NAME</label>
+          <input 
+            type="text" 
+            pInputText 
+            [(ngModel)]="logoNameFilter" 
+            (input)="onFilterChange()"
+            placeholder="Search by logo name..." 
+            class="filter-input filter-input-logo-name" />
+        </div>
+        
+        <div class="filter-item">
+          <label>UPLOADED BY</label>
+          <p-dropdown 
+            [options]="uploadedByOptions" 
+            [(ngModel)]="uploadedByFilter"
+            (onChange)="onFilterChange()"
+            optionLabel="label" 
+            optionValue="value"
+            [showClear]="true"
+            placeholder="All Users"
+            styleClass="filter-dropdown"
+            appendTo="body">
+          </p-dropdown>
+        </div>
+      </div>
+
+      <!-- Common Filters -->
+      <div class="filter-row" [class.filter-row-second]="!isSuperAdmin">
+        <div class="filter-item">
+          <label>FILE CATEGORY</label>
+          <p-dropdown 
+            [options]="fileCategoryOptions" 
+            [(ngModel)]="fileCategoryFilter"
+            (onChange)="onFilterChange()"
+            optionLabel="label" 
+            optionValue="value"
+            [showClear]="true"
+            placeholder="All Categories"
+            styleClass="filter-dropdown"
+            appendTo="body">
+          </p-dropdown>
+        </div>
+        
+        <div class="filter-item">
+          <label>STATUS</label>
+          <p-dropdown 
+            [options]="fileStatusOptions" 
+            [(ngModel)]="fileStatusFilter"
+            (onChange)="onFilterChange()"
+            optionLabel="label" 
+            optionValue="value"
+            [showClear]="true"
+            placeholder="All Statuses"
+            styleClass="filter-dropdown"
+            appendTo="body">
+          </p-dropdown>
+      </div>
+
+        <div class="filter-item">
+          <label>DATE FROM</label>
+          <p-calendar 
+            [(ngModel)]="dateFrom"
+            (onSelect)="onFilterChange()"
+            [showIcon]="true"
+            dateFormat="yy-mm-dd"
+            placeholder="Select date"
+            styleClass="filter-calendar"
+            appendTo="body">
+          </p-calendar>
+        </div>
+        
+        <div class="filter-item">
+          <label>DATE TO</label>
+          <p-calendar 
+            [(ngModel)]="dateTo"
+            (onSelect)="onFilterChange()"
+            [showIcon]="true"
+            dateFormat="yy-mm-dd"
+            placeholder="Select date"
+            styleClass="filter-calendar"
+            appendTo="body">
+          </p-calendar>
+        </div>
+        
+        <div class="filter-item filter-actions">
+          <p-button 
+            label="Clear Filters" 
+            icon="pi pi-times"
+            styleClass="p-button-text"
+            (onClick)="clearFilters()">
+          </p-button>
+        </div>
+      </div>
+
+      <!-- Regular User Filters (Logo Name only) -->
+      <div *ngIf="!isSuperAdmin" class="filter-row">
+        <div class="filter-item filter-item-logo-name">
+          <label>LOGO NAME</label>
+          <input 
+            type="text" 
+            pInputText 
+            [(ngModel)]="logoNameFilter" 
+            (input)="onFilterChange()"
+            placeholder="Search by logo name..." 
+            class="filter-input filter-input-logo-name" />
+        </div>
+      </div>
+    </div>
+  </p-card>
+
+  <div *ngIf="loading" class="loading-container">
+    <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+    <p>Loading files...</p>
+  </div>
+
+  <!-- Super Admin Hierarchical View -->
+  <div *ngIf="!loading && isSuperAdmin && viewMode === 'table'">
+    <p-card styleClass="files-card">
+      <p-table 
+        [value]="clientGroups" 
+        [loading]="loading"
+        [paginator]="true"
+        [rows]="pageSize"
+        [first]="0"
+        (onPage)="onPageChange($event)"
+        [rowsPerPageOptions]="[5, 10, 25, 50]"
+        [totalRecords]="totalClients"
+        [lazy]="false"
+        styleClass="p-datatable-striped hierarchical-table">
+        
+        <ng-template pTemplate="header">
+          <tr>
+            <th class="table-header-expand" style="width: 50px;"></th>
+            <th class="table-header-client" style="min-width: 250px;">Client</th>
+            <th class="table-header-logos" style="width: 120px; text-align: center;">Logos</th>
+            <th class="table-header-files" style="width: 120px; text-align: center;">Files</th>
+            <th class="table-header-actions" style="width: 100px; text-align: center;">Actions</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-client>
+          <!-- Client Row -->
+          <tr class="client-row" [class.expanded]="isClientExpanded(client.clientId)" (click)="toggleClient(client.clientId)">
+            <td class="expand-cell" (click)="$event.stopPropagation()">
+              <div class="expand-icon-wrapper" (click)="toggleClient(client.clientId)">
+                <i [class]="isClientExpanded(client.clientId) ? 'pi pi-chevron-down expand-icon' : 'pi pi-chevron-right expand-icon'"></i>
+              </div>
+            </td>
+            <td class="client-name-cell">
+              <div class="client-name-wrapper">
+                <i class="pi pi-user client-icon"></i>
+                <div class="client-info">
+                  <span class="client-name">{{ client.clientName }}</span>
+                  <span *ngIf="client.clientCompanyName" class="client-company">{{ client.clientCompanyName }}</span>
+                </div>
+              </div>
+            </td>
+            <td class="logos-count-cell">
+              <p-tag [value]="client.logoCount + ' logo' + (client.logoCount !== 1 ? 's' : '')" severity="info" [rounded]="true"></p-tag>
+            </td>
+            <td class="files-count-cell">
+              <p-tag [value]="client.totalFiles + ' file' + (client.totalFiles !== 1 ? 's' : '')" severity="success" [rounded]="true"></p-tag>
+            </td>
+            <td class="actions-cell" (click)="$event.stopPropagation()">
+              <p-button 
+                [icon]="isClientExpanded(client.clientId) ? 'pi pi-eye-slash' : 'pi pi-eye'"
+                [label]="isClientExpanded(client.clientId) ? 'Collapse' : 'Expand'"
+                styleClass="p-button-outlined p-button-sm"
+                (onClick)="toggleClient(client.clientId)"
+                pTooltip="Toggle logos"
+                tooltipPosition="top">
+              </p-button>
+            </td>
+          </tr>
+          
+          <!-- Expanded Logos Row -->
+          <tr *ngIf="isClientExpanded(client.clientId)" class="logos-row">
+            <td colspan="5">
+              <div class="logos-container">
+                <p-table [value]="client.logos" styleClass="p-datatable-sm nested-table">
+                  <ng-template pTemplate="header">
+                    <tr>
+                      <th class="table-header-expand" style="width: 50px;"></th>
+                      <th style="min-width: 250px;">Logo Name</th>
+                      <th style="width: 120px; text-align: center;">Files</th>
+                      <th style="width: 150px;">Created</th>
+                      <th style="width: 100px; text-align: center;">Actions</th>
+                    </tr>
+                  </ng-template>
+                  <ng-template pTemplate="body" let-logo>
+                    <tr class="logo-row" [class.expanded]="isLogoExpanded(logo.orderId)" (click)="toggleLogo(logo.orderId)">
+                      <td class="expand-cell" (click)="$event.stopPropagation()">
+                        <div class="expand-icon-wrapper" (click)="toggleLogo(logo.orderId)">
+                          <i [class]="isLogoExpanded(logo.orderId) ? 'pi pi-chevron-down expand-icon' : 'pi pi-chevron-right expand-icon'"></i>
+                        </div>
+                      </td>
+                      <td class="logo-name-cell">
+                        <div class="logo-name-wrapper">
+                          <i class="pi pi-image logo-icon"></i>
+                          <span class="logo-name-text">{{ logo.logoName }}</span>
+                        </div>
+                      </td>
+                      <td class="files-count-cell">
+                        <p-tag [value]="logo.fileCount + ' file' + (logo.fileCount !== 1 ? 's' : '')" severity="info" [rounded]="true"></p-tag>
+                      </td>
+                      <td class="created-date-cell">
+                        <div class="date-wrapper">
+                          <i class="pi pi-calendar date-icon"></i>
+                          <span class="date-text">{{ formatDate(logo.createdAt) }}</span>
+                        </div>
+                      </td>
+                      <td class="actions-cell" (click)="$event.stopPropagation()">
+                        <p-button 
+                          [icon]="isLogoExpanded(logo.orderId) ? 'pi pi-eye-slash' : 'pi pi-eye'"
+                          styleClass="p-button-text p-button-sm"
+                          (onClick)="toggleLogo(logo.orderId)"
+                          pTooltip="Toggle files"
+                          tooltipPosition="top">
+                        </p-button>
+                      </td>
+                    </tr>
+                    
+                    <!-- Expanded Files Row -->
+                    <tr *ngIf="isLogoExpanded(logo.orderId)" class="files-row">
+                      <td colspan="5">
+                        <div class="files-container">
+                          <p-table [value]="logo.files" styleClass="p-datatable-sm file-table">
+                            <ng-template pTemplate="header">
+                              <tr>
+                                <th>File Name</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                                <th>Type</th>
+                                <th>Size</th>
+                                <th>Uploaded By</th>
+                                <th *ngIf="isAdmin || isSuperAdmin">User Role</th>
+                                <th>Uploaded At</th>
+                                <th>Actions</th>
+                              </tr>
+                            </ng-template>
+                            <ng-template pTemplate="body" let-file>
+                              <tr>
+                                <td>
+                                  <div class="file-name-cell">
+                                    <i class="pi pi-file"></i>
+                                    <span>{{ file.originalFileName || file.fileName }}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <p-tag 
+                                    *ngIf="file.fileCategory"
+                                    [value]="file.fileCategory" 
+                                    severity="info"
+                                    [rounded]="true">
+                                  </p-tag>
+                                  <span *ngIf="!file.fileCategory">-</span>
+                                </td>
+                                <td>
+                                  <p-tag 
+                                    [value]="getFileStatusValue(file.fileStatus)" 
+                                    [severity]="getFileStatusSeverity(file.fileStatus)"
+                                    [rounded]="true">
+                                  </p-tag>
+                                </td>
+                                <td>
+                                  <p-tag 
+                                    [value]="file.fileType" 
+                                    severity="secondary"
+                                    [rounded]="true">
+                                  </p-tag>
+                                </td>
+                                <td>{{ formatFileSize(file.fileSize) }}</td>
+                                <td>{{ file.uploadedByName || 'N/A' }}</td>
+                                <td *ngIf="isAdmin || isSuperAdmin">
+                                  <p-tag 
+                                    *ngIf="file.uploadedByRole"
+                                    [value]="file.uploadedByRole" 
+                                    [severity]="getUserRoleSeverity(file.uploadedByRole)"
+                                    [rounded]="true">
+                                  </p-tag>
+                                  <span *ngIf="!file.uploadedByRole">-</span>
+                                </td>
+                                <td>{{ formatDate(file.createdAt) }}</td>
+                                <td>
+                                  <p-button 
+                                    icon="pi pi-download" 
+                                    styleClass="p-button-text p-button-rounded p-button-sm"
+                                    (onClick)="downloadFile(file.id, file.originalFileName || file.fileName)"
+                                    pTooltip="Download"
+                                    tooltipPosition="top">
+                                  </p-button>
+                                </td>
+                              </tr>
+                            </ng-template>
+                            <ng-template pTemplate="emptymessage">
+                              <tr>
+                                <td [attr.colspan]="(isAdmin || isSuperAdmin) ? 9 : 8" class="empty-message">
+                                  <p>No files in this logo</p>
+                                </td>
+                              </tr>
+                            </ng-template>
+                          </p-table>
+                        </div>
+                      </td>
+                    </tr>
+                  </ng-template>
+                  <ng-template pTemplate="emptymessage">
+                    <tr>
+                      <td colspan="5" class="empty-message">
+                        <p>No logos found for this client</p>
+                      </td>
+                    </tr>
+                  </ng-template>
+                </p-table>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="5" class="empty-message">
+              <div class="empty-state">
+                <i class="pi pi-users empty-icon"></i>
+                <p>No clients found</p>
+                <p class="empty-subtitle">Try adjusting your filters or search criteria</p>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </p-card>
+  </div>
+
+  <!-- Regular User Table View -->
+  <p-card styleClass="files-card" *ngIf="!loading && !isSuperAdmin && viewMode === 'table'">
     <p-table 
-      [value]="files" 
+      [value]="logoGroups" 
       [loading]="loading"
       [paginator]="true"
-      [rows]="rows"
-      [first]="first"
-      (onPage)="first = $event.first"
-      [globalFilterFields]="['fileName', 'fileType']"
-      [rowsPerPageOptions]="[10, 25, 50]"
-      styleClass="p-datatable-striped"
-      [responsive]="true">
+      [rows]="pageSize"
+      [first]="0"
+      (onPage)="onPageChange($event)"
+      [rowsPerPageOptions]="[5, 10, 25, 50]"
+      [totalRecords]="totalLogos"
+      [lazy]="false"
+      styleClass="p-datatable-striped">
       
-      <ng-template pTemplate="caption">
-        <div class="table-header">
-          <span class="p-input-icon-left">
-            <i class="pi pi-search"></i>
-            <input 
-              type="text" 
-              pInputText 
-              [(ngModel)]="globalFilter" 
-              placeholder="Search files..." 
-              class="search-input" />
-          </span>
-        </div>
-      </ng-template>
-
       <ng-template pTemplate="header">
         <tr>
-          <th>File Name</th>
-          <th>Type</th>
-          <th>Size</th>
-          <th>Uploaded By</th>
-          <th>Uploaded At</th>
-          <th>Actions</th>
+          <th class="table-header-expand" style="width: 70px; text-align: center;"></th>
+          <th class="table-header-logo" style="min-width: 250px;">Logo Name</th>
+          <th class="table-header-files" style="width: 150px; text-align: center;">Files</th>
+          <th class="table-header-created" style="width: 200px;">Created</th>
+          <th class="table-header-actions" style="width: 150px; text-align: center;">Actions</th>
         </tr>
       </ng-template>
 
-      <ng-template pTemplate="body" let-file>
-        <tr>
-          <td>
-            <div class="file-name-cell">
-              <i class="pi pi-file"></i>
-              <span>{{ file.fileName }}</span>
+      <ng-template pTemplate="body" let-logo>
+        <tr class="logo-row" [class.expanded]="isLogoExpanded(logo.orderId)" (click)="toggleLogo(logo.orderId)">
+          <td class="expand-cell" (click)="$event.stopPropagation()">
+            <div class="expand-icon-wrapper" (click)="toggleLogo(logo.orderId)">
+              <i [class]="isLogoExpanded(logo.orderId) ? 'pi pi-chevron-down expand-icon' : 'pi pi-chevron-right expand-icon'"></i>
             </div>
           </td>
-          <td>
-            <p-tag 
-              [value]="file.fileType" 
-              severity="info"
-              [rounded]="true">
-            </p-tag>
+          <td class="logo-name-cell-wrapper">
+            <div class="logo-name-cell">
+              <i class="pi pi-image logo-icon"></i>
+              <span class="logo-name-text">{{ logo.logoName }}</span>
+            </div>
           </td>
-          <td>{{ formatFileSize(file.fileSize) }}</td>
-          <td>{{ file.uploadedBy }}</td>
-          <td>{{ formatDate(file.uploadedAt) }}</td>
-          <td>
-            <div class="action-buttons">
-              <p-button 
-                icon="pi pi-download" 
-                styleClass="p-button-text p-button-rounded p-button-sm"
-                (onClick)="downloadFile(file.id, file.fileName)"
-                pTooltip="Download"
-                tooltipPosition="top">
-              </p-button>
+          <td class="files-count-cell">
+            <p-tag [value]="logo.fileCount + ' file' + (logo.fileCount !== 1 ? 's' : '')" severity="info" [rounded]="true" styleClass="file-count-tag"></p-tag>
+          </td>
+          <td class="created-date-cell">
+            <div class="date-wrapper">
+              <i class="pi pi-calendar date-icon"></i>
+              <span class="date-text">{{ formatDate(logo.createdAt) }}</span>
+            </div>
+          </td>
+          <td class="actions-cell" (click)="$event.stopPropagation()">
+            <p-button 
+              [icon]="isLogoExpanded(logo.orderId) ? 'pi pi-eye-slash' : 'pi pi-eye'"
+              [label]="isLogoExpanded(logo.orderId) ? 'Collapse' : 'Expand'"
+              styleClass="p-button-outlined p-button-sm expand-action-btn"
+              (onClick)="toggleLogo(logo.orderId)"
+              pTooltip="Toggle files"
+              tooltipPosition="top">
+            </p-button>
+          </td>
+        </tr>
+        
+        <!-- Expanded files row -->
+        <tr *ngIf="isLogoExpanded(logo.orderId)" class="files-row">
+          <td colspan="5">
+            <div class="files-container">
+              <p-table [value]="logo.files" styleClass="p-datatable-sm">
+                <ng-template pTemplate="header">
+                  <tr>
+                    <th>File Name</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Uploaded By</th>
+                    <th *ngIf="isAdmin || isSuperAdmin">User Role</th>
+                    <th>Uploaded At</th>
+                    <th>Actions</th>
+                  </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-file>
+                  <tr>
+                    <td>
+                      <div class="file-name-cell">
+                        <i class="pi pi-file"></i>
+                        <span>{{ file.originalFileName || file.fileName }}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <p-tag 
+                        *ngIf="file.fileCategory"
+                        [value]="file.fileCategory" 
+                        severity="info"
+                        [rounded]="true">
+                      </p-tag>
+                      <span *ngIf="!file.fileCategory">-</span>
+                    </td>
+                    <td>
+                      <p-tag 
+                        [value]="getFileStatusValue(file.fileStatus)" 
+                        [severity]="getFileStatusSeverity(file.fileStatus)"
+                        [rounded]="true">
+                      </p-tag>
+                    </td>
+                    <td>
+                      <p-tag 
+                        [value]="file.fileType" 
+                        severity="secondary"
+                        [rounded]="true">
+                      </p-tag>
+                    </td>
+                    <td>{{ formatFileSize(file.fileSize) }}</td>
+                    <td>{{ file.uploadedByName || 'N/A' }}</td>
+                    <td *ngIf="isAdmin || isSuperAdmin">
+                      <p-tag 
+                        *ngIf="file.uploadedByRole"
+                        [value]="file.uploadedByRole" 
+                        [severity]="getUserRoleSeverity(file.uploadedByRole)"
+                        [rounded]="true">
+                      </p-tag>
+                      <span *ngIf="!file.uploadedByRole">-</span>
+                    </td>
+                    <td>{{ formatDate(file.createdAt) }}</td>
+                    <td>
+                      <p-button 
+                        icon="pi pi-download" 
+                        styleClass="p-button-text p-button-rounded p-button-sm"
+                        (onClick)="downloadFile(file.id, file.originalFileName || file.fileName)"
+                        pTooltip="Download"
+                        tooltipPosition="top">
+                      </p-button>
+                    </td>
+                  </tr>
+                </ng-template>
+                <ng-template pTemplate="emptymessage">
+                  <tr>
+                    <td [attr.colspan]="(isAdmin || isSuperAdmin) ? 9 : 8" class="empty-message">
+                      <p>No files in this logo</p>
+                    </td>
+                  </tr>
+                </ng-template>
+              </p-table>
             </div>
           </td>
         </tr>
@@ -78,14 +541,106 @@
 
       <ng-template pTemplate="emptymessage">
         <tr>
-          <td colspan="6" class="empty-message">
+          <td colspan="5" class="empty-message">
             <div class="empty-state">
               <i class="pi pi-file empty-icon"></i>
-              <p>No files found</p>
+              <p>No logos found</p>
             </div>
           </td>
         </tr>
       </ng-template>
     </p-table>
   </p-card>
+
+  <!-- Grid View (for both SuperAdmin and regular users) -->
+  <div *ngIf="!loading && viewMode === 'grid'" class="grid-view">
+    <div class="logos-grid">
+      <p-card *ngFor="let logo of getPaginatedLogos()" styleClass="logo-card">
+        <div class="logo-card-header" (click)="toggleLogo(logo.orderId)">
+          <div class="logo-info">
+            <i class="pi pi-image logo-icon"></i>
+            <div class="logo-details">
+              <h3 [title]="logo.logoName">{{ logo.logoName }}</h3>
+              <div class="logo-meta">
+                <p-tag 
+                  [value]="logo.fileCount + ' file' + (logo.fileCount !== 1 ? 's' : '')" 
+                  severity="info" 
+                  [rounded]="true"
+                  styleClass="file-count-tag">
+                </p-tag>
+                <span class="logo-date" *ngIf="logo.createdAt">
+                  <i class="pi pi-calendar"></i> {{ formatDate(logo.createdAt) }}
+                </span>
+              </div>
+            </div>
+          </div>
+          <i [class]="isLogoExpanded(logo.orderId) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></i>
+        </div>
+        
+        <div *ngIf="isLogoExpanded(logo.orderId)" class="logo-files">
+          <div class="files-header" *ngIf="logo.files.length > 0">
+            <span class="files-count-badge">{{ logo.files.length }} file{{ logo.files.length !== 1 ? 's' : '' }}</span>
+            <span class="files-scroll-hint" *ngIf="logo.files.length > 5">
+              <i class="pi pi-info-circle"></i> Scroll to see all files
+            </span>
+          </div>
+          <div class="files-list">
+            <div *ngFor="let file of logo.files; let i = index" class="file-item" [class.file-item-compact]="logo.files.length > 10">
+              <div class="file-info">
+                <i class="pi pi-file file-icon"></i>
+                <div class="file-details">
+                  <p class="file-name" [title]="file.originalFileName || file.fileName">
+                    {{ file.originalFileName || file.fileName }}
+                  </p>
+                  <div class="file-meta">
+                    <p-tag 
+                      *ngIf="file.fileCategory" 
+                      [value]="file.fileCategory" 
+                      severity="info" 
+                      [rounded]="true"
+                      styleClass="file-tag">
+                    </p-tag>
+                    <p-tag 
+                      [value]="getFileStatusValue(file.fileStatus)" 
+                      [severity]="getFileStatusSeverity(file.fileStatus)" 
+                      [rounded]="true"
+                      styleClass="file-tag">
+                    </p-tag>
+                    <span class="file-size">{{ formatFileSize(file.fileSize) }}</span>
+                    <span class="file-uploader" *ngIf="file.uploadedByName">
+                      <i class="pi pi-user"></i> {{ file.uploadedByName }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <p-button 
+                icon="pi pi-download" 
+                styleClass="p-button-text p-button-rounded p-button-sm file-download-btn"
+                (onClick)="downloadFile(file.id, file.originalFileName || file.fileName)"
+                pTooltip="Download {{ file.originalFileName || file.fileName }}">
+              </p-button>
+            </div>
+          </div>
+          <div class="files-footer" *ngIf="logo.files.length === 0">
+            <p class="no-files-message">
+              <i class="pi pi-inbox"></i> No files in this logo
+            </p>
+          </div>
+        </div>
+      </p-card>
+    </div>
+    
+    <div class="pagination-info" *ngIf="totalLogos > 0">
+      <p>Showing {{ (pageNumber - 1) * pageSize + 1 }} to {{ Math.min(pageNumber * pageSize, totalLogos) }} of {{ totalLogos }} logos</p>
+      <p-paginator 
+        [rows]="pageSize" 
+        [totalRecords]="totalLogos"
+        [first]="0"
+        (onPageChange)="onPageChange($event)"
+        [rowsPerPageOptions]="[5, 10, 25, 50]"
+        [showCurrentPageReport]="true"
+        currentPageReportTemplate="Showing {first} to {last} of {totalRecords} logos">
+      </p-paginator>
+    </div>
+  </div>
 </div>

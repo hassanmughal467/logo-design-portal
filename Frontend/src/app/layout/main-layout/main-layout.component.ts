@@ -164,6 +164,7 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
     const userRole = String(user.role);
     console.log('User role as string:', userRole);
 
+    // Base menu items - Dashboard only (other items are role-specific)
     this.menuItems = [
       {
         label: 'Dashboard',
@@ -180,6 +181,17 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
     // Add menu items based on role
     if (userRole === 'SuperAdmin' || userRole === 'Admin') {
       this.menuItems.push(
+        {
+          label: 'Orders',
+          icon: 'pi pi-shopping-cart',
+          routerLink: '/orders',
+          command: () => {
+            this.router.navigate(['/orders']);
+            if (window.innerWidth < 768) {
+              this.sidebarVisible = false;
+            }
+          }
+        },
         {
           label: 'Users',
           icon: 'pi pi-users',
@@ -209,27 +221,6 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
           }
         },
         {
-          label: 'Orders',
-          icon: 'pi pi-shopping-cart',
-          routerLink: '/orders',
-          command: () => {
-            this.router.navigate(['/orders']);
-            // Only close sidebar on mobile/small screens
-            if (window.innerWidth < 768) {
-              this.sidebarVisible = false;
-            }
-          }
-        },
-        {
-          label: 'Invoices',
-          icon: 'pi pi-file-pdf',
-          routerLink: '/invoices',
-          command: () => {
-            this.router.navigate(['/invoices']);
-            this.sidebarVisible = false;
-          }
-        },
-        {
           label: 'Designers',
           icon: 'pi pi-user-edit',
           routerLink: '/designers',
@@ -255,6 +246,42 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
             this.router.navigate(['/reviews']);
             this.sidebarVisible = false;
           }
+        },
+        {
+          label: 'Files',
+          icon: 'pi pi-file',
+          routerLink: '/files',
+          command: () => {
+            this.router.navigate(['/files']);
+            this.sidebarVisible = false;
+          }
+        },
+        {
+          label: 'Invoices',
+          icon: 'pi pi-money-bill',
+          routerLink: '/invoices',
+          command: () => {
+            this.router.navigate(['/invoices']);
+            this.sidebarVisible = false;
+          }
+        },
+        {
+          label: 'Detail Analytics',
+          icon: 'pi pi-chart-bar',
+          routerLink: '/analytics',
+          command: () => {
+            this.router.navigate(['/analytics']);
+            this.sidebarVisible = false;
+          }
+        },
+        {
+          label: 'Financial Overview',
+          icon: 'pi pi-wallet',
+          routerLink: '/financial',
+          command: () => {
+            this.router.navigate(['/financial']);
+            this.sidebarVisible = false;
+          }
         }
       );
     }
@@ -275,6 +302,17 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
     if (userRole === 'Client') {
       this.menuItems.push(
         {
+          label: 'My Orders',
+          icon: 'pi pi-shopping-cart',
+          routerLink: '/orders',
+          command: () => {
+            this.router.navigate(['/orders']);
+            if (window.innerWidth < 768) {
+              this.sidebarVisible = false;
+            }
+          }
+        },
+        {
           label: 'My Projects',
           icon: 'pi pi-palette',
           routerLink: '/projects',
@@ -284,15 +322,12 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
           }
         },
         {
-          label: 'My Orders',
-          icon: 'pi pi-shopping-cart',
-          routerLink: '/orders',
+          label: 'Detail Analytics',
+          icon: 'pi pi-chart-bar',
+          routerLink: '/analytics',
           command: () => {
-            this.router.navigate(['/orders']);
-            // Only close sidebar on mobile/small screens
-            if (window.innerWidth < 768) {
-              this.sidebarVisible = false;
-            }
+            this.router.navigate(['/analytics']);
+            this.sidebarVisible = false;
           }
         },
         {
@@ -303,21 +338,39 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
             this.router.navigate(['/messages']);
             this.sidebarVisible = false;
           }
+        },
+        {
+          label: 'Files',
+          icon: 'pi pi-file',
+          routerLink: '/files',
+          command: () => {
+            this.router.navigate(['/files']);
+            this.sidebarVisible = false;
+          }
+        },
+        {
+          label: 'Invoices',
+          icon: 'pi pi-money-bill',
+          routerLink: '/invoices',
+          command: () => {
+            this.router.navigate(['/invoices']);
+            this.sidebarVisible = false;
+          }
+        },
+        {
+          label: 'Financial Overview',
+          icon: 'pi pi-wallet',
+          routerLink: '/financial',
+          command: () => {
+            this.router.navigate(['/financial']);
+            this.sidebarVisible = false;
+          }
         }
       );
     }
 
     if (userRole === 'Designer') {
       this.menuItems.push(
-        {
-          label: 'My Projects',
-          icon: 'pi pi-palette',
-          routerLink: '/projects',
-          command: () => {
-            this.router.navigate(['/projects']);
-            this.sidebarVisible = false;
-          }
-        },
         {
           label: 'Assigned Orders',
           icon: 'pi pi-shopping-cart',
@@ -331,6 +384,15 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
           }
         },
         {
+          label: 'My Projects',
+          icon: 'pi pi-palette',
+          routerLink: '/projects',
+          command: () => {
+            this.router.navigate(['/projects']);
+            this.sidebarVisible = false;
+          }
+        },
+        {
           label: 'Messages',
           icon: 'pi pi-inbox',
           routerLink: '/messages',
@@ -338,21 +400,47 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
             this.router.navigate(['/messages']);
             this.sidebarVisible = false;
           }
+        },
+        {
+          label: 'Files',
+          icon: 'pi pi-file',
+          routerLink: '/files',
+          command: () => {
+            this.router.navigate(['/files']);
+            this.sidebarVisible = false;
+          }
+        },
+        {
+          label: 'Invoices',
+          icon: 'pi pi-money-bill',
+          routerLink: '/invoices',
+          command: () => {
+            this.router.navigate(['/invoices']);
+            this.sidebarVisible = false;
+          }
+        },
+        {
+          label: 'Detail Analytics',
+          icon: 'pi pi-chart-bar',
+          routerLink: '/analytics',
+          command: () => {
+            this.router.navigate(['/analytics']);
+            this.sidebarVisible = false;
+          }
+        },
+        {
+          label: 'Financial Overview',
+          icon: 'pi pi-wallet',
+          routerLink: '/financial',
+          command: () => {
+            this.router.navigate(['/financial']);
+            this.sidebarVisible = false;
+          }
         }
       );
     }
 
-    this.menuItems.push({
-      label: 'Files',
-      icon: 'pi pi-file',
-      routerLink: '/files',
-      command: () => {
-        this.router.navigate(['/files']);
-        this.sidebarVisible = false;
-      }
-    });
-
-    // Add Settings for all authenticated users
+    // Add Settings at the end for all authenticated users
     this.menuItems.push({
       label: 'Settings',
       icon: 'pi pi-cog',

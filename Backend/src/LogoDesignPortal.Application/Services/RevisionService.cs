@@ -9,6 +9,7 @@ using LogoDesignPortal.Domain.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace LogoDesignPortal.Application.Services;
 
@@ -16,6 +17,7 @@ public class RevisionService : IRevisionService
 {
     private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
+    private readonly ILogger<RevisionService> _logger;
     private readonly string _fileStoragePath;
     private readonly string _temporaryStoragePath;
     private readonly string _permanentStoragePath;
@@ -24,20 +26,34 @@ public class RevisionService : IRevisionService
     public RevisionService(
         IApplicationDbContext context,
         IMapper mapper,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<RevisionService> logger)
     {
         _context = context;
         _mapper = mapper;
-        
+        _logger = logger;
         _fileStoragePath = configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
         _temporaryStoragePath = Path.Combine(_fileStoragePath, "Temporary");
         _permanentStoragePath = Path.Combine(_fileStoragePath, "Permanent");
         
-        // Ensure directories exist
-        if (!Directory.Exists(_temporaryStoragePath))
-            Directory.CreateDirectory(_temporaryStoragePath);
-        if (!Directory.Exists(_permanentStoragePath))
-            Directory.CreateDirectory(_permanentStoragePath);
+        EnsureDirectoriesExist();
+    }
+
+    private void EnsureDirectoriesExist()
+    {
+        try
+        {
+            if (!Directory.Exists(_fileStoragePath))
+                Directory.CreateDirectory(_fileStoragePath);
+            if (!Directory.Exists(_temporaryStoragePath))
+                Directory.CreateDirectory(_temporaryStoragePath);
+            if (!Directory.Exists(_permanentStoragePath))
+                Directory.CreateDirectory(_permanentStoragePath);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Cannot create file storage directories at {Path}. Revision uploads will fail until write permissions are granted to the IIS App Pool identity.", _fileStoragePath);
+        }
     }
 
     public async Task<bool> CanRequestRevisionAsync(Guid orderId, Guid userId, string userRole)
@@ -333,8 +349,9 @@ public class RevisionService : IRevisionService
             _context.ClientGalleries.Add(galleryItem);
         }
 
-        // Update order status
+        // Update order status and disable uploads for completed orders
         order.Status = OrderStatus.Completed;
+        order.AllowUploads = false; // Disable uploads when logo is final approved
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = approvedBy;
 

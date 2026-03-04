@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -14,13 +14,13 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<DateTime>(
                 name: "DeactivatedAt",
                 table: "Users",
-                type: "datetime2",
+                type: "datetime(6)",
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
                 name: "DeactivatedBy",
                 table: "Users",
-                type: "uniqueidentifier",
+                type: "char(36)",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
@@ -33,42 +33,42 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<DateTime>(
                 name: "LockoutEnd",
                 table: "Users",
-                type: "datetime2",
+                type: "datetime(6)",
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "Notes",
                 table: "DesignerProfiles",
-                type: "nvarchar(max)",
+                type: "longtext",
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "Notes",
                 table: "ClientProfiles",
-                type: "nvarchar(max)",
+                type: "longtext",
                 nullable: true);
 
             migrationBuilder.CreateTable(
                 name: "AuditLogs",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    EntityType = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    EntityId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Action = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    PreviousValue = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    NewValue = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    PerformedByUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    PerformedByRole = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    Timestamp = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    Notes = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    UpdatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    DeletedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
+                    EntityType = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    EntityId = table.Column<Guid>(type: "char(36)", nullable: false),
+                    Action = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false),
+                    PreviousValue = table.Column<string>(type: "longtext", nullable: true),
+                    NewValue = table.Column<string>(type: "longtext", nullable: true),
+                    PerformedByUserId = table.Column<Guid>(type: "char(36)", nullable: true),
+                    PerformedByRole = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true),
+                    Timestamp = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    Notes = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true)
                 },
                 constraints: table =>
                 {

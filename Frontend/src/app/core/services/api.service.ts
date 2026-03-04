@@ -7,7 +7,11 @@ import { environment } from '@environments/environment';
   providedIn: 'root'
 })
 export class ApiService {
-  private baseUrl = `${environment.apiUrl}/api${environment.apiVersion ? '/' + environment.apiVersion : ''}`;
+  private readonly baseUrl = `${environment.apiUrl}/api${environment.apiVersion ? '/' + environment.apiVersion : ''}`;
+
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
 
   constructor(private http: HttpClient) {}
 
@@ -39,8 +43,16 @@ export class ApiService {
     return this.http.put<T>(`${this.baseUrl}/${endpoint}`, body);
   }
 
-  delete<T>(endpoint: string): Observable<T> {
-    return this.http.delete<T>(`${this.baseUrl}/${endpoint}`);
+  delete<T>(endpoint: string, body?: any): Observable<T> {
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+    const fullUrl = `${this.baseUrl}/${cleanEndpoint}`;
+    if (body) {
+      const headers = new HttpHeaders({
+        'Content-Type': 'application/json'
+      });
+      return this.http.delete<T>(fullUrl, { headers, body });
+    }
+    return this.http.delete<T>(fullUrl);
   }
 
   patch<T>(endpoint: string, body: any): Observable<T> {

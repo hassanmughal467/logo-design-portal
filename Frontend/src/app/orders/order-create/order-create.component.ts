@@ -40,7 +40,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   ) {
     this.orderForm = this.fb.group({
       title: ['', [Validators.required, Validators.minLength(3)]],
-      description: ['', [Validators.required]],
+      description: ['', [Validators.required, Validators.minLength(10)]],
       price: [0, [Validators.required, Validators.min(0.01)]],
       priority: [2], // Default to Medium (2)
       deadline: [null],
@@ -168,10 +168,13 @@ export class OrderCreateComponent implements OnInit, OnChanges {
         }
       },
       error: (error) => {
+        const msg = error.error?.error || error.error?.message || (typeof error.error === 'string' ? error.error : null);
+        const detail = msg || (error.error?.errors ? JSON.stringify(error.error.errors) : 'Failed to create order');
+        console.error('Order creation failed:', { status: error.status, error: error.error, detail });
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: error.error?.error || 'Failed to create order'
+          detail: typeof detail === 'string' ? detail : 'Failed to create order'
         });
         this.loading = false;
       }

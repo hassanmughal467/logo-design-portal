@@ -532,7 +532,8 @@
           optionLabel="label"
           optionValue="value"
           placeholder="Select payment type"
-          class="full-width">
+          class="full-width"
+          appendTo="body">
         </p-dropdown>
       </div>
 
@@ -562,13 +563,13 @@
         label="Cancel" 
         icon="pi pi-times"
         (onClick)="showPaymentDialog = false"
-        styleClass="p-button-text">
+        styleClass="p-button-outlined p-button-secondary modal-footer-btn">
       </p-button>
       <p-button 
         label="Save" 
         icon="pi pi-check"
         (onClick)="savePaymentMethod()"
-        styleClass="p-button-primary">
+        styleClass="p-button-primary modal-footer-btn">
       </p-button>
     </ng-template>
   </p-dialog>

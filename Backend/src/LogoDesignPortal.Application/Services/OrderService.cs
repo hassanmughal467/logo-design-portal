@@ -28,9 +28,49 @@ public class OrderService : IOrderService
             .Include(c => c.User)
             .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
 
+        // Fallback for legacy clients without profile (before CompanyName was mandatory)
         if (client == null)
         {
-            throw new InvalidOperationException("Client profile not found.");
+            var user = await _context.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == clientId && !u.IsDeleted);
+
+            if (user == null || user.Role?.Name != "Client")
+            {
+                throw new InvalidOperationException("Client profile not found. Please ensure the client has a company name set in their profile.");
+            }
+
+            // Check for soft-deleted profile (UserId has unique constraint - can't create duplicate)
+            var deletedProfile = await _context.ClientProfiles
+                .Include(c => c.User)
+                .FirstOrDefaultAsync(c => c.UserId == clientId && c.IsDeleted);
+
+            if (deletedProfile != null)
+            {
+                deletedProfile.IsDeleted = false;
+                deletedProfile.DeletedAt = null;
+                deletedProfile.DeletedBy = null;
+                deletedProfile.CompanyName = string.IsNullOrEmpty(deletedProfile.CompanyName) ? $"{user.FirstName} {user.LastName}".Trim() : deletedProfile.CompanyName;
+                if (string.IsNullOrEmpty(deletedProfile.CompanyName)) deletedProfile.CompanyName = "Personal";
+                deletedProfile.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                client = deletedProfile;
+            }
+            else
+            {
+                client = new ClientProfile
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    CompanyName = $"{user.FirstName} {user.LastName}".Trim(),
+                    ContactName = $"{user.FirstName} {user.LastName}".Trim(),
+                    CreatedAt = DateTime.UtcNow
+                };
+                if (string.IsNullOrEmpty(client.CompanyName)) client.CompanyName = "Personal";
+                _context.ClientProfiles.Add(client);
+                await _context.SaveChangesAsync();
+                client = await _context.ClientProfiles.Include(c => c.User).FirstAsync(c => c.Id == client.Id);
+            }
         }
 
         var order = _mapper.Map<LogoOrder>(request);
@@ -945,6 +985,30 @@ public class OrderService : IOrderService
             Metadata = l.Metadata,
             CreatedAt = l.CreatedAt
         }).ToList();
+    }
+
+    public async Task<OrderResponseDto> SetAllowUploadsAsync(Guid orderId, bool allowUploads, Guid userId)
+    {
+        var order = await _context.LogoOrders
+            .Include(o => o.Client)
+                .ThenInclude(c => c.User)
+            .Include(o => o.Designer)
+                .ThenInclude(d => d.User)
+            .Include(o => o.Files)
+            .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+
+        if (order == null)
+        {
+            throw new InvalidOperationException("Order not found.");
+        }
+
+        order.AllowUploads = allowUploads;
+        order.UpdatedAt = DateTime.UtcNow;
+        order.UpdatedBy = userId;
+
+        await _context.SaveChangesAsync();
+
+        return await GetOrderByIdAsync(orderId, userId, "Admin");
     }
 
     // Keep DeleteOrderAsync for backward compatibility but mark as obsolete

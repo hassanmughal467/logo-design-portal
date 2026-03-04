@@ -596,7 +596,10 @@ export class OrderListComponent implements OnInit, OnDestroy {
         next: (users) => {
           this.availableDesigners = users
             .filter(u => u.role === 'Designer' || u.roleName === 'Designer')
-            .map(u => ({ label: `${u.firstName} ${u.lastName}`, value: u.id }));
+            .map(u => {
+              const fullName = [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
+              return { label: fullName || u.email || 'Unknown Designer', value: u.id };
+            });
         },
         error: () => { this.availableDesigners = []; }
       });

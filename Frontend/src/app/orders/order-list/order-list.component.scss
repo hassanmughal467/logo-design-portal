@@ -363,6 +363,7 @@
     .assign-designer-dialog .p-dialog-content,
     .change-status-dialog .p-dialog-content {
       overflow: visible !important;
+      padding: var(--modal-content-padding) !important;
     }
 
     /* Upload File Dialog - no padding content (branded header via styleClass in HTML) */
@@ -372,7 +373,7 @@
   }
 
   .upload-dialog-content {
-    padding: 1.5rem;
+    padding: var(--modal-content-padding);
 
     .upload-header {
       display: flex;

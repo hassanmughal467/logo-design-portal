@@ -21,5 +21,6 @@ public class Invoice : BaseEntity
     public ClientProfile Client { get; set; } = null!;
     public ICollection<InvoiceOrder> InvoiceOrders { get; set; } = new List<InvoiceOrder>(); // Support multiple orders per invoice
     public ICollection<InvoiceLog> InvoiceLogs { get; set; } = new List<InvoiceLog>();
+    public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }
 

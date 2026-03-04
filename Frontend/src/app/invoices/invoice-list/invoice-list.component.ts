@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ApiService } from '@core/services/api.service';
 import { MessageService } from 'primeng/api';
-import { Subject } from 'rxjs';
+import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
 export interface InvoiceItem {
@@ -86,6 +86,12 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     paidAmount: 0,
     pendingAmount: 0
   };
+
+  // Payment functionality
+  selectedInvoices: Invoice[] = [];
+  showPaymentDialog = false;
+  paymentMethod = '';
+  selectedInvoiceTabIndex = 0;
 
   private destroy$ = new Subject<void>();
 
@@ -385,5 +391,224 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       paidAmount: invoices.filter(i => i.status === 'Paid').reduce((sum, i) => sum + (i.totalAmount || i.amount), 0),
       pendingAmount: invoices.filter(i => i.status !== 'Paid').reduce((sum, i) => sum + (i.totalAmount || i.amount), 0)
     };
+  }
+
+  // Payment methods
+  getUnpaidInvoices(): Invoice[] {
+    return this.invoices.filter(inv => inv.status === 'Pending' || inv.status === 'Overdue');
+  }
+
+  getPendingInvoices(): Invoice[] {
+    return this.invoices.filter(inv => inv.status === 'Pending');
+  }
+
+  getDueInvoices(): Invoice[] {
+    return this.invoices.filter(inv => inv.status === 'Overdue');
+  }
+
+  getPaidInvoices(): Invoice[] {
+    return this.invoices.filter(inv => inv.status === 'Paid');
+  }
+
+  getSelectedInvoicesTotal(): number {
+    return this.selectedInvoices.reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
+  }
+
+  openPaymentDialog(invoice?: Invoice): void {
+    if (invoice) {
+      this.selectedInvoices = [invoice];
+    }
+    this.showPaymentDialog = true;
+  }
+
+  cancelPayment(): void {
+    this.showPaymentDialog = false;
+    this.selectedInvoices = [];
+    this.paymentMethod = '';
+  }
+
+  processPayment(): void {
+    if (this.selectedInvoices.length === 0) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Please select at least one invoice'
+      });
+      return;
+    }
+
+    // Process payments (for multiple invoices or manual payment)
+    const paymentPromises = this.selectedInvoices.map(invoice =>
+      firstValueFrom(
+        this.apiService.put(`invoices/${invoice.id}/mark-paid`, {
+          paymentMethod: this.paymentMethod || 'Manual'
+        })
+      )
+    );
+
+    Promise.all(paymentPromises)
+      .then(() => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: `Payment processed for ${this.selectedInvoices.length} invoice(s)`
+        });
+        this.showPaymentDialog = false;
+        this.selectedInvoices = [];
+        this.paymentMethod = '';
+        this.loadInvoices();
+        this.loadStatistics();
+        this.cdr.markForCheck();
+      })
+      .catch((error) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: error.error?.error || 'Failed to process payment'
+        });
+      });
+  }
+
+  onPaymentComplete(): void {
+    // Called when payment component completes payment
+    this.showPaymentDialog = false;
+    this.selectedInvoices = [];
+    this.paymentMethod = '';
+    this.loadInvoices();
+    this.loadStatistics();
+    this.cdr.markForCheck();
+  }
+
+  // Summary methods
+  getWeeklySummary(): { total: number; paid: number; pending: number } {
+    const now = new Date();
+    const weekStart = new Date(now.setDate(now.getDate() - now.getDay()));
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekInvoices = this.invoices.filter(inv => {
+      const invDate = new Date(inv.createdAt);
+      return invDate >= weekStart;
+    });
+
+    return {
+      total: weekInvoices.reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0),
+      paid: weekInvoices
+        .filter(inv => inv.status === 'Paid')
+        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0),
+      pending: weekInvoices
+        .filter(inv => inv.status !== 'Paid')
+        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0)
+    };
+  }
+
+  getMonthlySummary(): { total: number; paid: number; pending: number } {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const monthInvoices = this.invoices.filter(inv => {
+      const invDate = new Date(inv.createdAt);
+      return invDate >= monthStart;
+    });
+
+    return {
+      total: monthInvoices.reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0),
+      paid: monthInvoices
+        .filter(inv => inv.status === 'Paid')
+        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0),
+      pending: monthInvoices
+        .filter(inv => inv.status !== 'Paid')
+        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0)
+    };
+  }
+
+  // Report download methods
+  downloadInvoiceReport(format: 'csv' | 'pdf'): void {
+    const invoices = this.getInvoicesForCurrentTab();
+    if (format === 'csv') {
+      this.downloadCSV(invoices);
+    } else {
+      this.downloadPDF(invoices);
+    }
+  }
+
+  private getInvoicesForCurrentTab(): Invoice[] {
+    switch (this.selectedInvoiceTabIndex) {
+      case 0:
+        return this.getUnpaidInvoices();
+      case 1:
+        return this.getPendingInvoices();
+      case 2:
+        return this.getDueInvoices();
+      case 3:
+        return this.getPaidInvoices();
+      default:
+        return [];
+    }
+  }
+
+  private downloadCSV(invoices: Invoice[]): void {
+    const headers = ['Invoice Number', 'Amount', 'Status', 'Due Date', 'Paid Date'];
+    const rows = invoices.map(inv => [
+      inv.invoiceNumber,
+      inv.totalAmount || inv.amount,
+      inv.status,
+      inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'N/A',
+      inv.paidDate ? new Date(inv.paidDate).toLocaleDateString() : 'N/A'
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const tabNames = ['unpaid', 'pending', 'due', 'paid'];
+    link.download = `invoices_${tabNames[this.selectedInvoiceTabIndex] || 'all'}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  private downloadPDF(invoices: Invoice[]): void {
+    // Map tab index to status for the backend filter
+    const statusMap: { [key: number]: string } = {
+      0: '', // Unpaid = all non-paid
+      1: 'Pending',
+      2: 'Overdue',
+      3: 'Paid'
+    };
+    const status = statusMap[this.selectedInvoiceTabIndex] ?? '';
+    const endpoint = status ? `invoices/report?status=${status}` : 'invoices/report';
+
+    this.apiService.getBlob(endpoint)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          const tabNames = ['unpaid', 'pending', 'due', 'paid'];
+          link.download = `invoices_${tabNames[this.selectedInvoiceTabIndex] || 'all'}_${new Date().toISOString().split('T')[0]}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Invoice report PDF downloaded successfully'
+          });
+        },
+        error: (error) => {
+          console.error('Error downloading invoice report PDF:', error);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to download invoice report PDF'
+          });
+        }
+      });
   }
 }

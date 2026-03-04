@@ -35,6 +35,14 @@ public class LogoFileConfiguration : IEntityTypeConfiguration<LogoFile>
             .HasConversion<int>()
             .HasDefaultValue(FileType.Reference);
 
+        builder.Property(e => e.FileCategory)
+            .HasConversion<int>(); // Store enum as int, nullable
+
+        builder.Property(e => e.FileStatus)
+            .IsRequired()
+            .HasConversion<int>()
+            .HasDefaultValue(FileStatus.Draft); // Store enum as int, default to Draft
+
         builder.Property(e => e.Description)
             .HasMaxLength(1000);
 

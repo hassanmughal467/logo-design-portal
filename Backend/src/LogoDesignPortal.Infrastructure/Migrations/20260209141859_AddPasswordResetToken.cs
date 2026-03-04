@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -14,13 +14,13 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "PasswordResetToken",
                 table: "Users",
-                type: "nvarchar(max)",
+                type: "longtext",
                 nullable: true);
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "PasswordResetTokenExpiryTime",
                 table: "Users",
-                type: "datetime2",
+                type: "datetime(6)",
                 nullable: true);
 
             migrationBuilder.UpdateData(

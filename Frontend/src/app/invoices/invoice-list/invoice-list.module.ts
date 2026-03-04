@@ -16,6 +16,9 @@ import { CalendarModule } from 'primeng/calendar';
 import { DropdownModule } from 'primeng/dropdown';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { DialogModule } from 'primeng/dialog';
+import { TabViewModule } from 'primeng/tabview';
+import { CheckboxModule } from 'primeng/checkbox';
+import { PaymentsModule } from '../../payments/payments.module';
 
 @NgModule({
   declarations: [InvoiceListComponent],
@@ -33,7 +36,10 @@ import { DialogModule } from 'primeng/dialog';
     CalendarModule,
     DropdownModule,
     MultiSelectModule,
-    DialogModule
+    DialogModule,
+    TabViewModule,
+    CheckboxModule,
+    PaymentsModule
   ]
 })
 export class InvoiceListModule { }

@@ -76,6 +76,8 @@
               placeholder="Search..." 
               class="search-input" />
           </span>
+          <!-- HIDDEN: Notifications button - No longer needed -->
+          <!--
           <button 
             pButton 
             icon="pi pi-bell" 
@@ -84,6 +86,7 @@
             tooltipPosition="bottom">
             <span class="notification-badge" *ngIf="hasNotifications">3</span>
           </button>
+          -->
         </div>
         <p-menu #userMenu [model]="userMenuItems" [popup]="true"></p-menu>
         <button 

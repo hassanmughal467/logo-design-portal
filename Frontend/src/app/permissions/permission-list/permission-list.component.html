@@ -6,16 +6,17 @@
     </div>
     <div class="header-actions">
       <p-button 
-        label="Permission Matrix" 
-        icon="pi pi-table" 
+        [label]="displayMatrix ? 'Hide Matrix' : 'Permission Matrix'" 
+        [icon]="displayMatrix ? 'pi pi-eye-slash' : 'pi pi-table'" 
         (onClick)="toggleMatrixView()"
-        styleClass="p-button-secondary">
+        [styleClass]="displayMatrix ? 'p-button-secondary p-button-outlined' : 'p-button-secondary'">
       </p-button>
     </div>
   </div>
 
   <p-card styleClass="permissions-card">
     <p-table 
+      #dt
       [value]="permissions" 
       [loading]="loading"
       [paginator]="true"
@@ -35,6 +36,7 @@
               type="text" 
               pInputText 
               [(ngModel)]="globalFilter" 
+              (input)="dt.filterGlobal(globalFilter, 'contains')"
               placeholder="Search permissions..." 
               class="search-input" />
           </span>
@@ -87,5 +89,68 @@
         </tr>
       </ng-template>
     </p-table>
+  </p-card>
+
+  <!-- Permission Matrix View -->
+  <p-card styleClass="permissions-card" *ngIf="displayMatrix" style="margin-top: 2rem;">
+    <div class="matrix-header">
+      <h2>Permission Matrix</h2>
+      <p class="matrix-subtitle">Toggle permissions for each role. SuperAdmin has all permissions automatically.</p>
+    </div>
+    
+    <div *ngIf="permissions.length === 0 && !loading" class="matrix-empty">
+      <i class="pi pi-info-circle" style="font-size: 2rem; color: var(--text-color-secondary);"></i>
+      <p>No permissions available. Please load permissions first.</p>
+    </div>
+    
+    <div class="matrix-container" *ngIf="permissions.length > 0 && !loadingMatrix; else matrixLoading">
+      <div class="matrix-table-wrapper">
+        <table class="permission-matrix-table">
+          <thead>
+            <tr>
+              <th class="permission-col">Permission</th>
+              <th *ngFor="let role of roles" class="role-col">
+                <div class="role-header">
+                  <span class="role-name">{{ role.name }}</span>
+                  <p-tag 
+                    *ngIf="isSuperAdmin(role.id)"
+                    value="All Permissions" 
+                    severity="success"
+                    [rounded]="true"
+                    styleClass="role-tag">
+                  </p-tag>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let permission of permissions">
+              <td class="permission-cell">
+                <div class="permission-info">
+                  <strong>{{ permission.name }}</strong>
+                  <span class="permission-desc">{{ permission.description }}</span>
+                </div>
+              </td>
+              <td *ngFor="let role of roles" class="checkbox-cell">
+                <p-checkbox 
+                  [binary]="true"
+                  [ngModel]="getCheckboxState(role.id, permission.id)"
+                  (ngModelChange)="togglePermission(role.id, permission.id, $event)"
+                  [disabled]="isSuperAdmin(role.id)"
+                  [inputId]="'perm-' + permission.id + '-role-' + role.id">
+                </p-checkbox>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    
+    <ng-template #matrixLoading>
+      <div class="matrix-loading">
+        <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+        <p>Loading role permissions...</p>
+      </div>
+    </ng-template>
   </p-card>
 </div>

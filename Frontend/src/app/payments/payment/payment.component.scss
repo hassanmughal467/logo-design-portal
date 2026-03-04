@@ -1,0 +1,218 @@
+.payment-container {
+  padding: 1.5rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.payment-header {
+  margin-bottom: 2rem;
+  text-align: center;
+
+  h3 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-color);
+    font-size: 1.5rem;
+  }
+
+  .invoice-info {
+    color: var(--text-color-secondary);
+    font-size: 0.9rem;
+    margin: 0;
+  }
+}
+
+.payment-methods {
+  margin-bottom: 2rem;
+
+  .payment-label {
+    display: block;
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+    color: var(--text-color);
+  }
+
+  ::ng-deep .payment-method-selector {
+    width: 100%;
+
+    .p-button {
+      flex: 1;
+      min-width: 120px;
+    }
+  }
+}
+
+.payment-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--surface-card);
+  border-radius: 8px;
+  border: 1px solid var(--surface-border);
+}
+
+.payment-info {
+  text-align: center;
+
+  .payment-icon {
+    font-size: 3rem;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+    display: block;
+  }
+
+  p {
+    margin-bottom: 1.5rem;
+    color: var(--text-color-secondary);
+    line-height: 1.6;
+  }
+
+  .button-group {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
+.payment-link-section {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--surface-ground);
+  border-radius: 6px;
+
+  .link-label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text-color);
+  }
+
+  .link-container {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+
+    .link-input {
+      flex: 1;
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+  }
+
+  .link-hint {
+    font-size: 0.85rem;
+    color: var(--text-color-secondary);
+    margin: 0;
+    font-style: italic;
+  }
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.bank-details {
+  margin-top: 1.5rem;
+  text-align: left;
+
+  .bank-details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid var(--primary-color);
+
+    h4 {
+      margin: 0;
+      color: var(--text-color);
+      font-size: 1.1rem;
+    }
+  }
+
+  .bank-details-content {
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--surface-border);
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &.highlight {
+        background: var(--primary-color-text);
+        padding: 1rem;
+        border-radius: 6px;
+        margin-top: 0.5rem;
+        border: 2px solid var(--primary-color);
+      }
+
+      .detail-label {
+        font-weight: 500;
+        color: var(--text-color-secondary);
+        min-width: 140px;
+      }
+
+      .detail-value {
+        font-weight: 600;
+        color: var(--text-color);
+        text-align: right;
+        word-break: break-all;
+      }
+    }
+  }
+
+  .bank-instructions {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: var(--yellow-50);
+    border-left: 4px solid var(--yellow-500);
+    border-radius: 4px;
+
+    p {
+      margin: 0;
+      color: var(--text-color);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+  }
+}
+
+.payment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--surface-border);
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  .payment-container {
+    padding: 1rem;
+  }
+
+  .bank-details-content .detail-row {
+    flex-direction: column;
+    gap: 0.25rem;
+
+    .detail-label {
+      min-width: auto;
+    }
+
+    .detail-value {
+      text-align: left;
+    }
+  }
+
+  .button-group {
+    flex-direction: column;
+
+    ::ng-deep .p-button {
+      width: 100%;
+    }
+  }
+}

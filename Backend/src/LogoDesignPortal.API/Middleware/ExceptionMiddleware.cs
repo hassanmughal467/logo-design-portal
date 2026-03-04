@@ -42,10 +42,20 @@ public class ExceptionMiddleware
                 code = HttpStatusCode.Forbidden;
                 result = JsonSerializer.Serialize(new { error = exception.Message });
                 break;
-            case UnauthorizedAccessException:
-                // User is not authenticated or token is invalid
-                code = HttpStatusCode.Unauthorized;
-                result = JsonSerializer.Serialize(new { error = exception.Message });
+            case UnauthorizedAccessException uaEx:
+                // Distinguish: file system "Access to the path ... is denied" should be 500, not 401
+                // Auth-related UnauthorizedAccessException has different messages
+                if (uaEx.Message?.Contains("Access to the path", StringComparison.OrdinalIgnoreCase) == true ||
+                    uaEx.Message?.Contains("is denied", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    code = HttpStatusCode.InternalServerError;
+                    result = JsonSerializer.Serialize(new { error = "File storage access denied. Ensure the application has write permissions to the Files directory. See server logs for details." });
+                }
+                else
+                {
+                    code = HttpStatusCode.Unauthorized;
+                    result = JsonSerializer.Serialize(new { error = exception.Message });
+                }
                 break;
             case InvalidOperationException:
                 code = HttpStatusCode.BadRequest;

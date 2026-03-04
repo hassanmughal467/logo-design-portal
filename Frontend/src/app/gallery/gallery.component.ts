@@ -69,8 +69,9 @@ export class GalleryComponent implements OnInit, OnDestroy {
   }
 
   downloadFile(item: GalleryItem): void {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    const url = `${this.apiService['baseUrl']}/files/${item.id}/download`;
+    const token = this.authService.getAccessToken();
+    const baseUrl = this.apiService.getBaseUrl();
+    const url = `${baseUrl}/files/${item.id}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     
     const link = document.createElement('a');
     link.href = url;

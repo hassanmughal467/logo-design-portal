@@ -52,10 +52,12 @@ export class ErrorInterceptor implements HttpInterceptor {
               // - /permissions: Only SuperAdmin has access
               // - /orders: Admin users may not have ViewAllOrders permission yet
               // - /invoices: May not be accessible to all roles
+              // - /users: Only Admin/SuperAdmin have access (clients may try to access this)
               const isExpected403Endpoint = 
                 requestUrl.includes('/permissions') || errorUrl.includes('/permissions') ||
                 requestUrl.includes('/orders') || errorUrl.includes('/orders') ||
-                requestUrl.includes('/invoices') || errorUrl.includes('/invoices');
+                requestUrl.includes('/invoices') || errorUrl.includes('/invoices') ||
+                requestUrl.includes('/users') || errorUrl.includes('/users');
               
               if (!isExpected403Endpoint) {
                 this.messageService.add({

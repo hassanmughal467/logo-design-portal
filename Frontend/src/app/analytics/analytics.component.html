@@ -1,0 +1,81 @@
+<div class="analytics-page">
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">Detail Analytics</h1>
+      <p class="page-subtitle">Comprehensive analytics and insights</p>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading-container">
+    <p-progressSpinner></p-progressSpinner>
+    <p>Loading analytics data...</p>
+  </div>
+
+  <div *ngIf="!loading" class="analytics-content">
+    <!-- Order Analytics -->
+    <p-card styleClass="analytics-card">
+      <h3 class="card-title"><i class="pi pi-chart-bar"></i> Order Analytics</h3>
+      <div class="stats-grid">
+        <div class="stat-card" *ngFor="let stat of clientOrderAnalytics" [class]="'stat-' + stat.color">
+          <div class="stat-icon-wrapper">
+            <div class="stat-icon" [class]="'bg-' + stat.color">
+              <i [class]="stat.icon"></i>
+            </div>
+          </div>
+          <div class="stat-content" [class.clickable]="stat.route" (click)="stat.route && navigateToRoute(stat.route)">
+            <h3 class="stat-value">{{ stat.value | number }}</h3>
+            <p class="stat-label">{{ stat.label }}</p>
+          </div>
+        </div>
+      </div>
+    </p-card>
+
+    <!-- Productivity & Spend -->
+    <p-card styleClass="analytics-card">
+      <h3 class="card-title"><i class="pi pi-dollar"></i> Productivity & Spend</h3>
+      <div class="stats-grid">
+        <div class="stat-card" *ngFor="let stat of clientProductivityMetrics" [class]="'stat-' + stat.color">
+          <div class="stat-icon-wrapper">
+            <div class="stat-icon" [class]="'bg-' + stat.color">
+              <i [class]="stat.icon"></i>
+            </div>
+          </div>
+          <div class="stat-content" [class.clickable]="stat.route" (click)="stat.route && navigateToRoute(stat.route)">
+            <h3 class="stat-value">
+              <span *ngIf="stat.isCurrency">$</span>{{ stat.isCurrency ? (stat.value | number:'1.2-2') : (stat.value | number) }}
+            </h3>
+            <p class="stat-label">{{ stat.label }}</p>
+          </div>
+        </div>
+      </div>
+    </p-card>
+
+    <!-- Quick Status -->
+    <p-card styleClass="analytics-card">
+      <h3 class="card-title"><i class="pi pi-info-circle"></i> Quick Status</h3>
+      <div class="stats-grid stats-grid-5">
+        <div class="stat-card" *ngFor="let stat of clientFinancialCards" [class]="'stat-' + stat.color">
+          <div class="stat-icon-wrapper">
+            <div class="stat-icon" [class]="'bg-' + stat.color">
+              <i [class]="stat.icon"></i>
+            </div>
+          </div>
+          <div class="stat-content" [class.clickable]="stat.route" (click)="stat.route && navigateToRoute(stat.route)">
+            <h3 class="stat-value">
+              <span *ngIf="stat.isCurrency">$</span>{{ stat.isCurrency ? (stat.value | number:'1.2-2') : (stat.value | number) }}
+            </h3>
+            <p class="stat-label">{{ stat.label }}</p>
+          </div>
+        </div>
+      </div>
+    </p-card>
+
+    <!-- Status Chart -->
+    <p-card *ngIf="statusChartData" styleClass="chart-card">
+      <h3 class="card-title"><i class="pi pi-chart-pie"></i> Orders by Status</h3>
+      <div class="chart-container">
+        <p-chart type="doughnut" [data]="statusChartData" [options]="statusChartOptions" [style]="{'height': '300px'}"></p-chart>
+      </div>
+    </p-card>
+  </div>
+</div>

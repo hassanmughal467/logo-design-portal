@@ -3,6 +3,7 @@
   .p-dialog-content {
     overflow-y: auto !important;
     max-height: calc(90vh - 120px);
+    padding: var(--modal-content-padding) !important;
   }
 }
 
@@ -25,21 +26,22 @@
   .form-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 1.25rem;
-    margin-bottom: 1.5rem;
+    gap: var(--modal-form-gap);
+    margin-bottom: var(--modal-field-margin);
 
     .form-group {
       display: flex;
       flex-direction: column;
+      gap: 0.5rem;
 
       &.full-width {
         grid-column: 1 / -1;
       }
 
       label {
-        margin-bottom: 0.5rem;
+        margin-bottom: 0;
         font-weight: 600;
-        font-size: 0.875rem;
+        font-size: 0.925rem;
         color: var(--text-color);
 
         .required {
@@ -50,10 +52,10 @@
 
       input[type="text"],
       textarea {
-        border-radius: 8px;
+        border-radius: var(--border-radius);
         border: 1px solid var(--surface-border);
-        padding: 0.65rem 0.85rem;
-        font-size: 0.9rem;
+        padding: var(--modal-input-padding);
+        font-size: 0.925rem;
         transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
         &:focus {
@@ -77,10 +79,13 @@
         .p-inputnumber,
         .p-calendar,
         .p-dropdown {
-          border-radius: 8px;
+          width: 100%;
+          border-radius: var(--border-radius);
 
-          .p-inputtext {
-            border-radius: 8px;
+          .p-inputtext,
+          .p-inputnumber-input {
+            padding: var(--modal-input-padding);
+            border-radius: var(--border-radius);
           }
         }
       }
@@ -90,8 +95,9 @@
   .form-actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 0.75rem;
-    margin-top: 1.5rem;
+    margin-top: var(--modal-field-margin);
     padding-top: 1.25rem;
     border-top: 1px solid var(--surface-border);
   }

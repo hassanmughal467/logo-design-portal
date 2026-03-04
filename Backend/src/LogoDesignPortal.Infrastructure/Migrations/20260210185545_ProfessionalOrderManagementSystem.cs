@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -14,52 +14,52 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<DateTime>(
                 name: "ArchivedAt",
                 table: "LogoOrders",
-                type: "datetime2",
+                type: "datetime(6)",
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
                 name: "ArchivedBy",
                 table: "LogoOrders",
-                type: "uniqueidentifier",
+                type: "char(36)",
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "CancellationReason",
                 table: "LogoOrders",
-                type: "nvarchar(2000)",
+                type: "varchar(2000)",
                 maxLength: 2000,
                 nullable: true);
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "CancelledAt",
                 table: "LogoOrders",
-                type: "datetime2",
+                type: "datetime(6)",
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
                 name: "CancelledBy",
                 table: "LogoOrders",
-                type: "uniqueidentifier",
+                type: "char(36)",
                 nullable: true);
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsArchived",
                 table: "LogoOrders",
-                type: "bit",
+                type: "tinyint(1)",
                 nullable: false,
                 defaultValue: false);
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsCancelledByUser",
                 table: "LogoOrders",
-                type: "bit",
+                type: "tinyint(1)",
                 nullable: false,
                 defaultValue: false);
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsRefunded",
                 table: "LogoOrders",
-                type: "bit",
+                type: "tinyint(1)",
                 nullable: false,
                 defaultValue: false);
 
@@ -74,42 +74,42 @@ namespace LogoDesignPortal.Infrastructure.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "RefundReason",
                 table: "LogoOrders",
-                type: "nvarchar(2000)",
+                type: "varchar(2000)",
                 maxLength: 2000,
                 nullable: true);
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "RefundedAt",
                 table: "LogoOrders",
-                type: "datetime2",
+                type: "datetime(6)",
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
                 name: "RefundedBy",
                 table: "LogoOrders",
-                type: "uniqueidentifier",
+                type: "char(36)",
                 nullable: true);
 
             migrationBuilder.CreateTable(
                 name: "OrderLogs",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OrderId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
+                    OrderId = table.Column<Guid>(type: "char(36)", nullable: false),
                     Action = table.Column<int>(type: "int", nullable: false),
                     PreviousStatus = table.Column<int>(type: "int", nullable: true),
                     NewStatus = table.Column<int>(type: "int", nullable: true),
-                    PerformedBy = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    PerformedById = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    Note = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
-                    Metadata = table.Column<string>(type: "nvarchar(max)", maxLength: 5000, nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    UpdatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    DeletedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                    PerformedBy = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
+                    PerformedById = table.Column<Guid>(type: "char(36)", nullable: true),
+                    Note = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true),
+                    Metadata = table.Column<string>(type: "longtext", maxLength: 5000, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false),
+                    DeletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true)
                 },
                 constraints: table =>
                 {

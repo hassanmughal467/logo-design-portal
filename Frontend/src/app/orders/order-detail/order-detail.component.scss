@@ -28,7 +28,7 @@
 }
 
 .order-detail-container {
-  padding: 1.5rem;
+  padding: var(--modal-content-padding);
   max-width: 100%;
   margin: 0 auto;
 

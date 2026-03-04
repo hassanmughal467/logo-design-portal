@@ -22,6 +22,7 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
     {
         try
@@ -32,6 +33,11 @@ public class AuthController : ControllerBase
         catch (UnauthorizedAccessException ex)
         {
             return Unauthorized(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Login failed for email: {Email}. Error: {Message}", request?.Email, ex.Message);
+            return StatusCode(500, new { error = "An error occurred while processing your request. Please ensure the database is running and migrations have been applied." });
         }
     }
 

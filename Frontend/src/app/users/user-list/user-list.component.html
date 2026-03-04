@@ -132,12 +132,20 @@
                 (onClick)="openResetPasswordDialog(user)">
               </p-button>
               <p-button 
-                *ngIf="canDeleteUser()"
+                *ngIf="canDeleteUser() && user.isActive"
                 icon="pi pi-trash" 
                 styleClass="p-button-text p-button-rounded p-button-sm p-button-danger"
                 pTooltip="Delete User"
                 tooltipPosition="top"
                 (onClick)="openDeleteDialog(user)">
+              </p-button>
+              <p-button 
+                *ngIf="canDeleteUser() && !user.isActive"
+                icon="pi pi-check-circle" 
+                styleClass="p-button-text p-button-rounded p-button-sm p-button-success"
+                pTooltip="Reactivate User"
+                tooltipPosition="top"
+                (onClick)="reactivateUser(user)">
               </p-button>
             </div>
           </td>
@@ -608,14 +616,14 @@
           label="Cancel" 
           icon="pi pi-times" 
           (onClick)="displayCreateDialog = false"
-          styleClass="p-button-text p-button-lg">
+          styleClass="p-button-outlined p-button-secondary modal-footer-btn">
         </p-button>
         <p-button 
           label="Create User" 
           icon="pi pi-plus" 
           (onClick)="createUser()"
           [disabled]="createUserForm.invalid"
-          styleClass="p-button-primary p-button-lg">
+          styleClass="p-button-primary modal-footer-btn">
         </p-button>
       </div>
     </ng-template>
@@ -710,7 +718,7 @@
           label="Cancel" 
           icon="pi pi-times"
           (onClick)="displayResetPasswordDialog = false"
-          styleClass="p-button-text p-button-lg"
+          styleClass="p-button-outlined p-button-secondary modal-footer-btn"
           [disabled]="resettingPassword">
         </p-button>
         <p-button 
@@ -719,56 +727,78 @@
           (onClick)="resetUserPassword()"
           [disabled]="resetPasswordForm.invalid || resettingPassword"
           [loading]="resettingPassword"
-          styleClass="p-button-primary p-button-lg">
+          styleClass="p-button-primary modal-footer-btn">
         </p-button>
       </div>
     </ng-template>
   </p-dialog>
 
-  <!-- Delete User Confirmation Dialog -->
+  <!-- Deactivate User Confirmation Dialog -->
   <p-dialog 
     [(visible)]="displayDeleteDialog" 
-    header="Delete User" 
+    header="Deactivate User" 
     [modal]="true"
-    [style]="{width: '450px'}"
+    [style]="{width: '520px'}"
+    [contentStyle]="{'overflow': 'visible'}"
     [closable]="true"
     [draggable]="false"
-    [resizable]="false">
+    [resizable]="false"
+    styleClass="deactivate-user-dialog">
     
-    <div *ngIf="selectedUserForDelete" class="delete-user-content">
-      <div class="delete-warning-section">
-        <div class="warning-icon">
-          <i class="pi pi-exclamation-triangle"></i>
+    <div *ngIf="selectedUserForDelete" class="deactivate-user-content">
+      <div class="deactivate-section">
+        <div class="deactivate-icon">
+          <i class="pi pi-user-minus"></i>
         </div>
-        <div class="warning-message">
-          <h3>Are you sure?</h3>
-          <p>You are about to delete the user account for:</p>
-          <div class="user-to-delete">
-            <strong>{{ selectedUserForDelete.firstName }} {{ selectedUserForDelete.lastName }}</strong>
-            <span class="user-email">{{ selectedUserForDelete.email }}</span>
-            <span class="user-role">{{ selectedUserForDelete.roleName || selectedUserForDelete.role }}</span>
+        <p class="deactivate-intro">Choose how to remove the user account for:</p>
+        <div class="deactivate-user-card">
+          <div class="deactivate-user-name">{{ selectedUserForDelete.firstName }} {{ selectedUserForDelete.lastName }}</div>
+          <div class="deactivate-user-email">{{ selectedUserForDelete.email }}</div>
+          <div class="deactivate-user-role">{{ selectedUserForDelete.roleName || selectedUserForDelete.role }}</div>
+        </div>
+        <div class="deactivate-options">
+          <div class="deactivate-option deactivate-option--soft">
+            <i class="pi pi-user-minus"></i>
+            <div class="deactivate-option-content">
+              <strong>Deactivate User</strong>
+              <p>User becomes inactive and cannot log in. You can reactivate them later.</p>
+            </div>
           </div>
-          <p class="warning-text">This action cannot be undone. The user will be permanently removed from the system.</p>
+          <div class="deactivate-option deactivate-option--hard">
+            <i class="pi pi-trash"></i>
+            <div class="deactivate-option-content">
+              <strong>Permanent Delete</strong>
+              <p>User is permanently removed from the system. This cannot be undone.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <ng-template pTemplate="footer">
-      <div class="dialog-footer">
+      <div class="deactivate-dialog-footer">
         <p-button 
           label="Cancel" 
           icon="pi pi-times"
           (onClick)="displayDeleteDialog = false"
-          styleClass="p-button-text p-button-lg"
+          styleClass="p-button-secondary modal-footer-btn"
           [disabled]="deletingUser">
         </p-button>
         <p-button 
-          label="Delete User" 
-          icon="pi pi-trash"
-          (onClick)="deleteUser()"
+          label="Deactivate User" 
+          icon="pi pi-user-minus"
+          (onClick)="deleteUser(false)"
           [disabled]="deletingUser"
-          [loading]="deletingUser"
-          styleClass="p-button-danger p-button-lg">
+          [loading]="deletingUser && !deletePermanent"
+          styleClass="p-button-warning modal-footer-btn">
+        </p-button>
+        <p-button 
+          label="Permanent Delete" 
+          icon="pi pi-trash"
+          (onClick)="deleteUser(true)"
+          [disabled]="deletingUser"
+          [loading]="deletingUser && deletePermanent"
+          styleClass="p-button-danger modal-footer-btn">
         </p-button>
       </div>
     </ng-template>
@@ -1092,7 +1122,7 @@
           label="Close" 
           icon="pi pi-times" 
           (onClick)="displayViewDialog = false"
-          styleClass="p-button-text p-button-lg">
+          styleClass="p-button-outlined p-button-secondary modal-footer-btn">
         </p-button>
       </div>
     </ng-template>
@@ -1274,7 +1304,7 @@
             <div class="form-field">
               <label for="editCompanyName">
                 <i class="pi pi-building"></i>
-                Company Name
+                Company Name <span class="required">*</span>
               </label>
               <input 
                 id="editCompanyName"
@@ -1282,7 +1312,11 @@
                 pInputText 
                 formControlName="companyName"
                 placeholder="Enter company name"
+                [class.ng-invalid]="editUserForm.get('companyName')?.invalid && editUserForm.get('companyName')?.touched"
                 autocomplete="off" />
+              <small class="p-error" *ngIf="editUserForm.get('companyName')?.invalid && editUserForm.get('companyName')?.touched">
+                Company name is required for Client role
+              </small>
             </div>
 
             <div class="form-field">
@@ -1515,7 +1549,7 @@
           label="Cancel" 
           icon="pi pi-times" 
           (onClick)="displayEditDialog = false"
-          styleClass="p-button-text p-button-lg"
+          styleClass="p-button-outlined p-button-secondary modal-footer-btn"
           [disabled]="updatingUser">
         </p-button>
         <p-button 
@@ -1524,7 +1558,7 @@
           (onClick)="updateUser()"
           [disabled]="editUserForm.invalid || updatingUser"
           [loading]="updatingUser"
-          styleClass="p-button-primary p-button-lg">
+          styleClass="p-button-primary modal-footer-btn">
         </p-button>
       </div>
     </ng-template>

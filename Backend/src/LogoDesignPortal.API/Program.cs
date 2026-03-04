@@ -84,12 +84,20 @@ builder.Services.AddAuthorization();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// CORS
+// CORS - origins from config (appsettings.Production.json when deployed to IIS)
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? new[] { "http://localhost:4200", "https://localhost:4200", "http://localhost:83", "http://209.209.42.42", "http://209.209.42.42:83", "http://209.209.42.42:4200", "https://admin.hawkmerchandising.com" };
+
 builder.Services.AddCors(options =>
 {
+    options.AddPolicy("AllowAdmin", policy => policy
+        .WithOrigins("https://admin.hawkmerchandising.com", "http://admin.hawkmerchandising.com", "http://localhost:4200", "https://localhost:4200")
+        .AllowAnyHeader()
+        .AllowAnyMethod());
+
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins("http://localhost:4200", "https://localhost:4200")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials(); // Allow credentials for cookies/auth
@@ -98,21 +106,18 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
+// Configure the HTTP request pipeline - Swagger enabled for testing on IIS
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Logo Design Portal API v1");
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Logo Design Portal API v1");
+});
 
 // Global Exception Handler (must be first to catch all errors)
 app.UseMiddleware<ExceptionMiddleware>();
 
 // CORS must be very early to handle preflight OPTIONS requests
-app.UseCors("AllowAll");
+app.UseCors("AllowAdmin");
 
 // Only redirect to HTTPS in production, not in development
 if (!app.Environment.IsDevelopment())
@@ -192,9 +197,7 @@ _ = Task.Run(async () =>
         var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
         var logger = loggerFactory.CreateLogger<Program>();
         logger.LogError(ex, "Error initializing database. The application will continue, but database operations may fail.");
-        logger.LogWarning("Make sure SQL Server (LocalDB or full instance) is running.");
-        logger.LogWarning("For LocalDB, run: sqllocaldb start MSSQLLocalDB");
-        logger.LogWarning("Or update connection string in appsettings.json to use a full SQL Server instance.");
+        logger.LogWarning("Make sure MySQL is running and connection string in appsettings.json is correct.");
     }
 });
 

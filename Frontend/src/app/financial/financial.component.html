@@ -1,0 +1,186 @@
+<div class="financial-page">
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">Financial Overview</h1>
+      <p class="page-subtitle">Comprehensive financial insights and reports</p>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading-container">
+    <p-progressSpinner></p-progressSpinner>
+    <p>Loading financial data...</p>
+  </div>
+
+  <div *ngIf="!loading" class="financial-content">
+    <!-- Financial Snapshot Cards -->
+    <p-card styleClass="financial-card">
+      <div class="financial-snapshot-grid">
+        <div class="snapshot-card snapshot-primary">
+          <div class="snapshot-icon"><i class="pi pi-wallet"></i></div>
+          <div class="snapshot-info">
+            <span class="snapshot-value">{{ formatCurrency(financialSnapshot.lifetimeSpend) }}</span>
+            <span class="snapshot-label">Lifetime Spend</span>
+          </div>
+        </div>
+        <div class="snapshot-card snapshot-info-color">
+          <div class="snapshot-icon"><i class="pi pi-chart-line"></i></div>
+          <div class="snapshot-info">
+            <span class="snapshot-value">{{ formatCurrency(financialSnapshot.monthlySpend) }}</span>
+            <span class="snapshot-label">Monthly Spend</span>
+          </div>
+        </div>
+        <div class="snapshot-card snapshot-warning">
+          <div class="snapshot-icon"><i class="pi pi-percentage"></i></div>
+          <div class="snapshot-info">
+            <span class="snapshot-value">{{ formatCurrency(financialSnapshot.averageOrderValue) }}</span>
+            <span class="snapshot-label">Avg Order Value</span>
+          </div>
+        </div>
+        <div class="snapshot-card snapshot-success">
+          <div class="snapshot-icon"><i class="pi pi-check-circle"></i></div>
+          <div class="snapshot-info">
+            <span class="snapshot-value">{{ financialSnapshot.totalInvoicesPaid }}</span>
+            <span class="snapshot-label">Invoices Paid</span>
+          </div>
+        </div>
+        <div class="snapshot-card snapshot-danger">
+          <div class="snapshot-icon"><i class="pi pi-clock"></i></div>
+          <div class="snapshot-info">
+            <span class="snapshot-value">{{ financialSnapshot.totalInvoicesPending }}</span>
+            <span class="snapshot-label">Invoices Pending</span>
+          </div>
+        </div>
+      </div>
+    </p-card>
+
+    <!-- Weekly and Monthly Summaries -->
+    <div class="summary-cards-row">
+      <p-card styleClass="summary-card">
+        <h3 class="summary-title"><i class="pi pi-calendar-week"></i> This Week</h3>
+        <div class="summary-content">
+          <div class="summary-item">
+            <span class="summary-label">Total</span>
+            <span class="summary-value">{{ formatCurrency(weeklySummary.total) }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Paid</span>
+            <span class="summary-value success">{{ formatCurrency(weeklySummary.paid) }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Pending</span>
+            <span class="summary-value warning">{{ formatCurrency(weeklySummary.pending) }}</span>
+          </div>
+        </div>
+      </p-card>
+
+      <p-card styleClass="summary-card">
+        <h3 class="summary-title"><i class="pi pi-calendar"></i> This Month</h3>
+        <div class="summary-content">
+          <div class="summary-item">
+            <span class="summary-label">Total</span>
+            <span class="summary-value">{{ formatCurrency(monthlySummary.total) }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Paid</span>
+            <span class="summary-value success">{{ formatCurrency(monthlySummary.paid) }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Pending</span>
+            <span class="summary-value warning">{{ formatCurrency(monthlySummary.pending) }}</span>
+          </div>
+        </div>
+      </p-card>
+    </div>
+
+    <!-- Trend Chart -->
+    <p-card *ngIf="clientTrendChartData" styleClass="chart-card">
+      <h3 class="chart-title"><i class="pi pi-chart-bar"></i> Orders Trend</h3>
+      <div class="chart-container">
+        <p-chart type="bar" [data]="clientTrendChartData" [options]="clientTrendChartOptions" [style]="{'height': '300px'}"></p-chart>
+      </div>
+    </p-card>
+
+    <!-- Invoices Section -->
+    <p-card *ngIf="invoices.length > 0" styleClass="invoices-card">
+      <div class="card-header">
+        <h3 class="card-title"><i class="pi pi-file-pdf"></i> Invoices</h3>
+        <p-button 
+          label="View All Invoices" 
+          icon="pi pi-arrow-right" 
+          iconPos="right"
+          styleClass="p-button-text"
+          (onClick)="navigateToInvoices()">
+        </p-button>
+      </div>
+      
+      <p-tabView [(activeIndex)]="selectedInvoiceTabIndex">
+        <p-tabPanel header="All Invoices">
+          <p-table [value]="invoices" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Invoice #</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Due Date</th>
+                <th>Paid Date</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-invoice>
+              <tr>
+                <td>{{ invoice.invoiceNumber || invoice.id }}</td>
+                <td>{{ formatCurrency(invoice.totalAmount || invoice.amount || 0) }}</td>
+                <td>
+                  <p-tag 
+                    [value]="invoice.status" 
+                    [severity]="invoice.status === 'Paid' ? 'success' : invoice.status === 'Overdue' ? 'danger' : 'warning'"
+                    [rounded]="true">
+                  </p-tag>
+                </td>
+                <td>{{ invoice.dueDate ? (invoice.dueDate | date:'short') : '-' }}</td>
+                <td>{{ invoice.paidDate ? (invoice.paidDate | date:'short') : '-' }}</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </p-tabPanel>
+        
+        <p-tabPanel header="Pending">
+          <p-table [value]="getPendingInvoices()" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Invoice #</th>
+                <th>Amount</th>
+                <th>Due Date</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-invoice>
+              <tr>
+                <td>{{ invoice.invoiceNumber || invoice.id }}</td>
+                <td>{{ formatCurrency(invoice.totalAmount || invoice.amount || 0) }}</td>
+                <td>{{ invoice.dueDate ? (invoice.dueDate | date:'short') : '-' }}</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </p-tabPanel>
+        
+        <p-tabPanel header="Paid">
+          <p-table [value]="getPaidInvoices()" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Invoice #</th>
+                <th>Amount</th>
+                <th>Paid Date</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-invoice>
+              <tr>
+                <td>{{ invoice.invoiceNumber || invoice.id }}</td>
+                <td>{{ formatCurrency(invoice.totalAmount || invoice.amount || 0) }}</td>
+                <td>{{ invoice.paidDate ? (invoice.paidDate | date:'short') : '-' }}</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </p-tabPanel>
+      </p-tabView>
+    </p-card>
+  </div>
+</div>

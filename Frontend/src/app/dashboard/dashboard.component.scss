@@ -421,6 +421,49 @@
   .action-buttons { display: flex; gap: 0.5rem; align-items: center; }
   .overdue { color: var(--danger-color, #ef4444); font-weight: 600; }
 
+  // ═══ PAYMENT DIALOG ═══
+  .payment-dialog {
+    .multiple-invoices-payment {
+      .payment-summary {
+        margin: 1rem 0;
+        padding: 1rem;
+        background: var(--surface-ground);
+        border-radius: 8px;
+        border: 1px solid var(--surface-border);
+
+        p {
+          margin: 0;
+          font-size: 1rem;
+        }
+      }
+
+      .field {
+        margin-top: 1rem;
+
+        label {
+          display: block;
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: var(--text-color);
+          margin-bottom: 0.5rem;
+        }
+
+        input {
+          width: 100%;
+        }
+      }
+
+      .payment-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--surface-border);
+      }
+    }
+  }
+
   // ═══ ACTION REQUIRED ═══
   .action-required-section {
     margin-bottom: 1.75rem;

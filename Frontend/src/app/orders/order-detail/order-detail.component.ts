@@ -298,7 +298,10 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
         next: (users) => {
           this.availableDesigners = users
             .filter(u => u.role === 'Designer' || u.roleName === 'Designer')
-            .map(u => ({ label: `${u.firstName} ${u.lastName}`, value: u.id }));
+            .map(u => {
+              const fullName = [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
+              return { label: fullName || u.email || 'Unknown Designer', value: u.id };
+            });
         },
         error: () => {
           this.availableDesigners = [];
@@ -841,6 +844,68 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
             severity: 'error',
             summary: 'Error',
             detail: error.error?.error || 'Failed to refund order'
+          });
+        }
+      });
+  }
+
+  canUploadFiles(): boolean {
+    if (!this.order) return false;
+    
+    // Check if order is completed or final approved
+    const isCompleted = this.order.status === OrderStatus.Completed || 
+                       this.order.status === OrderStatus.FinalApproved;
+    
+    // If completed, uploads are disabled by default (unless admin explicitly enabled them)
+    if (isCompleted) {
+      // Only allow if admin has explicitly enabled uploads
+      return (this.isAdmin || this.isSuperAdmin) && this.order.allowUploads === true;
+    }
+    
+    // For non-completed orders, check role and allowUploads flag
+    if (this.isClient) {
+      return this.order.allowUploads !== false;
+    }
+    
+    // Designers and admins can upload if uploads are allowed
+    return (this.isDesigner || this.isAdmin || this.isSuperAdmin) && 
+           (this.order.allowUploads !== false);
+  }
+
+  canToggleUploads(): boolean {
+    // Only admins can toggle uploads, and only for completed/final approved orders
+    if (!this.order || (!this.isAdmin && !this.isSuperAdmin)) {
+      return false;
+    }
+    
+    const isCompleted = this.order.status === OrderStatus.Completed || 
+                        this.order.status === OrderStatus.FinalApproved;
+    return isCompleted;
+  }
+
+  toggleUploads(): void {
+    if (!this.order) return;
+
+    const newValue = !this.order.allowUploads;
+    this.apiService.put<Order>(`orders/${this.order.id}/allow-uploads`, {
+      allowUploads: newValue
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (updatedOrder) => {
+          this.order = updatedOrder;
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: `File uploads ${newValue ? 'enabled' : 'disabled'} successfully`
+          });
+          this.orderUpdated.emit();
+        },
+        error: (error) => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.error?.error || 'Failed to update upload settings'
           });
         }
       });

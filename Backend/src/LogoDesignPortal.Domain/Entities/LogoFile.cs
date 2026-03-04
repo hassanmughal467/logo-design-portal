@@ -11,6 +11,8 @@ public class LogoFile : BaseEntity
     public string ContentType { get; set; } = string.Empty;
     public long FileSize { get; set; }
     public FileType FileType { get; set; } = FileType.Reference; // Reference, Preview, Final
+    public FileCategory? FileCategory { get; set; } // Source, Print, Web, Embroidery
+    public FileStatus FileStatus { get; set; } = FileStatus.Draft; // Draft, Final, Approved
     public bool IsFinalVersion { get; set; } = false;
     public bool IsVisibleToClient { get; set; } = false; // Admin must approve before client sees
     public bool IsAdminApproved { get; set; } = false; // Admin approval flag

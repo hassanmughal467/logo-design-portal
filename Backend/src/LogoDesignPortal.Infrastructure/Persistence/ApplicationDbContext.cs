@@ -29,6 +29,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<Invoice> Invoices { get; set; }
     public DbSet<InvoiceOrder> InvoiceOrders { get; set; }
     public DbSet<InvoiceLog> InvoiceLogs { get; set; }
+    public DbSet<Payment> Payments { get; set; }
     public DbSet<Message> Messages { get; set; }
     public DbSet<Review> Reviews { get; set; }
     public DbSet<Settings> Settings { get; set; }

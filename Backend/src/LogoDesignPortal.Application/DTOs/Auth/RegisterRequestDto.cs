@@ -20,6 +20,10 @@ public class RegisterRequestDto
     [MinLength(2)]
     public string LastName { get; set; } = string.Empty;
 
+    [Required]
+    [MinLength(2)]
+    public string CompanyName { get; set; } = string.Empty;
+
     [EmailAddress]
     public string? SecondaryEmail { get; set; }
 

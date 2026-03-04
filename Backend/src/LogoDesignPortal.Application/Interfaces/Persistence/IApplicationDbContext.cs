@@ -23,6 +23,7 @@ public interface IApplicationDbContext
     DbSet<Invoice> Invoices { get; }
     DbSet<InvoiceOrder> InvoiceOrders { get; }
     DbSet<InvoiceLog> InvoiceLogs { get; }
+    DbSet<Payment> Payments { get; }
     DbSet<Message> Messages { get; }
     DbSet<Review> Reviews { get; }
     DbSet<Settings> Settings { get; }

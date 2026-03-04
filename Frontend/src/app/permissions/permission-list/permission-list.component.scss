@@ -68,4 +68,175 @@
       }
     }
   }
+
+  // Permission Matrix Styles
+  .matrix-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--surface-border);
+    margin-bottom: 1.5rem;
+
+    h2 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--text-color);
+    }
+
+    .matrix-subtitle {
+      margin: 0;
+      color: var(--text-color-secondary);
+      font-size: 0.9rem;
+    }
+  }
+
+  .matrix-container {
+    padding: 0 1.5rem 1.5rem 1.5rem;
+  }
+
+  .matrix-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--surface-border);
+    border-radius: 4px;
+  }
+
+  .permission-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface-ground);
+
+    thead {
+      background: var(--surface-section);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+
+      th {
+        padding: 1rem;
+        text-align: center;
+        font-weight: 600;
+        color: var(--text-color);
+        border-bottom: 2px solid var(--surface-border);
+        white-space: nowrap;
+
+        &.permission-col {
+          text-align: left;
+          min-width: 300px;
+          position: sticky;
+          left: 0;
+          background: var(--surface-section);
+          z-index: 11;
+        }
+
+        .role-header {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.5rem;
+
+          .role-name {
+            font-size: 1rem;
+            font-weight: 600;
+          }
+
+          .role-tag {
+            font-size: 0.75rem;
+          }
+        }
+      }
+    }
+
+    tbody {
+      tr {
+        border-bottom: 1px solid var(--surface-border);
+        transition: background-color 0.2s;
+
+        &:hover {
+          background: var(--surface-hover);
+        }
+
+        &:last-child {
+          border-bottom: none;
+        }
+      }
+
+      td {
+        padding: 1rem;
+        text-align: center;
+        vertical-align: middle;
+
+        &.permission-cell {
+          text-align: left;
+          position: sticky;
+          left: 0;
+          background: var(--surface-ground);
+          z-index: 5;
+          min-width: 300px;
+
+          .permission-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+
+            strong {
+              color: var(--text-color);
+              font-size: 0.95rem;
+            }
+
+            .permission-desc {
+              color: var(--text-color-secondary);
+              font-size: 0.85rem;
+            }
+          }
+        }
+
+        &.checkbox-cell {
+          text-align: center;
+          width: 120px;
+
+          ::ng-deep .p-checkbox {
+            display: flex;
+            justify-content: center;
+          }
+        }
+      }
+    }
+  }
+
+  .matrix-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    gap: 1rem;
+
+    i {
+      color: var(--primary-color);
+    }
+
+    p {
+      color: var(--text-color-secondary);
+      margin: 0;
+    }
+  }
+
+  .matrix-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    gap: 1rem;
+    text-align: center;
+
+    i {
+      margin-bottom: 1rem;
+    }
+
+    p {
+      color: var(--text-color-secondary);
+      margin: 0;
+      font-size: 1rem;
+    }
+  }
 }

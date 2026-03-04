@@ -42,6 +42,9 @@ public class OrderResponseDto
     public decimal? RefundAmount { get; set; }
     public string? RefundReason { get; set; }
     
+    // Upload control fields
+    public bool AllowUploads { get; set; } = true;
+    
     // Invoice fields
     public bool HasInvoice { get; set; }
 }

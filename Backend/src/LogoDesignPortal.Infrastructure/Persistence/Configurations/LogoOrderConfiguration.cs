@@ -60,6 +60,10 @@ public class LogoOrderConfiguration : IEntityTypeConfiguration<LogoOrder>
         builder.Property(e => e.RefundAmount)
             .HasPrecision(18, 2);
 
+        builder.Property(e => e.AllowUploads)
+            .IsRequired()
+            .HasDefaultValue(true);
+
         builder.HasOne(e => e.Client)
             .WithMany(c => c.Orders)
             .HasForeignKey(e => e.ClientId)
