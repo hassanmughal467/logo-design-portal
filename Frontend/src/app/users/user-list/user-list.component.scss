@@ -971,6 +971,25 @@
         }
       }
 
+      .deactivate-warning {
+        margin: 0;
+        padding: 0.75rem 1rem;
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        border-radius: 8px;
+        color: var(--orange-700, #b45309);
+        font-size: 0.875rem;
+        line-height: 1.5;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+
+        i {
+          flex-shrink: 0;
+          margin-top: 0.1rem;
+        }
+      }
+
       .deactivate-intro {
         margin: 0;
         color: var(--text-color-secondary);

@@ -30,7 +30,7 @@ public class ExceptionMiddleware
         }
     }
 
-    private static Task HandleExceptionAsync(HttpContext context, Exception exception)
+    private Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         var code = HttpStatusCode.InternalServerError;
         var result = string.Empty;
@@ -38,13 +38,10 @@ public class ExceptionMiddleware
         switch (exception)
         {
             case ForbiddenAccessException:
-                // User is authenticated but doesn't have permission
                 code = HttpStatusCode.Forbidden;
                 result = JsonSerializer.Serialize(new { error = exception.Message });
                 break;
             case UnauthorizedAccessException uaEx:
-                // Distinguish: file system "Access to the path ... is denied" should be 500, not 401
-                // Auth-related UnauthorizedAccessException has different messages
                 if (uaEx.Message?.Contains("Access to the path", StringComparison.OrdinalIgnoreCase) == true ||
                     uaEx.Message?.Contains("is denied", StringComparison.OrdinalIgnoreCase) == true)
                 {
@@ -66,7 +63,8 @@ public class ExceptionMiddleware
                 result = JsonSerializer.Serialize(new { error = exception.Message });
                 break;
             default:
-                result = JsonSerializer.Serialize(new { error = "An error occurred while processing your request." });
+                var errorDetail = exception.InnerException?.Message ?? exception.Message;
+                result = JsonSerializer.Serialize(new { error = "An error occurred while processing your request.", detail = errorDetail });
                 break;
         }
 

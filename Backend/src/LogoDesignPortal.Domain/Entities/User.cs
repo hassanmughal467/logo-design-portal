@@ -22,6 +22,9 @@ public class User : BaseEntity
     public string? SecondaryEmail { get; set; }
     public string? InvoiceEmail { get; set; }
 
+    /// <summary>Root Admin cannot be deleted, deactivated, or have their role changed.</summary>
+    public bool IsRootAdmin { get; set; } = false;
+
     // Navigation properties
     public Guid RoleId { get; set; }
     public Role Role { get; set; } = null!;

@@ -6,6 +6,7 @@ import { ApiService } from './api.service';
 import { LoginRequest, LoginResponse, RegisterRequest, User } from '@shared/models/user.model';
 
 const TOKEN_KEY = 'auth_token';
+const REFRESH_TOKEN_KEY = 'auth_refresh_token';
 const EXPIRES_AT_KEY = 'auth_expires_at';
 const USER_KEY = 'auth_user';
 
@@ -44,7 +45,14 @@ export class AuthService {
   }
 
   refreshToken(): Observable<LoginResponse> {
-    return this.apiService.post<LoginResponse>('auth/refresh-token', {}).pipe(
+    const stored = this.getStoredTokensForRefresh();
+    if (!stored) {
+      return throwError(() => new Error('No refresh token available'));
+    }
+    return this.apiService.post<LoginResponse>('auth/refresh-token', {
+      token: stored.token,
+      refreshToken: stored.refreshToken
+    }).pipe(
       tap(response => {
         this.setAuthData(response);
       }),
@@ -55,11 +63,22 @@ export class AuthService {
     );
   }
 
+  /** Returns stored token + refreshToken for refresh attempt (even when access token expired) */
+  getStoredTokensForRefresh(): { token: string; refreshToken: string } | null {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (token && refreshToken) {
+      return { token, refreshToken };
+    }
+    return null;
+  }
+
   logout(): void {
     this.accessToken = null;
     this.tokenExpiry = null;
     this.currentUserSubject.next(null);
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(EXPIRES_AT_KEY);
     localStorage.removeItem(USER_KEY);
     sessionStorage.removeItem('user');
@@ -81,8 +100,7 @@ export class AuthService {
         this.tokenExpiry = expiry;
         return storedToken;
       }
-      // Token expired - clear storage
-      this.clearStoredAuth();
+      // Token expired - return null but keep storage for refresh attempt
       return null;
     }
     return null;
@@ -91,7 +109,9 @@ export class AuthService {
   isAuthenticated(): boolean {
     const token = this.getAccessToken();
     const user = this.currentUserSubject.value;
-    return !!token && !!user;
+    const hasRefreshToken = !!localStorage.getItem(REFRESH_TOKEN_KEY);
+    // Valid token + user, or user + refresh token (will try refresh on next API call)
+    return (!!token && !!user) || (!!user && hasRefreshToken);
   }
 
   getCurrentUser(): User | null {
@@ -140,6 +160,9 @@ export class AuthService {
     
     // Persist in localStorage so session survives page refresh
     localStorage.setItem(TOKEN_KEY, response.token);
+    if (response.refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+    }
     localStorage.setItem(EXPIRES_AT_KEY, String(this.tokenExpiry));
     localStorage.setItem(USER_KEY, JSON.stringify(user));
     sessionStorage.setItem('user', JSON.stringify(user));
@@ -151,6 +174,7 @@ export class AuthService {
     this.tokenExpiry = null;
     this.currentUserSubject.next(null);
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(EXPIRES_AT_KEY);
     localStorage.removeItem(USER_KEY);
     sessionStorage.removeItem('user');
@@ -159,15 +183,17 @@ export class AuthService {
   private loadUserFromStorage(): void {
     const storedToken = localStorage.getItem(TOKEN_KEY);
     const storedExpiry = localStorage.getItem(EXPIRES_AT_KEY);
+    const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
     const userStr = localStorage.getItem(USER_KEY) || sessionStorage.getItem('user');
     
-    if (!storedToken || !storedExpiry || !userStr) {
+    if (!storedToken || !userStr) {
       this.clearStoredAuth();
       return;
     }
     
-    const expiry = parseInt(storedExpiry, 10);
-    if (Date.now() >= expiry) {
+    const expiry = storedExpiry ? parseInt(storedExpiry, 10) : 0;
+    const tokenExpired = Date.now() >= expiry;
+    if (tokenExpired && !storedRefreshToken) {
       this.clearStoredAuth();
       return;
     }
@@ -178,8 +204,10 @@ export class AuthService {
         ...userData,
         role: userData.role || userData.roleName || 'Client'
       };
-      this.accessToken = storedToken;
-      this.tokenExpiry = expiry;
+      if (!tokenExpired) {
+        this.accessToken = storedToken;
+        this.tokenExpiry = expiry;
+      }
       this.currentUserSubject.next(user);
     } catch {
       this.clearStoredAuth();

@@ -44,8 +44,23 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto request)
     {
+        if (request == null)
+        {
+            return BadRequest(new { error = "Request body is required." });
+        }
+
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState
+                .Where(x => x.Value?.Errors.Count > 0)
+                .SelectMany(x => x.Value!.Errors.Select(e => e.ErrorMessage))
+                .ToList();
+            return BadRequest(new { error = string.Join(" ", errors) });
+        }
+
         try
         {
             var response = await _authService.RegisterAsync(request);
@@ -54,6 +69,25 @@ public class AuthController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Registration database error for email: {Email}. Inner: {Inner}", request.Email, ex.InnerException?.Message);
+            var innerMsg = ex.InnerException?.Message ?? ex.Message;
+            var isConstraintOrSchema = innerMsg.Contains("Duplicate") || innerMsg.Contains("column") || innerMsg.Contains("migration");
+            return StatusCode(500, new
+            {
+                error = isConstraintOrSchema
+                    ? "Registration failed. The email may already exist, or the database may need migrations applied."
+                    : "Registration failed. Please try again.",
+                detail = innerMsg
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Registration failed for email: {Email}. Error: {Message}", request.Email, ex.Message);
+            var errorMessage = ex.InnerException?.Message ?? ex.Message;
+            return StatusCode(500, new { error = "Registration failed. Please try again.", detail = errorMessage });
         }
     }
 

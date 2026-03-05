@@ -237,6 +237,7 @@ public class UserService : IUserService
             LastName = user.LastName,
             RoleName = user.Role?.Name ?? string.Empty,
             IsActive = user.IsActive,
+            IsRootAdmin = user.IsRootAdmin,
             CreatedAt = user.CreatedAt,
             SecondaryEmail = user.SecondaryEmail,
             InvoiceEmail = user.InvoiceEmail,
@@ -302,6 +303,7 @@ public class UserService : IUserService
                 LastName = user.LastName,
                 RoleName = user.Role?.Name ?? string.Empty,
                 IsActive = user.IsActive,
+                IsRootAdmin = user.IsRootAdmin,
                 CreatedAt = user.CreatedAt,
                 SecondaryEmail = user.SecondaryEmail,
                 InvoiceEmail = user.InvoiceEmail,
@@ -311,7 +313,7 @@ public class UserService : IUserService
         }).ToList();
     }
 
-    public async Task<UserResponseDto> UpdateUserAsync(Guid id, UpdateUserRequestDto request)
+    public async Task<UserResponseDto> UpdateUserAsync(Guid id, UpdateUserRequestDto request, Guid? performedBy = null)
     {
         var user = await _context.Users
             .Include(u => u.Role)
@@ -320,6 +322,18 @@ public class UserService : IUserService
         if (user == null)
         {
             throw new InvalidOperationException("User not found.");
+        }
+
+        // Root Admin: role cannot be changed
+        if (user.IsRootAdmin && user.Role?.Name != request.Role)
+        {
+            throw new InvalidOperationException("Super Admin role cannot be changed.");
+        }
+
+        // Root Admin: cannot be deactivated
+        if (user.IsRootAdmin && !request.IsActive)
+        {
+            throw new InvalidOperationException("Super Admin cannot be deactivated.");
         }
 
         // Check if email is being changed and if new email already exists
@@ -341,6 +355,13 @@ public class UserService : IUserService
         if (role == null)
         {
             throw new InvalidOperationException($"Invalid role specified: {request.Role}");
+        }
+
+        // Audit log for role change (unless Root Admin which is blocked above)
+        if (user.Role?.Name != request.Role)
+        {
+            await _auditLogService.LogActionAsync("User", user.Id, "RoleChange", performedBy, "SuperAdmin",
+                user.Role?.Name, request.Role, $"User role changed from {user.Role?.Name} to {request.Role}");
         }
 
         // Update user properties
@@ -498,6 +519,7 @@ public class UserService : IUserService
             LastName = user.LastName,
             RoleName = role.Name,
             IsActive = user.IsActive,
+            IsRootAdmin = user.IsRootAdmin,
             CreatedAt = user.CreatedAt,
             SecondaryEmail = user.SecondaryEmail,
             InvoiceEmail = user.InvoiceEmail,
@@ -648,6 +670,7 @@ public class UserService : IUserService
             LastName = user.LastName,
             RoleName = user.Role?.Name ?? string.Empty,
             IsActive = user.IsActive,
+            IsRootAdmin = user.IsRootAdmin,
             CreatedAt = user.CreatedAt,
             SecondaryEmail = user.SecondaryEmail,
             InvoiceEmail = user.InvoiceEmail,
@@ -673,14 +696,24 @@ public class UserService : IUserService
             throw new InvalidOperationException("User not found.");
         }
 
-        if (user.Role?.Name == "SuperAdmin")
+        if (user.IsRootAdmin)
         {
-            throw new InvalidOperationException("Cannot deactivate SuperAdmin users.");
+            throw new InvalidOperationException("Super Admin cannot be deactivated.");
         }
 
         if (user.Id == deactivatedBy)
         {
-            throw new InvalidOperationException("Cannot deactivate your own account.");
+            throw new InvalidOperationException("You cannot delete your own account.");
+        }
+
+        if (user.Role?.Name == "SuperAdmin")
+        {
+            var superAdminCount = await _context.Users
+                .CountAsync(u => !u.IsDeleted && u.Role!.Name == "SuperAdmin" && u.IsActive);
+            if (superAdminCount <= 1)
+            {
+                throw new InvalidOperationException("At least one Super Admin must remain in the system.");
+            }
         }
 
         user.IsActive = false;
@@ -689,6 +722,7 @@ public class UserService : IUserService
         user.UpdatedAt = DateTime.UtcNow;
         user.UpdatedBy = deactivatedBy;
 
+        await _auditLogService.LogActionAsync("User", user.Id, "DeactivateUser", deactivatedBy, "SuperAdmin", null, null, $"User {user.Email} deactivated.");
         await _context.SaveChangesAsync();
         return true;
     }
@@ -728,14 +762,24 @@ public class UserService : IUserService
             throw new InvalidOperationException("User not found.");
         }
 
-        if (user.Role?.Name == "SuperAdmin")
+        if (user.IsRootAdmin)
         {
-            throw new InvalidOperationException("Cannot permanently delete SuperAdmin users.");
+            throw new InvalidOperationException("Super Admin cannot be deleted.");
         }
 
         if (user.Id == deletedBy)
         {
-            throw new InvalidOperationException("Cannot permanently delete your own account.");
+            throw new InvalidOperationException("You cannot delete your own account.");
+        }
+
+        if (user.Role?.Name == "SuperAdmin")
+        {
+            var superAdminCount = await _context.Users
+                .CountAsync(u => !u.IsDeleted && u.Role!.Name == "SuperAdmin");
+            if (superAdminCount <= 1)
+            {
+                throw new InvalidOperationException("At least one Super Admin must remain in the system.");
+            }
         }
 
         user.IsDeleted = true;
@@ -759,6 +803,7 @@ public class UserService : IUserService
             user.DesignerProfile.DeletedBy = deletedBy;
         }
 
+        await _auditLogService.LogActionAsync("User", user.Id, "DeleteUser", deletedBy, "SuperAdmin", null, null, $"User {user.Email} permanently deleted.");
         await _context.SaveChangesAsync();
         return true;
     }

@@ -28,9 +28,10 @@ export class ErrorInterceptor implements HttpInterceptor {
           // Server-side error
           switch (error.status) {
             case 401:
-              // Unauthorized - token expired or invalid
-              // Don't show session expired for login endpoint - let login component handle it
-              if (request.url && !request.url.includes('/auth/login')) {
+              // Unauthorized - TokenInterceptor tries refresh first; ErrorInterceptor only handles when refresh fails (401 on refresh-token)
+              const isAuthEndpoint = (request.url || '').includes('/auth/login') || (request.url || '').includes('/auth/register');
+              const isRefreshEndpoint = (request.url || '').includes('/auth/refresh-token');
+              if (!isAuthEndpoint && isRefreshEndpoint) {
                 this.authService.logout();
                 this.messageService.add({
                   severity: 'error',
@@ -76,7 +77,10 @@ export class ErrorInterceptor implements HttpInterceptor {
               break;
 
             case 500:
-              errorMessage = 'Server error. Please try again later';
+              errorMessage = error.error?.error || 'Server error. Please try again later';
+              if (error.error?.detail) {
+                errorMessage += ` (${error.error.detail})`;
+              }
               this.messageService.add({
                 severity: 'error',
                 summary: 'Server Error',

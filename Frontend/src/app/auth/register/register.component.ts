@@ -71,7 +71,18 @@ export class RegisterComponent {
     }
 
     this.loading = true;
-    const { confirmPassword, ...registerData } = this.registerForm.value;
+    const formValue = this.registerForm.value;
+
+    // Map form to backend RegisterRequestDto - backend expects only these fields
+    const registerData = {
+      email: formValue.email,
+      password: formValue.password,
+      firstName: formValue.firstName,
+      lastName: formValue.lastName,
+      companyName: formValue.companyName,
+      secondaryEmail: formValue.secondaryEmail?.trim() || null,
+      agreeToTerms: formValue.agreeToTerms
+    };
 
     this.authService.register(registerData).subscribe({
       next: () => {
@@ -84,10 +95,14 @@ export class RegisterComponent {
       },
       error: (error) => {
         this.loading = false;
+        let detail = error.error?.error || error.error?.message || 'Registration failed. Please try again.';
+        if (error.error?.detail) {
+          detail += ` (${error.error.detail})`;
+        }
         this.messageService.add({
           severity: 'error',
           summary: 'Registration Failed',
-          detail: error.error?.error || error.error?.message || 'Registration failed. Please try again.'
+          detail
         });
       }
     });

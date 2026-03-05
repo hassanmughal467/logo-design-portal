@@ -7,7 +7,7 @@ public interface IUserService
     Task<UserResponseDto> CreateUserAsync(CreateUserRequestDto request);
     Task<UserResponseDto?> GetUserByIdAsync(Guid id);
     Task<List<UserResponseDto>> GetAllUsersAsync();
-    Task<UserResponseDto> UpdateUserAsync(Guid id, UpdateUserRequestDto request);
+    Task<UserResponseDto> UpdateUserAsync(Guid id, UpdateUserRequestDto request, Guid? performedBy = null);
     Task<UserResponseDto> UpdateUserProfileAsync(Guid id, UpdateClientProfileDto request);
     Task<bool> DeleteUserAsync(Guid id, Guid deletedBy);
     Task<bool> SoftDeactivateUserAsync(Guid id, Guid deactivatedBy);

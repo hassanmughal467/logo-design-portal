@@ -616,7 +616,12 @@ export class UserListComponent implements OnInit, OnDestroy {
     }
 
     this.updatingUser = true;
-    const formValue = this.editUserForm.value;
+    const formValue = { ...this.editUserForm.value };
+    // Root Admin: ensure role and isActive cannot be changed (disabled controls are excluded from form value)
+    if (this.selectedUserForEdit.isRootAdmin) {
+      formValue.role = 'SuperAdmin';
+      formValue.isActive = true;
+    }
     
     // Prepare update request with all fields
     const updateRequest: any = {
@@ -693,7 +698,48 @@ export class UserListComponent implements OnInit, OnDestroy {
     return this.authService.hasRole('SuperAdmin');
   }
 
+  /** Whether the delete button should be shown for this user (not Root Admin, not self, and active) */
+  canDeleteUserFor(user: User): boolean {
+    if (!this.canDeleteUser() || !user.isActive) return false;
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser || user.id === currentUser.id) return false;
+    if (user.isRootAdmin) return false;
+    return true;
+  }
+
+  /** Whether the user is an admin (SuperAdmin or Admin) - used for confirmation message */
+  isAdminUser(user: User): boolean {
+    const role = user.roleName || user.role || '';
+    return role === 'SuperAdmin' || role === 'Admin';
+  }
+
+  /** Whether the reactivate button should be shown for this user (not Root Admin, not self, and inactive) */
+  canReactivateUserFor(user: User): boolean {
+    if (!this.canDeleteUser() || user.isActive) return false;
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser || user.id === currentUser.id) return false;
+    if (user.isRootAdmin) return false;
+    return true;
+  }
+
   openDeleteDialog(user: User): void {
+    const currentUser = this.authService.getCurrentUser();
+    if (currentUser && user.id === currentUser.id) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Not Allowed',
+        detail: 'You cannot delete your own account.'
+      });
+      return;
+    }
+    if (user.isRootAdmin) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Not Allowed',
+        detail: 'Super Admin cannot be deleted.'
+      });
+      return;
+    }
     this.selectedUserForDelete = user;
     this.displayDeleteDialog = true;
   }
@@ -736,10 +782,11 @@ export class UserListComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           console.error('Error deleting user:', error);
+          const errorMsg = error.error?.error || 'Failed to delete user';
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: error.error?.error || 'Failed to delete user'
+            detail: errorMsg
           });
           this.deletingUser = false;
           this.deletePermanent = false;

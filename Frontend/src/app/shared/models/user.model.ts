@@ -6,6 +6,7 @@ export interface User {
   role?: UserRole;
   roleName?: string; // From API response
   isActive: boolean;
+  isRootAdmin?: boolean;
   createdAt: Date;
   updatedAt?: Date;
 }
@@ -35,5 +36,6 @@ export interface RegisterRequest {
   firstName: string;
   lastName: string;
   companyName: string;
-  phoneNumber: string;
+  secondaryEmail?: string | null;
+  agreeToTerms: boolean;
 }

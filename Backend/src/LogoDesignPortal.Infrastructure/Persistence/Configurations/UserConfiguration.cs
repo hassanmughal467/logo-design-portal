@@ -40,6 +40,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(e => e.DeactivatedAt)
             .IsRequired(false);
 
+        builder.Property(e => e.IsRootAdmin)
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.HasOne(e => e.Role)
             .WithMany(r => r.Users)
             .HasForeignKey(e => e.RoleId)

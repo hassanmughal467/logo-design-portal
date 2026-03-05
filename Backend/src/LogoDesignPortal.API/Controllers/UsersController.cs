@@ -88,7 +88,8 @@ public class UsersController : ControllerBase
     {
         try
         {
-            var user = await _userService.UpdateUserAsync(id, request);
+            var performedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var user = await _userService.UpdateUserAsync(id, request, performedBy);
             return Ok(user);
         }
         catch (InvalidOperationException ex)

@@ -1,5 +1,5 @@
 export const environment = {
   production: false,
-  apiUrl: 'http://api.hawkmerchandising.com',  // Backend API - matches Swagger at https://localhost:5001
+  apiUrl: 'https://localhost:44398',  // IIS Express HTTPS - use http://localhost:61311 for HTTP
   apiVersion: ''  // Backend uses /api/ not /api/v1/
 };

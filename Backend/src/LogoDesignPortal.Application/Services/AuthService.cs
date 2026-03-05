@@ -75,16 +75,18 @@ public class AuthService : IAuthService
 
         var token = await _jwtTokenService.GenerateTokenAsync(user);
         var refreshToken = _jwtTokenService.GenerateRefreshToken();
+        var accessTokenHours = int.TryParse(_configuration["Jwt:AccessTokenExpiryHours"], out var ath) ? ath : 1;
+        var refreshTokenHours = int.TryParse(_configuration["Jwt:RefreshTokenExpiryHours"], out var rth) ? rth : 1;
 
         user.RefreshToken = refreshToken;
-        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddHours(refreshTokenHours);
         await _context.SaveChangesAsync();
 
         return new AuthResponseDto
         {
             Token = token,
             RefreshToken = refreshToken,
-            ExpiresAt = DateTime.UtcNow.AddHours(1),
+            ExpiresAt = DateTime.UtcNow.AddHours(accessTokenHours),
             User = new UserDto
             {
                 Id = user.Id,
@@ -116,7 +118,7 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Client role not found.");
         }
 
-        // Create user (profile will be completed later)
+        // Create user (profile will be completed later) - do NOT set Role nav property to avoid EF tracking issues
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -133,11 +135,16 @@ public class AuthService : IAuthService
         _context.Users.Add(user);
 
         // Create ClientProfile so the client can create orders immediately (CompanyName is required in RegisterRequestDto)
+        var companyName = (request.CompanyName ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(companyName))
+        {
+            throw new InvalidOperationException("Company name is required.");
+        }
         var clientProfile = new ClientProfile
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            CompanyName = request.CompanyName.Trim(),
+            CompanyName = companyName,
             ContactName = $"{user.FirstName} {user.LastName}".Trim(),
             CreatedAt = DateTime.UtcNow
         };
@@ -145,26 +152,32 @@ public class AuthService : IAuthService
 
         await _context.SaveChangesAsync();
 
-        // Generate tokens
-        var token = await _jwtTokenService.GenerateTokenAsync(user);
-        var refreshToken = _jwtTokenService.GenerateRefreshToken();
+        // Reload user with Role for JWT token generation (avoids EF tracking issues with new entities)
+        var userWithRole = await _context.Users
+            .Include(u => u.Role)
+            .FirstAsync(u => u.Id == user.Id);
 
-        user.RefreshToken = refreshToken;
-        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        var token = await _jwtTokenService.GenerateTokenAsync(userWithRole);
+        var refreshToken = _jwtTokenService.GenerateRefreshToken();
+        var accessTokenHours = int.TryParse(_configuration["Jwt:AccessTokenExpiryHours"], out var ath) ? ath : 1;
+        var refreshTokenHours = int.TryParse(_configuration["Jwt:RefreshTokenExpiryHours"], out var rth) ? rth : 1;
+
+        userWithRole.RefreshToken = refreshToken;
+        userWithRole.RefreshTokenExpiryTime = DateTime.UtcNow.AddHours(refreshTokenHours);
         await _context.SaveChangesAsync();
 
         return new AuthResponseDto
         {
             Token = token,
             RefreshToken = refreshToken,
-            ExpiresAt = DateTime.UtcNow.AddHours(1),
+            ExpiresAt = DateTime.UtcNow.AddHours(accessTokenHours),
             User = new UserDto
             {
-                Id = user.Id,
-                Email = user.Email,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                RoleName = clientRole.Name
+                Id = userWithRole.Id,
+                Email = userWithRole.Email,
+                FirstName = userWithRole.FirstName,
+                LastName = userWithRole.LastName,
+                RoleName = userWithRole.Role?.Name ?? clientRole.Name
             }
         };
     }
@@ -190,16 +203,18 @@ public class AuthService : IAuthService
 
         var newToken = await _jwtTokenService.GenerateTokenAsync(user);
         var newRefreshToken = _jwtTokenService.GenerateRefreshToken();
+        var accessTokenHours = int.TryParse(_configuration["Jwt:AccessTokenExpiryHours"], out var ath) ? ath : 1;
+        var refreshTokenHours = int.TryParse(_configuration["Jwt:RefreshTokenExpiryHours"], out var rth) ? rth : 1;
 
         user.RefreshToken = newRefreshToken;
-        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddHours(refreshTokenHours);
         await _context.SaveChangesAsync();
 
         return new AuthResponseDto
         {
             Token = newToken,
             RefreshToken = newRefreshToken,
-            ExpiresAt = DateTime.UtcNow.AddHours(1),
+            ExpiresAt = DateTime.UtcNow.AddHours(accessTokenHours),
             User = new UserDto
             {
                 Id = user.Id,

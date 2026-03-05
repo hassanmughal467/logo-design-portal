@@ -132,7 +132,7 @@
                 (onClick)="openResetPasswordDialog(user)">
               </p-button>
               <p-button 
-                *ngIf="canDeleteUser() && user.isActive"
+                *ngIf="canDeleteUserFor(user)"
                 icon="pi pi-trash" 
                 styleClass="p-button-text p-button-rounded p-button-sm p-button-danger"
                 pTooltip="Delete User"
@@ -140,7 +140,7 @@
                 (onClick)="openDeleteDialog(user)">
               </p-button>
               <p-button 
-                *ngIf="canDeleteUser() && !user.isActive"
+                *ngIf="canReactivateUserFor(user)"
                 icon="pi pi-check-circle" 
                 styleClass="p-button-text p-button-rounded p-button-sm p-button-success"
                 pTooltip="Reactivate User"
@@ -750,6 +750,9 @@
         <div class="deactivate-icon">
           <i class="pi pi-user-minus"></i>
         </div>
+        <p class="deactivate-warning" *ngIf="isAdminUser(selectedUserForDelete)">
+          <i class="pi pi-exclamation-triangle"></i> You are about to remove an administrator account. This action can affect system access.
+        </p>
         <p class="deactivate-intro">Choose how to remove the user account for:</p>
         <div class="deactivate-user-card">
           <div class="deactivate-user-name">{{ selectedUserForDelete.firstName }} {{ selectedUserForDelete.lastName }}</div>
@@ -1240,10 +1243,14 @@
               placeholder="Select Role"
               [filter]="false"
               [showClear]="false"
+              [disabled]="!!(selectedUserForEdit.isRootAdmin)"
               appendTo="body"
               [overlayOptions]="{ baseZIndex: 10000, autoZIndex: true }"
               [class.ng-invalid]="editUserForm.get('role')?.invalid && editUserForm.get('role')?.touched">
             </p-dropdown>
+            <small class="p-info" *ngIf="selectedUserForEdit?.isRootAdmin">
+              <i class="pi pi-lock"></i> Super Admin role cannot be changed
+            </small>
             <small 
               class="p-error" 
               *ngIf="editUserForm.get('role')?.invalid && editUserForm.get('role')?.touched">
@@ -1257,6 +1264,7 @@
               <p-checkbox 
                 formControlName="isActive"
                 [binary]="true"
+                [disabled]="!!(selectedUserForEdit.isRootAdmin)"
                 inputId="editIsActive">
               </p-checkbox>
               <label for="editIsActive">
@@ -1264,6 +1272,9 @@
                 Active User
               </label>
             </div>
+            <small class="p-info" *ngIf="selectedUserForEdit?.isRootAdmin">
+              <i class="pi pi-lock"></i> Super Admin cannot be deactivated
+            </small>
           </div>
 
           <!-- Additional User Fields -->

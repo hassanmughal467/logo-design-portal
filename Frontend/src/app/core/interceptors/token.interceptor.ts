@@ -1,24 +1,51 @@
 import { Injectable } from '@angular/core';
-import { HttpInterceptor, HttpRequest, HttpHandler, HttpEvent } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { HttpInterceptor, HttpRequest, HttpHandler, HttpEvent, HttpErrorResponse } from '@angular/common/http';
+import { Observable, throwError } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
 import { AuthService } from '../services/auth.service';
+import { MessageService } from 'primeng/api';
 
 @Injectable()
 export class TokenInterceptor implements HttpInterceptor {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private messageService: MessageService
+  ) {}
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     const token = this.authService.getAccessToken();
+    const authRequest = token
+      ? request.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
+      : request;
 
-    // Add Bearer token to request headers if available
-    if (token) {
-      request = request.clone({
-        setHeaders: {
-          Authorization: `Bearer ${token}`
+    return next.handle(authRequest).pipe(
+      catchError((error: HttpErrorResponse) => {
+        const isAuthEndpoint = (request.url || '').includes('/auth/login') || (request.url || '').includes('/auth/register');
+        const isRefreshEndpoint = (request.url || '').includes('/auth/refresh-token');
+
+        if (error.status === 401 && !isAuthEndpoint && !isRefreshEndpoint) {
+          const stored = this.authService.getStoredTokensForRefresh();
+          if (stored) {
+            return this.authService.refreshToken().pipe(
+              switchMap(() => {
+                const newToken = this.authService.getAccessToken();
+                const retryRequest = request.clone({
+                  setHeaders: { Authorization: `Bearer ${newToken}` }
+                });
+                return next.handle(retryRequest);
+              }),
+              catchError(() => throwError(() => error))
+            );
+          }
+          this.authService.logout();
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Session Expired',
+            detail: 'Please login again'
+          });
         }
-      });
-    }
-
-    return next.handle(request);
+        return throwError(() => error);
+      })
+    );
   }
 }

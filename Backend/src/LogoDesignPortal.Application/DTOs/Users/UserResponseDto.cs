@@ -8,6 +8,7 @@ public class UserResponseDto
     public string LastName { get; set; } = string.Empty;
     public string RoleName { get; set; } = string.Empty;
     public bool IsActive { get; set; }
+    public bool IsRootAdmin { get; set; }
     public DateTime CreatedAt { get; set; }
     
     // Additional User fields
