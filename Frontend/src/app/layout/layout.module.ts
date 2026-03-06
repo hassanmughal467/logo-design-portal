@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { MainLayoutComponent } from './main-layout/main-layout.component';
 import { AuthLayoutComponent } from './auth-layout/auth-layout.component';
+import { SharedModule } from '@shared/shared.module';
 
 // PrimeNG
 import { MenuModule } from 'primeng/menu';
@@ -12,6 +13,8 @@ import { ButtonModule } from 'primeng/button';
 import { BreadcrumbModule } from 'primeng/breadcrumb';
 import { TooltipModule } from 'primeng/tooltip';
 import { InputTextModule } from 'primeng/inputtext';
+import { OverlayPanelModule } from 'primeng/overlaypanel';
+import { TagModule } from 'primeng/tag';
 
 @NgModule({
   declarations: [
@@ -22,12 +25,15 @@ import { InputTextModule } from 'primeng/inputtext';
     CommonModule,
     FormsModule,
     RouterModule,
+    SharedModule,
     MenuModule,
     SidebarModule,
     ButtonModule,
     BreadcrumbModule,
     TooltipModule,
-    InputTextModule
+    InputTextModule,
+    OverlayPanelModule,
+    TagModule
   ],
   exports: [
     MainLayoutComponent,

@@ -59,7 +59,9 @@ public class MappingProfile : Profile
 
         // Notification mappings
         CreateMap<Notification, NotificationResponseDto>()
-            .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type.ToString()));
+            .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type.ToString()))
+            .ForMember(dest => dest.ReferenceType, opt => opt.MapFrom(src => src.ReferenceType.ToString()))
+            .ForMember(dest => dest.ReferenceId, opt => opt.MapFrom(src => src.ReferenceId ?? src.OrderId));
 
         // Comment mappings
         CreateMap<OrderComment, CommentResponseDto>()

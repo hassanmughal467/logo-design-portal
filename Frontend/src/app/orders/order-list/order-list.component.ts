@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
+import { RealtimeNotificationService } from '@core/services/realtime-notification.service';
 import { MessageService } from 'primeng/api';
 import { FileUpload } from 'primeng/fileupload';
 import { Subject } from 'rxjs';
@@ -124,6 +125,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private authService: AuthService,
+    private realtimeNotification: RealtimeNotificationService,
     private messageService: MessageService,
     private router: Router
   ) {}
@@ -139,6 +141,30 @@ export class OrderListComponent implements OnInit, OnDestroy {
     this.isSuperAdmin = user?.role === 'SuperAdmin';
 
     this.loadOrders();
+
+    // Real-time order updates: refresh grid when order events arrive
+    this.realtimeNotification.orderUpdates$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(data => this.handleOrderUpdate(data));
+  }
+
+  private handleOrderUpdate(data: { orderId: string; status?: string; invoiceId?: string }): void {
+    const orderId = data.orderId?.toLowerCase?.() ?? data.orderId;
+    const existing = this.orders.find(o => (o.id ?? '').toLowerCase() === orderId);
+    if (existing) {
+      if (data.status) {
+        existing.status = data.status as OrderStatus;
+      }
+      if (data.invoiceId) {
+        existing.hasInvoice = true;
+      }
+      this.buildSummaryCards();
+      this.buildQuickFilterChips();
+      this.applyFilters();
+    } else {
+      // Order not in current view (e.g. new order for admin) - full refresh
+      this.loadOrders();
+    }
   }
 
   ngOnDestroy(): void {

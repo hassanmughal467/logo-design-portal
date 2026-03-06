@@ -1,8 +1,11 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { AuthService } from '@core/services/auth.service';
+import { NotificationService } from '@core/services/notification.service';
 import { User } from '@shared/models/user.model';
-import { Subject } from 'rxjs';
+import { Notification } from '@shared/models/notification.model';
+import { getNotificationIcon } from '@shared/utils/notification-helpers';
+import { Observable, Subject } from 'rxjs';
 import { filter, takeUntil } from 'rxjs/operators';
 import { MenuItem } from 'primeng/api';
 
@@ -14,8 +17,11 @@ import { MenuItem } from 'primeng/api';
 export class MainLayoutComponent implements OnInit, OnDestroy {
   user: User | null = null;
   sidebarVisible = true;
-  hasNotifications = false; // TODO: Implement notification service
   globalSearchQuery = '';
+  recentNotifications: Notification[] = [];
+  loadingNotifications = false;
+
+  unreadCount$!: Observable<number>;
 
   menuItems: MenuItem[] = [];
   userMenuItems: MenuItem[] = [];
@@ -26,9 +32,12 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
 
   constructor(
     private authService: AuthService,
+    private notificationService: NotificationService,
     private router: Router,
     private activatedRoute: ActivatedRoute
-  ) {}
+  ) {
+    this.unreadCount$ = this.notificationService.unreadCount$;
+  }
 
   ngOnInit(): void {
     // Ensure sidebar is visible by default
@@ -41,9 +50,20 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
         if (user) {
           this.buildMenuItems();
           this.buildUserMenu();
+          this.loadRecentNotifications();
           console.log('Menu items built:', this.menuItems);
         }
       });
+
+    // Refresh notification dropdown when realtime notification arrives
+    this.notificationService.refreshRequested$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.loadNotifications(5));
+
+    // Activity feed: update existing notification in place when SignalR pushes an update
+    this.notificationService.notificationReceived$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(notification => this.mergeRealtimeNotification(notification));
 
     // Update breadcrumbs on route change
     this.router.events
@@ -120,6 +140,92 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   logout(): void {
     this.authService.logout();
     this.router.navigate(['/login']);
+  }
+
+  loadRecentNotifications(): void {
+    this.loadNotifications(5);
+  }
+
+  private mergeRealtimeNotification(notification: Notification): void {
+    const idx = this.recentNotifications.findIndex(n => n.id === notification.id);
+    if (idx >= 0) {
+      this.recentNotifications = [
+        ...this.recentNotifications.slice(0, idx),
+        notification,
+        ...this.recentNotifications.slice(idx + 1)
+      ];
+    } else {
+      this.recentNotifications = [notification, ...this.recentNotifications].slice(0, 5);
+    }
+  }
+
+  private loadNotifications(limit: number = 5): void {
+    this.loadingNotifications = true;
+    this.notificationService.getNotifications(false, limit)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (notifications) => {
+          this.recentNotifications = Array.isArray(notifications) ? notifications : [];
+          this.loadingNotifications = false;
+        },
+        error: () => {
+          this.recentNotifications = [];
+          this.loadingNotifications = false;
+        }
+      });
+  }
+
+  markNotificationAsRead(notification: Notification): void {
+    if (notification.isRead) return;
+    this.notificationService.markAsRead(notification.id).subscribe({
+      next: () => {
+        notification.isRead = true;
+      }
+    });
+  }
+
+  markAllAsRead(): void {
+    this.notificationService.markAllAsRead().subscribe({
+      next: () => {
+        this.recentNotifications.forEach(n => n.isRead = true);
+      }
+    });
+  }
+
+  hasUnreadNotifications(): boolean {
+    return this.recentNotifications.some(n => !n.isRead);
+  }
+
+  onNotificationClick(notification: Notification): void {
+    this.markNotificationAsRead(notification);
+    this.navigateFromNotification(notification);
+  }
+
+  getNotificationIcon(notification: Notification): string {
+    return getNotificationIcon(notification);
+  }
+
+  /** Navigate to the appropriate page based on notification reference type */
+  private navigateFromNotification(notification: Notification): void {
+    const refType = (notification.referenceType ?? 'Order').toLowerCase();
+    const refId = notification.referenceId ?? notification.orderId;
+    if (!refId) return;
+
+    switch (refType) {
+      case 'order':
+        this.router.navigate(['/orders', refId]);
+        break;
+      case 'invoice':
+        this.router.navigate(['/invoices', refId]);
+        break;
+      case 'message':
+        this.router.navigate(['/orders', notification.orderId ?? refId, 'messages']);
+        break;
+      default:
+        if (notification.orderId) {
+          this.router.navigate(['/orders', notification.orderId]);
+        }
+    }
   }
 
   performGlobalSearch(): void {
@@ -439,6 +545,18 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
         }
       );
     }
+
+    // Add Notifications for all authenticated users
+    this.menuItems.push({
+      label: 'Notifications',
+      icon: 'pi pi-bell',
+      routerLink: '/notifications',
+      routerLinkActiveOptions: { exact: true },
+      command: () => {
+        this.router.navigate(['/notifications']);
+        this.sidebarVisible = false;
+      }
+    });
 
     // Add Settings at the end for all authenticated users
     this.menuItems.push({

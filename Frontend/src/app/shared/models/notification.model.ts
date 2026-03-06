@@ -4,10 +4,18 @@ export interface Notification {
   title: string;
   message: string;
   type: NotificationType;
+  referenceType?: NotificationReferenceType;
+  referenceId?: string;
   isRead: boolean;
   readAt?: Date;
   createdAt: Date;
+  /** Number of similar events aggregated (1 = single event). */
+  aggregationCount?: number;
+  /** Timestamp of the most recent occurrence when aggregated. */
+  lastOccurrenceAt?: Date;
 }
+
+export type NotificationReferenceType = 'Order' | 'Invoice' | 'Message' | 'System';
 
 export enum NotificationType {
   Info = 'Info',

@@ -122,7 +122,8 @@ const routes: Routes = [
   {
     path: 'notifications',
     loadChildren: () => import('./notifications/notifications.module').then(m => m.NotificationsModule),
-    canActivate: [AuthGuard]
+    canActivate: [AuthGuard],
+    data: { breadcrumb: 'Notifications' }
   },
 
   // Gallery (lazy loaded)

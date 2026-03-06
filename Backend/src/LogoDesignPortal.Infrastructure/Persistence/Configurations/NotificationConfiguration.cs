@@ -24,6 +24,11 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
             .HasConversion<int>()
             .HasDefaultValue(NotificationType.Info);
 
+        builder.Property(e => e.ReferenceType)
+            .IsRequired()
+            .HasConversion<int>()
+            .HasDefaultValue(NotificationReferenceType.Order);
+
         builder.HasOne(e => e.User)
             .WithMany()
             .HasForeignKey(e => e.UserId)
@@ -34,6 +39,14 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
             .HasForeignKey(e => e.OrderId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.Property(e => e.AggregationCount)
+            .IsRequired()
+            .HasDefaultValue(1);
+
+        builder.Property(e => e.LastOccurrenceAt);
+
         builder.HasIndex(e => new { e.UserId, e.IsRead });
+        builder.HasIndex(e => new { e.UserId, e.CreatedAt });
+        builder.HasIndex(e => new { e.UserId, e.ReferenceType, e.CreatedAt });
     }
 }

@@ -4,6 +4,7 @@ using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Authentication;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
+using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
@@ -14,17 +15,20 @@ public class AuthService : IAuthService
     private readonly IApplicationDbContext _context;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IEmailService _emailService;
+    private readonly INotificationService _notificationService;
     private readonly IConfiguration _configuration;
 
     public AuthService(
         IApplicationDbContext context,
         IJwtTokenService jwtTokenService,
         IEmailService emailService,
+        INotificationService notificationService,
         IConfiguration configuration)
     {
         _context = context;
         _jwtTokenService = jwtTokenService;
         _emailService = emailService;
+        _notificationService = notificationService;
         _configuration = configuration;
     }
 
@@ -151,6 +155,21 @@ public class AuthService : IAuthService
         _context.ClientProfiles.Add(clientProfile);
 
         await _context.SaveChangesAsync();
+
+        // Notify Admin and SuperAdmin: New client registered
+        try
+        {
+            var clientName = $"{user.FirstName} {user.LastName}".Trim();
+            if (string.IsNullOrEmpty(clientName)) clientName = companyName;
+            var title = "New Client Registered";
+            var message = $"New client registered: {clientName}";
+            await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.Info, NotificationReferenceType.System, user.Id);
+            await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, message, NotificationType.Info, NotificationReferenceType.System, user.Id);
+        }
+        catch
+        {
+            // Must not fail registration
+        }
 
         // Reload user with Role for JWT token generation (avoids EF tracking issues with new entities)
         var userWithRole = await _context.Users

@@ -1,8 +1,10 @@
 using AutoMapper;
 using LogoDesignPortal.Application.DTOs.Messages;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
+using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace LogoDesignPortal.Application.Services;
@@ -11,11 +13,13 @@ public class MessageService : IMessageService
 {
     private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
+    private readonly INotificationService _notificationService;
 
-    public MessageService(IApplicationDbContext context, IMapper mapper)
+    public MessageService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService)
     {
         _context = context;
         _mapper = mapper;
+        _notificationService = notificationService;
     }
 
     public async Task<MessageResponseDto> CreateMessageAsync(CreateMessageRequestDto request, Guid senderId)
@@ -41,6 +45,80 @@ public class MessageService : IMessageService
 
         _context.Messages.Add(message);
         await _context.SaveChangesAsync();
+
+        // Reload with includes for MapToDto
+        message = await _context.Messages
+            .Include(m => m.Sender)
+                .ThenInclude(u => u.Role)
+            .Include(m => m.Recipient)
+                .ThenInclude(u => u.Role)
+            .FirstAsync(m => m.Id == message.Id);
+
+        // Notify recipient(s): New message
+        try
+        {
+            var senderName = $"{sender.FirstName} {sender.LastName}".Trim();
+            if (string.IsNullOrEmpty(senderName)) senderName = "Someone";
+            var orderNumber = request.OrderId.HasValue ? NotificationFormatHelper.GetOrderNumber(request.OrderId.Value) : "N/A";
+            var title = "New Message";
+            var senderRole = sender.Role?.Name ?? string.Empty;
+
+            if (senderRole == "Client")
+            {
+                // Client sends: notify Admin, SuperAdmin, and assigned Designer
+                var messageText = $"{senderName} sent a new message regarding order (#{orderNumber})";
+                var refId = request.OrderId ?? message.Id;
+                var refType = request.OrderId.HasValue ? NotificationReferenceType.Order : NotificationReferenceType.Message;
+                await _notificationService.CreateNotificationForRoleAsync("Admin", title, messageText, NotificationType.Info, refType, refId, senderId);
+                await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, messageText, NotificationType.Info, refType, refId, senderId);
+                if (request.OrderId.HasValue)
+                {
+                    var designerUserId = await _context.LogoOrders
+                        .Where(o => o.Id == request.OrderId.Value && !o.IsDeleted && o.DesignerId.HasValue)
+                        .Select(o => o.DesignerId)
+                        .FirstOrDefaultAsync();
+                    if (designerUserId.HasValue)
+                    {
+                        var designerUser = await _context.DesignerProfiles
+                            .Where(d => d.Id == designerUserId.Value && !d.IsDeleted)
+                            .Select(d => d.UserId)
+                            .FirstOrDefaultAsync();
+                        if (designerUser != Guid.Empty)
+                        {
+                            await _notificationService.CreateNotificationAsync(
+                                designerUser,
+                                title,
+                                messageText,
+                                NotificationType.Info,
+                                request.OrderId,
+                                NotificationReferenceType.Message,
+                                message.Id,
+                                senderId
+                            );
+                        }
+                    }
+                }
+            }
+            else if (request.RecipientId.HasValue && request.RecipientId != senderId)
+            {
+                // Admin/Designer sends: notify client (recipient)
+                var messageText = $"{senderName} sent a new message regarding order (#{orderNumber})";
+                await _notificationService.CreateNotificationAsync(
+                    request.RecipientId.Value,
+                    title,
+                    messageText,
+                    NotificationType.Info,
+                    request.OrderId,
+                    NotificationReferenceType.Message,
+                    message.Id,
+                    senderId
+                );
+            }
+        }
+        catch
+        {
+            // Must not fail message creation
+        }
 
         return MapToDto(message);
     }

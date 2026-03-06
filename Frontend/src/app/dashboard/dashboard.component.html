@@ -444,15 +444,15 @@
       </p-panel>
       -->
 
-      <!-- HIDDEN: Notifications - No longer needed -->
-      <!-- Uncomment below to restore Notifications panel in dashboard -->
-      <!--
+      <!-- Notifications panel - uses NotificationService.unreadCount$ -->
       <p-panel [toggleable]="true" [collapsed]="true" toggler="header" styleClass="dashboard-panel">
         <ng-template pTemplate="header">
           <div class="panel-header-content">
             <i class="pi pi-bell"></i>
             <span>Notifications</span>
-            <p-tag *ngIf="getUnreadNotificationsCount() > 0" class="panel-badge" [value]="getUnreadNotificationsCount() + ' new'" severity="danger" [rounded]="true"></p-tag>
+            <ng-container *ngIf="notificationUnreadCount$ | async as count">
+              <p-tag *ngIf="count > 0" class="panel-badge" [value]="count + ' new'" severity="danger" [rounded]="true"></p-tag>
+            </ng-container>
           </div>
         </ng-template>
         <div *ngIf="notifications.length === 0" class="empty-state">
@@ -460,7 +460,7 @@
           <p class="empty-text">No notifications</p>
         </div>
         <div class="notifications-list" *ngIf="notifications.length > 0">
-          <div class="notification-item" *ngFor="let notification of notifications" [class.unread]="!notification.isRead">
+          <div class="notification-item" *ngFor="let notification of notifications" [class.unread]="!notification.isRead" (click)="notification.orderId && navigateToOrder(notification.orderId)" [style.cursor]="notification.orderId ? 'pointer' : 'default'">
             <div class="notification-icon">
               <i [class]="'pi ' + (notification.type?.includes('Order') ? 'pi-shopping-cart' : 'pi-file')"></i>
             </div>
@@ -471,8 +471,8 @@
             </div>
           </div>
         </div>
+        <p-button label="View All Notifications" icon="pi pi-arrow-right" iconPos="right" styleClass="p-button-text p-button-sm" (onClick)="navigateToRoute('/notifications')"></p-button>
       </p-panel>
-      -->
 
       <!-- COLLAPSIBLE: Account & Security -->
       <p-panel [toggleable]="true" [collapsed]="true" toggler="header" styleClass="dashboard-panel">
@@ -530,6 +530,36 @@
 
     <!-- ═══ ADMIN / DESIGNER DASHBOARD ═══ -->
     <ng-container *ngIf="user?.role !== 'Client'">
+
+      <!-- Notifications panel for Admin (New Order Submitted, etc.) -->
+      <p-panel *ngIf="user?.role === 'SuperAdmin' || user?.role === 'Admin'" [toggleable]="true" [collapsed]="true" toggler="header" styleClass="dashboard-panel">
+        <ng-template pTemplate="header">
+          <div class="panel-header-content">
+            <i class="pi pi-bell"></i>
+            <span>Notifications</span>
+            <ng-container *ngIf="notificationUnreadCount$ | async as count">
+              <p-tag *ngIf="count > 0" class="panel-badge" [value]="count + ' new'" severity="danger" [rounded]="true"></p-tag>
+            </ng-container>
+          </div>
+        </ng-template>
+        <div *ngIf="notifications.length === 0" class="empty-state">
+          <i class="pi pi-bell-slash empty-icon"></i>
+          <p class="empty-text">No notifications</p>
+        </div>
+        <div class="notifications-list" *ngIf="notifications.length > 0">
+          <div class="notification-item" *ngFor="let notification of notifications" [class.unread]="!notification.isRead" (click)="notification.orderId && navigateToOrder(notification.orderId)" [style.cursor]="notification.orderId ? 'pointer' : 'default'">
+            <div class="notification-icon">
+              <i [class]="'pi ' + (notification.type?.includes('Order') ? 'pi-shopping-cart' : 'pi-file')"></i>
+            </div>
+            <div class="notification-content">
+              <h4>{{ notification.title }}</h4>
+              <p>{{ notification.message }}</p>
+              <span class="notification-date">{{ notification.createdAt | date:'short' }}</span>
+            </div>
+          </div>
+        </div>
+        <p-button label="View All Notifications" icon="pi pi-arrow-right" iconPos="right" styleClass="p-button-text p-button-sm" (onClick)="navigateToRoute('/notifications')"></p-button>
+      </p-panel>
 
       <!-- Stats Cards -->
       <div class="admin-stats-grid">

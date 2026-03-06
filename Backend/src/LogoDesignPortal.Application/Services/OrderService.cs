@@ -2,11 +2,13 @@ using AutoMapper;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Users;
 using LogoDesignPortal.Application.Exceptions;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace LogoDesignPortal.Application.Services;
@@ -15,11 +17,17 @@ public class OrderService : IOrderService
 {
     private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
+    private readonly INotificationService _notificationService;
+    private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
+    private readonly ILogger<OrderService> _logger;
 
-    public OrderService(IApplicationDbContext context, IMapper mapper)
+    public OrderService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender, ILogger<OrderService> logger)
     {
         _context = context;
         _mapper = mapper;
+        _notificationService = notificationService;
+        _entityUpdateSender = entityUpdateSender;
+        _logger = logger;
     }
 
     public async Task<OrderResponseDto> CreateOrderAsync(CreateOrderRequestDto request, Guid clientId)
@@ -107,6 +115,25 @@ public class OrderService : IOrderService
         );
 
         await _context.SaveChangesAsync();
+
+        // Notify all Admin and SuperAdmin users about the new order
+        var clientName = $"{client.User.FirstName} {client.User.LastName}".Trim();
+        if (string.IsNullOrEmpty(clientName)) clientName = client.CompanyName ?? "A client";
+        var orderNumber = NotificationFormatHelper.GetOrderNumber(order.Id);
+        var title = "New Order Submitted";
+        var message = $"{clientName} placed a new order (#{orderNumber})";
+
+        try
+        {
+            await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.OrderStatusChange, NotificationReferenceType.Order, order.Id);
+            await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, message, NotificationType.OrderStatusChange, NotificationReferenceType.Order, order.Id);
+            var adminUserIds = await GetAdminAndSuperAdminUserIdsAsync();
+            await _entityUpdateSender.SendOrderCreatedAsync(order.Id, adminUserIds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create notifications for new order {OrderId}. Order was created successfully.", order.Id);
+        }
 
         return await GetOrderByIdAsync(order.Id, clientId, "Client");
     }
@@ -364,6 +391,28 @@ public class OrderService : IOrderService
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
 
+        // Notify designer: Order assigned
+        try
+        {
+            var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+            var title = "Order Assigned";
+            var message = $"You have been assigned order (#{orderNumber})";
+            await _notificationService.CreateNotificationAsync(
+                designerId,
+                title,
+                message,
+                NotificationType.OrderStatusChange,
+                orderId,
+                NotificationReferenceType.Order,
+                orderId,
+                assignedBy
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to notify designer of order assignment {OrderId}.", orderId);
+        }
+
         return await GetOrderByIdAsync(orderId, assignedBy, "SuperAdmin");
     }
 
@@ -414,6 +463,119 @@ public class OrderService : IOrderService
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
 
+        // Notify client when order status changes (if client exists)
+        if (order.Client != null && order.Client.UserId != userId)
+        {
+            var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+            string title;
+            string message;
+            if (newStatus == OrderStatus.CancelledByAdmin)
+            {
+                title = "Order Rejected";
+                message = $"Your order (#{orderNumber}) was rejected";
+            }
+            else if (newStatus == OrderStatus.Completed)
+            {
+                title = "Order Completed";
+                message = $"Your order (#{orderNumber}) has been completed";
+            }
+            else
+            {
+                title = "Order Status Updated";
+                message = $"Order (#{orderNumber}) status updated to {newStatus}.";
+            }
+            await _notificationService.CreateNotificationAsync(
+                order.Client.UserId,
+                title,
+                message,
+                NotificationType.OrderStatusChange,
+                orderId,
+                NotificationReferenceType.Order,
+                orderId
+            );
+        }
+
+        // When client approves preview (FinalApproved), notify Admin and Designer
+        if (newStatus == OrderStatus.FinalApproved && order.Client != null && order.Client.UserId == userId)
+        {
+            var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
+            if (string.IsNullOrEmpty(clientName)) clientName = "Client";
+            var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+            var approveTitle = "Preview Approved";
+            var approveMessage = $"{clientName} approved the preview for order (#{orderNumber})";
+            try
+            {
+                await _notificationService.CreateNotificationForRoleAsync("Admin", approveTitle, approveMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId);
+                await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", approveTitle, approveMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId);
+                if (order.DesignerId.HasValue)
+                {
+                    var designerUserId = await _context.DesignerProfiles
+                        .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
+                        .Select(d => d.UserId)
+                        .FirstOrDefaultAsync();
+                    if (designerUserId != Guid.Empty)
+                    {
+                        await _notificationService.CreateNotificationAsync(designerUserId, approveTitle, approveMessage, NotificationType.OrderStatusChange, orderId, NotificationReferenceType.Order, orderId, userId);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create preview approved notifications for order {OrderId}.", orderId);
+            }
+        }
+
+        // When client rejects preview (RevisionRequested), notify Admin and Designer
+        if (newStatus == OrderStatus.RevisionRequested && order.Client != null && order.Client.UserId == userId)
+        {
+            var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
+            if (string.IsNullOrEmpty(clientName)) clientName = "Client";
+            var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+            var rejectTitle = "Preview Rejected";
+            var rejectMessage = $"{clientName} rejected the preview for order (#{orderNumber})";
+            try
+            {
+                await _notificationService.CreateNotificationForRoleAsync("Admin", rejectTitle, rejectMessage, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId);
+                await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", rejectTitle, rejectMessage, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId);
+                if (order.DesignerId.HasValue)
+                {
+                    var designerUserId = await _context.DesignerProfiles
+                        .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
+                        .Select(d => d.UserId)
+                        .FirstOrDefaultAsync();
+                    if (designerUserId != Guid.Empty)
+                    {
+                        await _notificationService.CreateNotificationAsync(designerUserId, rejectTitle, rejectMessage, NotificationType.RevisionRequest, orderId, NotificationReferenceType.Order, orderId, userId);
+                        var adminUserIds = await GetAdminAndSuperAdminUserIdsAsync();
+                        var designerUserIds = new[] { designerUserId };
+                        await _entityUpdateSender.SendPreviewRejectedAsync(orderId, clientName, adminUserIds.Concat(designerUserIds));
+                    }
+                }
+                else
+                {
+                    var adminUserIds = await GetAdminAndSuperAdminUserIdsAsync();
+                    await _entityUpdateSender.SendPreviewRejectedAsync(orderId, clientName, adminUserIds);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create preview rejected notifications for order {OrderId}.", orderId);
+            }
+        }
+
+        // Real-time entity update: notify client and admins so grids refresh
+        var statusUpdateUserIds = await GetOrderUpdateRecipientIdsAsync(order);
+        await _entityUpdateSender.SendOrderStatusChangedAsync(orderId, newStatus.ToString(), userId, statusUpdateUserIds);
+
+        // When client approves preview (FinalApproved), notify Admin so their grid updates
+        if (newStatus == OrderStatus.FinalApproved && order.Client != null && order.Client.UserId == userId)
+        {
+            var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
+            if (string.IsNullOrEmpty(clientName)) clientName = "Client";
+            var adminUserIds = await GetAdminAndSuperAdminUserIdsAsync();
+            await _entityUpdateSender.SendPreviewApprovedAsync(orderId, clientName, newStatus.ToString(), adminUserIds);
+        }
+
         return await GetOrderByIdAsync(orderId, userId, null);
     }
 
@@ -449,22 +611,19 @@ public class OrderService : IOrderService
         };
 
         _context.OrderStatusHistories.Add(statusHistory);
-
-        // Create notification for client
-        var notification = new Notification
-        {
-            Id = Guid.NewGuid(),
-            UserId = order.Client.UserId,
-            OrderId = orderId,
-            Title = "Price Approval Required",
-            Message = $"Order '{order.Title}' requires price approval. Proposed price: ${request.ProposedPrice}",
-            Type = NotificationType.PriceApproval,
-            IsRead = false,
-            CreatedAt = DateTime.UtcNow
-        };
-        _context.Notifications.Add(notification);
-
         await _context.SaveChangesAsync();
+
+        // Create notification for client via NotificationService
+        var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+        await _notificationService.CreateNotificationAsync(
+            order.Client.UserId,
+            "Price Approval Required",
+            $"Order (#{orderNumber}) requires price approval. Proposed price: ${request.ProposedPrice}",
+            NotificationType.PriceApproval,
+            orderId,
+            NotificationReferenceType.Order,
+            orderId
+        );
 
         return await GetOrderByIdAsync(orderId, requestedBy, "Admin");
     }
@@ -557,22 +716,19 @@ public class OrderService : IOrderService
         };
 
         _context.OrderStatusHistories.Add(statusHistory);
-
-        // Create notification for client
-        var notification = new Notification
-        {
-            Id = Guid.NewGuid(),
-            UserId = order.Client.UserId,
-            OrderId = orderId,
-            Title = "Order Approved",
-            Message = $"Your order '{order.Title}' has been approved and is now in progress.",
-            Type = NotificationType.OrderStatusChange,
-            IsRead = false,
-            CreatedAt = DateTime.UtcNow
-        };
-        _context.Notifications.Add(notification);
-
         await _context.SaveChangesAsync();
+
+        // Create notification for client via NotificationService
+        var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+        await _notificationService.CreateNotificationAsync(
+            order.Client.UserId,
+            "Order Approved",
+            $"Your order (#{orderNumber}) has been approved",
+            NotificationType.OrderStatusChange,
+            orderId,
+            NotificationReferenceType.Order,
+            orderId
+        );
 
         return await GetOrderByIdAsync(orderId, approvedBy, "Admin");
     }
@@ -628,22 +784,22 @@ public class OrderService : IOrderService
         };
 
         _context.OrderStatusHistories.Add(statusHistory);
-
-        // Create notification for client
-        var notification = new Notification
-        {
-            Id = Guid.NewGuid(),
-            UserId = order.Client.UserId,
-            OrderId = orderId,
-            Title = "Preview Files Available",
-            Message = $"Preview files for order '{order.Title}' are now available for review.",
-            Type = NotificationType.FileUpload,
-            IsRead = false,
-            CreatedAt = DateTime.UtcNow
-        };
-        _context.Notifications.Add(notification);
-
         await _context.SaveChangesAsync();
+
+        // Create notification for client via NotificationService
+        var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+        await _notificationService.CreateNotificationAsync(
+            order.Client.UserId,
+            "Preview Files Available",
+            $"Preview files were uploaded for order (#{orderNumber})",
+            NotificationType.FileUpload,
+            orderId,
+            NotificationReferenceType.Order,
+            orderId
+        );
+
+        // Real-time entity update: PreviewDelivered - client grid refreshes
+        await _entityUpdateSender.SendPreviewDeliveredAsync(orderId, OrderStatus.PreviewDelivered.ToString(), order.Client.UserId);
 
         return await GetOrderByIdAsync(orderId, sentBy, "Admin");
     }
@@ -809,6 +965,29 @@ public class OrderService : IOrderService
         );
 
         await _context.SaveChangesAsync();
+
+        // Notify client when admin cancels order
+        if (newStatus == OrderStatus.CancelledByAdmin && order.Client != null)
+        {
+            try
+            {
+                var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+                await _notificationService.CreateNotificationAsync(
+                    order.Client.UserId,
+                    "Order Cancelled",
+                    $"Your order (#{orderNumber}) was cancelled",
+                    NotificationType.OrderStatusChange,
+                    orderId,
+                    NotificationReferenceType.Order,
+                    orderId,
+                    userId
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to notify client of order cancellation {OrderId}.", orderId);
+            }
+        }
 
         return await GetOrderByIdAsync(orderId, userId, userRole);
     }
@@ -1084,5 +1263,52 @@ public class OrderService : IOrderService
         }
 
         return allowedStatuses;
+    }
+
+    /// <summary>
+    /// Gets user IDs who should receive real-time order updates (client, admins, designer if assigned).
+    /// </summary>
+    private async Task<List<Guid>> GetOrderUpdateRecipientIdsAsync(LogoOrder order)
+    {
+        var userIds = new List<Guid>();
+
+        if (order.Client != null)
+        {
+            userIds.Add(order.Client.UserId);
+        }
+
+        var adminIds = await GetAdminAndSuperAdminUserIdsAsync();
+        userIds.AddRange(adminIds);
+
+        if (order.DesignerId.HasValue)
+        {
+            var designer = await _context.DesignerProfiles
+                .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
+                .Select(d => d.UserId)
+                .FirstOrDefaultAsync();
+            if (designer != Guid.Empty)
+            {
+                userIds.Add(designer);
+            }
+        }
+
+        return userIds.Distinct().ToList();
+    }
+
+    private async Task<List<Guid>> GetAdminAndSuperAdminUserIdsAsync()
+    {
+        var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
+        var superAdminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
+        if (adminRole == null && superAdminRole == null)
+            return new List<Guid>();
+
+        var roleIds = new List<Guid>();
+        if (adminRole != null) roleIds.Add(adminRole.Id);
+        if (superAdminRole != null) roleIds.Add(superAdminRole.Id);
+
+        return await _context.Users
+            .Where(u => !u.IsDeleted && roleIds.Contains(u.RoleId))
+            .Select(u => u.Id)
+            .ToListAsync();
     }
 }

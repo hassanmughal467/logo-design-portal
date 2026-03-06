@@ -1,9 +1,18 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { ApiService } from '@core/services/api.service';
+import { Location } from '@angular/common';
+import { Router } from '@angular/router';
+import { NotificationService } from '@core/services/notification.service';
 import { MessageService } from 'primeng/api';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Observable, Subject } from 'rxjs';
+import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { Notification } from '@shared/models/notification.model';
+import { getNotificationIcon, formatReferenceDisplay, getActionLabel, hasNavigableTarget } from '@shared/utils/notification-helpers';
+import { groupNotificationsByDate, NotificationGroup } from '@shared/utils/notification-grouping';
+
+const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
+
+export type NotificationFilter = 'all' | 'Order' | 'Message' | 'Invoice' | 'System';
 
 @Component({
   selector: 'app-notifications',
@@ -11,22 +20,43 @@ import { Notification } from '@shared/models/notification.model';
   styleUrls: ['./notifications.component.scss']
 })
 export class NotificationsComponent implements OnInit, OnDestroy {
-  notifications: Notification[] = [];
-  filteredNotifications: Notification[] = [];
+  groupedNotifications: NotificationGroup[] = [];
   loading = false;
   showUnreadOnly = false;
-  unreadCount = 0;
+  currentPage = 1;
+  totalCount = 0;
+  totalPages = 1;
+  pageSize = PAGE_SIZE;
+
+  searchQuery = '';
+  activeFilter: NotificationFilter = 'all';
+
+  filters: { value: NotificationFilter; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'Order', label: 'Orders' },
+    { value: 'Message', label: 'Messages' },
+    { value: 'Invoice', label: 'Invoices' },
+    { value: 'System', label: 'System' }
+  ];
+
+  unreadCount$!: Observable<number>;
 
   private destroy$ = new Subject<void>();
+  private searchSubject = new Subject<string>();
 
   constructor(
-    private apiService: ApiService,
-    private messageService: MessageService
-  ) {}
+    private notificationService: NotificationService,
+    private messageService: MessageService,
+    private router: Router,
+    private location: Location
+  ) {
+    this.unreadCount$ = this.notificationService.unreadCount$;
+  }
 
   ngOnInit(): void {
+    this.setupSearchDebounce();
     this.loadNotifications();
-    this.loadUnreadCount();
+    this.subscribeToRealtimeUpdates();
   }
 
   ngOnDestroy(): void {
@@ -34,47 +64,89 @@ export class NotificationsComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  private setupSearchDebounce(): void {
+    this.searchSubject.pipe(
+      debounceTime(SEARCH_DEBOUNCE_MS),
+      distinctUntilChanged(),
+      takeUntil(this.destroy$)
+    ).subscribe(search => {
+      this.currentPage = 1;
+      this.loadNotifications();
+    });
+  }
+
+  private subscribeToRealtimeUpdates(): void {
+    this.notificationService.refreshRequested$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.loadNotifications());
+
+    this.notificationService.notificationReceived$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(notification => this.mergeRealtimeNotification(notification));
+  }
+
+  private mergeRealtimeNotification(notification: Notification): void {
+    for (const group of this.groupedNotifications) {
+      const idx = group.notifications.findIndex(n => n.id === notification.id);
+      if (idx >= 0) {
+        group.notifications[idx] = notification;
+        return;
+      }
+    }
+  }
+
   loadNotifications(): void {
     this.loading = true;
-    this.apiService.get<Notification[]>(`notifications?unreadOnly=${this.showUnreadOnly}`)
-      .pipe(takeUntil(this.destroy$))
+    const referenceType = this.activeFilter === 'all' ? undefined : this.activeFilter;
+    const search = this.searchQuery?.trim() || undefined;
+
+    this.notificationService.getNotificationsPaginated({
+      limit: this.pageSize,
+      offset: (this.currentPage - 1) * this.pageSize,
+      unreadOnly: this.showUnreadOnly,
+      search,
+      referenceType
+    }).pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (notifications) => {
-          this.notifications = notifications;
-          this.filteredNotifications = notifications;
+        next: (result) => {
+          this.totalCount = result.totalCount;
+          this.totalPages = Math.max(1, Math.ceil(this.totalCount / this.pageSize));
+          this.groupedNotifications = groupNotificationsByDate(result.items);
           this.loading = false;
         },
         error: () => {
-          this.notifications = [];
-          this.filteredNotifications = [];
+          this.groupedNotifications = [];
+          this.totalCount = 0;
+          this.totalPages = 1;
           this.loading = false;
         }
       });
   }
 
-  loadUnreadCount(): void {
-    this.apiService.get<{count: number}>(`notifications/unread-count`)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (response) => {
-          this.unreadCount = response.count;
-        },
-        error: () => {
-          this.unreadCount = 0;
-        }
-      });
+  onSearchInput(): void {
+    this.searchSubject.next(this.searchQuery);
+  }
+
+  onFilterChange(filter: NotificationFilter): void {
+    this.activeFilter = filter;
+    this.currentPage = 1;
+    this.loadNotifications();
+  }
+
+  onPageChange(page: number): void {
+    this.currentPage = page;
+    this.loadNotifications();
   }
 
   markAsRead(notification: Notification): void {
     if (notification.isRead) return;
 
-    this.apiService.put(`notifications/${notification.id}/read`, {})
+    this.notificationService.markAsRead(notification.id)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
           notification.isRead = true;
           notification.readAt = new Date();
-          this.unreadCount = Math.max(0, this.unreadCount - 1);
         },
         error: () => {
           this.messageService.add({
@@ -87,15 +159,11 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   }
 
   markAllAsRead(): void {
-    this.apiService.put(`notifications/mark-all-read`, {})
+    this.notificationService.markAllAsRead()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          this.notifications.forEach(n => {
-            n.isRead = true;
-            n.readAt = new Date();
-          });
-          this.unreadCount = 0;
+          this.loadNotifications();
           this.messageService.add({
             severity: 'success',
             summary: 'Success',
@@ -114,34 +182,62 @@ export class NotificationsComponent implements OnInit, OnDestroy {
 
   toggleUnreadFilter(): void {
     this.showUnreadOnly = !this.showUnreadOnly;
+    this.currentPage = 1;
     this.loadNotifications();
   }
 
-  getNotificationSeverity(type: string): string {
-    const severityMap: { [key: string]: string } = {
-      'Info': 'info',
-      'Success': 'success',
-      'Warning': 'warn',
-      'Error': 'danger',
-      'OrderStatusChange': 'info',
-      'PriceApproval': 'warn',
-      'RevisionRequest': 'warn',
-      'FileUpload': 'success'
-    };
-    return severityMap[type] || 'info';
+  onNotificationClick(notification: Notification): void {
+    this.markAsRead(notification);
+    this.navigateFromNotification(notification);
   }
 
-  getNotificationIcon(type: string): string {
-    const iconMap: { [key: string]: string } = {
-      'Info': 'pi-info-circle',
-      'Success': 'pi-check-circle',
-      'Warning': 'pi-exclamation-triangle',
-      'Error': 'pi-times-circle',
-      'OrderStatusChange': 'pi-sync',
-      'PriceApproval': 'pi-dollar',
-      'RevisionRequest': 'pi-refresh',
-      'FileUpload': 'pi-file'
-    };
-    return iconMap[type] || 'pi-info-circle';
+  markAsReadOnly(notification: Notification): void {
+    this.markAsRead(notification);
+  }
+
+  getNotificationIcon(notification: Notification): string {
+    return getNotificationIcon(notification);
+  }
+
+  getReferenceDisplay(notification: Notification): string | null {
+    return formatReferenceDisplay(notification);
+  }
+
+  getActionLabel(notification: Notification): string | null {
+    return getActionLabel(notification);
+  }
+
+  hasNavigableTarget(notification: Notification): boolean {
+    return hasNavigableTarget(notification);
+  }
+
+  goBack(): void {
+    this.location.back();
+  }
+
+  navigateFromNotification(notification: Notification): void {
+    const refType = (notification.referenceType ?? 'Order').toLowerCase();
+    const refId = notification.referenceId ?? notification.orderId;
+    if (!refId) return;
+
+    switch (refType) {
+      case 'order':
+        this.router.navigate(['/orders', refId]);
+        break;
+      case 'invoice':
+        this.router.navigate(['/invoices', refId]);
+        break;
+      case 'message':
+        this.router.navigate(['/orders', notification.orderId ?? refId, 'messages']);
+        break;
+      default:
+        if (notification.orderId) {
+          this.router.navigate(['/orders', notification.orderId]);
+        }
+    }
+  }
+
+  get hasNotifications(): boolean {
+    return this.groupedNotifications.some(g => g.notifications.length > 0);
   }
 }

@@ -76,17 +76,64 @@
               placeholder="Search..." 
               class="search-input" />
           </span>
-          <!-- HIDDEN: Notifications button - No longer needed -->
-          <!--
           <button 
             pButton 
             icon="pi pi-bell" 
             class="p-button-text p-button-rounded notification-btn"
             pTooltip="Notifications"
-            tooltipPosition="bottom">
-            <span class="notification-badge" *ngIf="hasNotifications">3</span>
+            tooltipPosition="bottom"
+            (click)="notificationPanel.toggle($event)">
+            <ng-container *ngIf="unreadCount$ | async as count">
+              <span class="notification-badge" *ngIf="count > 0">{{ count }}</span>
+            </ng-container>
           </button>
-          -->
+          <p-overlayPanel #notificationPanel [style]="{ width: '380px' }" (onShow)="loadRecentNotifications()">
+            <ng-template pTemplate="content">
+              <div class="notification-dropdown">
+                <div class="notification-dropdown-header">
+                  <h4>Notifications</h4>
+                </div>
+                <div class="notification-dropdown-list" *ngIf="recentNotifications.length > 0">
+                  <div 
+                    class="notification-dropdown-item" 
+                    *ngFor="let notification of recentNotifications"
+                    [class.unread]="!notification.isRead"
+                    (click)="onNotificationClick(notification); notificationPanel.hide()">
+                    <div class="notification-dropdown-icon">
+                      <i [class]="getNotificationIcon(notification)"></i>
+                    </div>
+                    <div class="notification-dropdown-content">
+                      <strong class="notification-dropdown-title">{{ notification.title }}</strong>
+                      <span class="notification-aggregation-badge" *ngIf="(notification.aggregationCount ?? 1) > 1">×{{ notification.aggregationCount }}</span>
+                      <p class="notification-dropdown-message">{{ notification.message }}</p>
+                      <span class="notification-dropdown-date">{{ (notification.lastOccurrenceAt ?? notification.createdAt) | relativeTime }}</span>
+                      <span class="notification-unread-dot" *ngIf="!notification.isRead"></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="notification-dropdown-empty" *ngIf="recentNotifications.length === 0 && !loadingNotifications">
+                  <i class="pi pi-bell"></i>
+                  <p>No new notifications</p>
+                </div>
+                <div class="notification-dropdown-loading" *ngIf="loadingNotifications">
+                  <i class="pi pi-spin pi-spinner"></i>
+                  <p>Loading...</p>
+                </div>
+                <div class="notification-dropdown-footer">
+                  <div class="footer-left">
+                    <button 
+                      type="button" 
+                      class="mark-read-btn"
+                      *ngIf="recentNotifications.length > 0 && hasUnreadNotifications()"
+                      (click)="markAllAsRead(); $event.stopPropagation()">
+                      Mark all as read
+                    </button>
+                  </div>
+                  <a [routerLink]="['/notifications']" (click)="notificationPanel.hide()" class="view-all-link">View all notifications <i class="pi pi-chevron-right"></i></a>
+                </div>
+              </div>
+            </ng-template>
+          </p-overlayPanel>
         </div>
         <p-menu #userMenu [model]="userMenuItems" [popup]="true"></p-menu>
         <button 

@@ -1,5 +1,6 @@
 using AutoMapper;
 using LogoDesignPortal.Application.DTOs.Payments;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
@@ -17,6 +18,7 @@ public class PaymentService : IPaymentService
     private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
     private readonly ISettingsService _settingsService;
+    private readonly INotificationService _notificationService;
     private readonly ILogger<PaymentService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
 
@@ -24,12 +26,14 @@ public class PaymentService : IPaymentService
         IApplicationDbContext context,
         IMapper mapper,
         ISettingsService settingsService,
+        INotificationService notificationService,
         ILogger<PaymentService> logger,
         IHttpClientFactory httpClientFactory)
     {
         _context = context;
         _mapper = mapper;
         _settingsService = settingsService;
+        _notificationService = notificationService;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
     }
@@ -204,6 +208,22 @@ public class PaymentService : IPaymentService
                     payment.Invoice.Status = InvoiceStatus.Paid;
                     payment.Invoice.PaidDate = DateTime.UtcNow;
                     payment.Invoice.PaymentMethod = payment.PaymentMethod;
+
+                    // Notify Admin and SuperAdmin: Payment received
+                    try
+                    {
+                        var firstOrderId = await _context.InvoiceOrders
+                            .Where(io => io.InvoiceId == payment.InvoiceId && io.OrderId.HasValue)
+                            .Select(io => io.OrderId)
+                            .FirstOrDefaultAsync();
+                        var title = "Payment Received";
+                        var message = firstOrderId.HasValue
+                            ? $"Payment received for order (#{NotificationFormatHelper.GetOrderNumber(firstOrderId.Value)})"
+                            : $"Payment received for invoice (#{NotificationFormatHelper.GetInvoiceNumber(payment.Invoice.InvoiceNumber)})";
+                        await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.Success, NotificationReferenceType.Invoice, payment.Invoice.Id, userId);
+                        await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, message, NotificationType.Success, NotificationReferenceType.Invoice, payment.Invoice.Id, userId);
+                    }
+                    catch { /* Non-critical */ }
                 }
             }
             else
@@ -391,6 +411,22 @@ public class PaymentService : IPaymentService
                     payment.Invoice.Status = InvoiceStatus.Paid;
                     payment.Invoice.PaidDate = DateTime.UtcNow;
                     payment.Invoice.PaymentMethod = payment.PaymentMethod;
+
+                    // Notify Admin and SuperAdmin: Payment received
+                    try
+                    {
+                        var firstOrderId = await _context.InvoiceOrders
+                            .Where(io => io.InvoiceId == payment.InvoiceId && io.OrderId.HasValue)
+                            .Select(io => io.OrderId)
+                            .FirstOrDefaultAsync();
+                        var title = "Payment Received";
+                        var message = firstOrderId.HasValue
+                            ? $"Payment received for order (#{NotificationFormatHelper.GetOrderNumber(firstOrderId.Value)})"
+                            : $"Payment received for invoice (#{NotificationFormatHelper.GetInvoiceNumber(payment.Invoice.InvoiceNumber)})";
+                        await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.Success, NotificationReferenceType.Invoice, payment.Invoice.Id, null);
+                        await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, message, NotificationType.Success, NotificationReferenceType.Invoice, payment.Invoice.Id, null);
+                    }
+                    catch { /* Non-critical */ }
                 }
             }
         }

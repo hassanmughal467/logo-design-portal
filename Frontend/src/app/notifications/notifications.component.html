@@ -1,54 +1,128 @@
-<div class="notifications-container">
-  <div class="notifications-header">
-    <h2>Notifications</h2>
+<div class="notifications-page">
+  <!-- Breadcrumb -->
+  <nav class="page-breadcrumb">
+    <a routerLink="/dashboard" class="breadcrumb-link">Dashboard</a>
+    <span class="breadcrumb-separator">/</span>
+    <span class="breadcrumb-current">Notifications</span>
+  </nav>
+
+  <!-- Header: Left = Back + Title, Right = Actions -->
+  <div class="page-header">
+    <div class="header-left">
+      <button
+        type="button"
+        class="back-button"
+        (click)="goBack()"
+        pTooltip="Go back"
+      >
+        <i class="pi pi-arrow-left"></i>
+        <span>Back</span>
+      </button>
+      <h1 class="page-title">Notifications</h1>
+    </div>
     <div class="header-actions">
-      <p-button 
-        *ngIf="unreadCount > 0"
-        [label]="'Mark All Read (' + unreadCount + ')'" 
-        icon="pi pi-check" 
-        (onClick)="markAllAsRead()"
-        [styleClass]="'p-button-outlined'"
-      ></p-button>
-      <p-button 
-        [label]="showUnreadOnly ? 'Show All' : 'Show Unread Only'" 
-        icon="pi pi-filter" 
+      <ng-container *ngIf="unreadCount$ | async as count">
+        <p-button
+          *ngIf="count > 0"
+          [label]="'Mark All Read (' + count + ')'"
+          icon="pi pi-check"
+          (onClick)="markAllAsRead()"
+          [styleClass]="'p-button-outlined'"
+        ></p-button>
+      </ng-container>
+      <p-button
+        [label]="showUnreadOnly ? 'Show All' : 'Show Unread Only'"
+        icon="pi pi-filter"
         (onClick)="toggleUnreadFilter()"
         [styleClass]="'p-button-outlined'"
       ></p-button>
     </div>
   </div>
 
-  <div class="notifications-list" *ngIf="!loading">
-    <div 
-      class="notification-item" 
-      *ngFor="let notification of filteredNotifications"
-      [class.unread]="!notification.isRead"
-      (click)="markAsRead(notification)"
+  <!-- Search -->
+  <div class="search-section">
+    <span class="p-input-icon-left search-input-wrapper">
+      <i class="pi pi-search"></i>
+      <input
+        type="text"
+        pInputText
+        [(ngModel)]="searchQuery"
+        (input)="onSearchInput()"
+        placeholder="Search notifications..."
+        class="search-input"
+      />
+    </span>
+  </div>
+
+  <!-- Filter Tabs -->
+  <div class="filter-tabs">
+    <button
+      *ngFor="let f of filters"
+      type="button"
+      class="filter-tab"
+      [class.active]="activeFilter === f.value"
+      (click)="onFilterChange(f.value)"
     >
-      <div class="notification-icon">
-        <i [class]="'pi ' + getNotificationIcon(notification.type)"></i>
-      </div>
-      <div class="notification-content">
-        <div class="notification-header">
-          <h4>{{ notification.title }}</h4>
-          <p-tag 
-            [value]="notification.type" 
-            [severity]="getNotificationSeverity(notification.type)"
-          ></p-tag>
+      {{ f.label }}
+    </button>
+  </div>
+
+  <!-- Notification List (Grouped) -->
+  <div class="notifications-list" *ngIf="!loading">
+    <ng-container *ngFor="let group of groupedNotifications">
+      <div class="notification-group">
+        <h3 class="group-label">{{ group.label }}</h3>
+        <div
+          class="notification-card"
+          *ngFor="let notification of group.notifications"
+          [class.unread]="!notification.isRead"
+          (click)="onNotificationClick(notification)"
+        >
+          <div class="notification-icon">
+            <i [class]="getNotificationIcon(notification)"></i>
+          </div>
+          <div class="notification-content">
+            <div class="notification-title-row">
+              <span class="notification-title">{{ notification.title }}</span>
+              <span class="notification-aggregation-badge" *ngIf="(notification.aggregationCount ?? 1) > 1">×{{ notification.aggregationCount }}</span>
+            </div>
+            <p class="notification-message">{{ notification.message }}</p>
+            <span class="notification-timestamp">{{ (notification.lastOccurrenceAt ?? notification.createdAt) | relativeTime }}</span>
+            <div class="notification-reference-row" *ngIf="hasNavigableTarget(notification)">
+              <span class="notification-reference">{{ getReferenceDisplay(notification) }}</span>
+              <button
+                type="button"
+                class="action-link"
+                *ngIf="getActionLabel(notification)"
+                (click)="onNotificationClick(notification); $event.stopPropagation()"
+                [attr.aria-label]="getActionLabel(notification)"
+              >
+                {{ getActionLabel(notification) }}
+                <i class="pi pi-arrow-right"></i>
+              </button>
+            </div>
+          </div>
+          <div class="notification-actions" (click)="$event.stopPropagation()">
+            <span class="unread-dot" *ngIf="!notification.isRead"></span>
+            <p-button
+              *ngIf="!notification.isRead"
+              icon="pi pi-check"
+              styleClass="p-button-text p-button-sm"
+              (onClick)="markAsReadOnly(notification)"
+              pTooltip="Mark as read"
+            ></p-button>
+          </div>
         </div>
-        <p class="notification-message">{{ notification.message }}</p>
-        <div class="notification-footer">
-          <span class="notification-date">{{ notification.createdAt | date:'short' }}</span>
-          <span class="notification-order" *ngIf="notification.orderId">
-            Order: {{ notification.orderId }}
-          </span>
-        </div>
       </div>
-      <div class="notification-actions">
-        <i class="pi pi-circle-fill unread-indicator" *ngIf="!notification.isRead"></i>
-      </div>
+    </ng-container>
+
+    <div class="pagination-controls" *ngIf="totalPages > 1">
+      <p-button icon="pi pi-chevron-left" [disabled]="currentPage <= 1" (onClick)="onPageChange(currentPage - 1)" styleClass="p-button-text p-button-sm"></p-button>
+      <span class="page-info">Page {{ currentPage }} of {{ totalPages }} ({{ totalCount }} total)</span>
+      <p-button icon="pi pi-chevron-right" [disabled]="currentPage >= totalPages" (onClick)="onPageChange(currentPage + 1)" styleClass="p-button-text p-button-sm"></p-button>
     </div>
-    <div *ngIf="filteredNotifications.length === 0" class="empty-state">
+
+    <div *ngIf="!hasNotifications" class="empty-state">
       <i class="pi pi-bell-slash"></i>
       <p>No notifications</p>
     </div>

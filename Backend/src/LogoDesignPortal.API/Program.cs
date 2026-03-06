@@ -14,8 +14,13 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
-builder.Services.AddControllers();
+// Add services to the container - ensure camelCase for JSON (Angular expects it)
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    });
 builder.Services.AddEndpointsApiExplorer();
 
 // Configure Swagger with JWT support
@@ -76,9 +81,28 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtAudience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
     };
+    // SignalR uses WebSockets - token must come from query string (browsers don't support custom headers for WS)
+    options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddAuthorization();
+
+// SignalR for real-time notifications and entity updates
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<LogoDesignPortal.Application.Interfaces.IRealtimeNotificationSender, LogoDesignPortal.API.Services.SignalRRealtimeNotificationSender>();
+builder.Services.AddSingleton<LogoDesignPortal.Application.Interfaces.IRealtimeEntityUpdateSender, LogoDesignPortal.API.Services.SignalRRealtimeEntityUpdateSender>();
 
 // Add Application and Infrastructure layers
 builder.Services.AddApplication();
@@ -93,7 +117,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAdmin", policy => policy
         .WithOrigins("https://admin.hawkmerchandising.com", "http://admin.hawkmerchandising.com", "http://localhost:4200", "https://localhost:4200")
         .AllowAnyHeader()
-        .AllowAnyMethod());
+        .AllowAnyMethod()
+        .AllowCredentials()); // Required for SignalR WebSocket
 
     options.AddPolicy("AllowAll", policy =>
     {
@@ -134,6 +159,7 @@ app.UseMiddleware<RateLimitingMiddleware>();
 // app.UseMiddleware<InputSanitizationMiddleware>();
 
 app.MapControllers();
+app.MapHub<LogoDesignPortal.API.Hubs.NotificationHub>("/hubs/notifications");
 
 // Ensure database is created and seeded (async to avoid blocking startup)
 _ = Task.Run(async () =>

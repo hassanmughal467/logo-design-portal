@@ -1,6 +1,7 @@
 using AutoMapper;
 using LogoDesignPortal.Application.DTOs.Files;
 using LogoDesignPortal.Application.Exceptions;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
@@ -17,16 +18,18 @@ public class FileService : IFileService
     private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
     private readonly ILogger<FileService> _logger;
+    private readonly INotificationService _notificationService;
     private readonly string _fileStoragePath;
     private readonly string _temporaryStoragePath;
     private readonly string _permanentStoragePath;
     private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
 
-    public FileService(IApplicationDbContext context, IConfiguration configuration, IMapper mapper, ILogger<FileService> logger)
+    public FileService(IApplicationDbContext context, IConfiguration configuration, IMapper mapper, ILogger<FileService> logger, INotificationService notificationService)
     {
         _context = context;
         _mapper = mapper;
         _logger = logger;
+        _notificationService = notificationService;
         _fileStoragePath = configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
         _temporaryStoragePath = Path.Combine(_fileStoragePath, "Temporary");
         _permanentStoragePath = Path.Combine(_fileStoragePath, "Permanent");
@@ -162,6 +165,31 @@ public class FileService : IFileService
         }
 
         await _context.SaveChangesAsync();
+
+        // When client uploads reference files, notify Admin
+        if (userRole == "Client" && parsedFileType == FileType.Reference)
+        {
+            try
+            {
+                var orderWithClient = await _context.LogoOrders
+                    .Include(o => o.Client)
+                    .ThenInclude(c => c.User)
+                    .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+                if (orderWithClient?.Client != null)
+                {
+                    var clientName = $"{orderWithClient.Client.User.FirstName} {orderWithClient.Client.User.LastName}".Trim();
+                    if (string.IsNullOrEmpty(clientName)) clientName = "Client";
+                    var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+                    var title = "File Uploaded by Client";
+                    var message = $"{clientName} uploaded files for order (#{orderNumber})";
+                    await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.FileUpload, NotificationReferenceType.Order, orderId, uploadedBy);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to create file upload notification for order {OrderId}.", orderId);
+            }
+        }
 
         return new FileUploadResponseDto
         {
@@ -309,6 +337,32 @@ public class FileService : IFileService
         }
 
         await _context.SaveChangesAsync();
+
+        // When client uploads reference files, notify Admin
+        if (userRole == "Client" && parsedFileType == FileType.Reference && results.Count > 0)
+        {
+            try
+            {
+                var orderWithClient = await _context.LogoOrders
+                    .Include(o => o.Client)
+                    .ThenInclude(c => c.User)
+                    .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+                if (orderWithClient?.Client != null)
+                {
+                    var clientName = $"{orderWithClient.Client.User.FirstName} {orderWithClient.Client.User.LastName}".Trim();
+                    if (string.IsNullOrEmpty(clientName)) clientName = "Client";
+                    var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+                    var title = "File Uploaded by Client";
+                    var message = $"{clientName} uploaded files for order (#{orderNumber})";
+                    await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.FileUpload, NotificationReferenceType.Order, orderId, uploadedBy);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to create file upload notification for order {OrderId}.", orderId);
+            }
+        }
+
         return results;
     }
 

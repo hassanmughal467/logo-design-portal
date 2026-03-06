@@ -3,6 +3,7 @@ import { Observable, forkJoin, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
+import { NotificationService } from './notification.service';
 import { Order, OrderStatus } from '@shared/models/order.model';
 
 export interface DashboardStats {
@@ -52,7 +53,8 @@ export interface DashboardData {
 export class DashboardService {
   constructor(
     private apiService: ApiService,
-    private authService: AuthService
+    private authService: AuthService,
+    private notificationService: NotificationService
   ) {}
 
   getDashboardData(): Observable<DashboardData> {
@@ -96,6 +98,11 @@ export class DashboardService {
       invoices$ = this.apiService.get<any[]>('invoices').pipe(
         catchError(() => of([]))
       );
+
+      // Fetch notifications for Admin (e.g. "New Order Submitted") - use NotificationService for normalized data
+      notifications$ = this.notificationService.getNotifications(false).pipe(
+        catchError(() => of([]))
+      );
     } else if (user.role === 'Client') {
       // Fetch client-specific data
       invoices$ = this.apiService.get<any[]>('invoices').pipe(
@@ -106,7 +113,7 @@ export class DashboardService {
         catchError(() => of([]))
       );
       
-      notifications$ = this.apiService.get<any[]>('notifications').pipe(
+      notifications$ = this.notificationService.getNotifications(false).pipe(
         catchError(() => of([]))
       );
     }
@@ -358,7 +365,8 @@ export class DashboardService {
       // Client-specific data
       invoices: userRole === 'Client' ? invoices : undefined,
       galleryItems: userRole === 'Client' ? galleryItems : undefined,
-      notifications: userRole === 'Client' ? notifications : undefined,
+      // Notifications for both Client and Admin (Admin gets "New Order Submitted", etc.)
+      notifications: notifications,
       ordersByWeek: userRole === 'Client' ? ordersByWeek : undefined
     };
   }

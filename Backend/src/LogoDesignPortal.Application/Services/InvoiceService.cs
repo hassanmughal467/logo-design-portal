@@ -1,5 +1,6 @@
 using AutoMapper;
 using LogoDesignPortal.Application.DTOs.Invoices;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
@@ -12,11 +13,15 @@ public class InvoiceService : IInvoiceService
 {
     private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
+    private readonly INotificationService _notificationService;
+    private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
 
-    public InvoiceService(IApplicationDbContext context, IMapper mapper)
+    public InvoiceService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender)
     {
         _context = context;
         _mapper = mapper;
+        _notificationService = notificationService;
+        _entityUpdateSender = entityUpdateSender;
     }
 
     public async Task<InvoiceResponseDto> CreateInvoiceAsync(CreateInvoiceRequestDto request, Guid createdBy)
@@ -189,6 +194,36 @@ public class InvoiceService : IInvoiceService
         await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Created, createdBy, "Invoice created");
 
         await _context.SaveChangesAsync();
+
+        // Notify client: Invoice created
+        try
+        {
+            var firstOrderId = invoiceItems.FirstOrDefault(io => io.OrderId.HasValue)?.OrderId;
+            var orderNumber = firstOrderId.HasValue ? NotificationFormatHelper.GetOrderNumber(firstOrderId.Value) : "N/A";
+            var invoiceDisplayNumber = NotificationFormatHelper.GetInvoiceNumber(invoice.InvoiceNumber);
+            var title = "Invoice Generated";
+            var message = $"Invoice (#{invoiceDisplayNumber}) generated for order (#{orderNumber})";
+            await _notificationService.CreateNotificationAsync(
+                client.UserId,
+                title,
+                message,
+                NotificationType.Info,
+                firstOrderId,
+                NotificationReferenceType.Invoice,
+                invoice.Id,
+                createdBy
+            );
+
+            // Real-time entity update: InvoiceGenerated - client order grid HasInvoice flag updates
+            foreach (var item in invoiceItems.Where(io => io.OrderId.HasValue))
+            {
+                await _entityUpdateSender.SendInvoiceGeneratedAsync(item.OrderId!.Value, invoice.Id, client.UserId);
+            }
+        }
+        catch
+        {
+            // Must not fail invoice creation
+        }
 
         return await GetInvoiceByIdAsync(invoice.Id) ?? throw new InvalidOperationException("Failed to create invoice.");
     }
@@ -376,6 +411,26 @@ public class InvoiceService : IInvoiceService
         await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Paid, performedBy, $"Invoice marked as paid. Payment method: {paymentMethod ?? "Not specified"}");
 
         await _context.SaveChangesAsync();
+
+        // Notify Admin and SuperAdmin: Payment received
+        try
+        {
+            var invoiceWithOrders = await _context.Invoices
+                .Include(i => i.InvoiceOrders)
+                .ThenInclude(io => io.Order)
+                .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
+            var firstOrder = invoiceWithOrders?.InvoiceOrders?.FirstOrDefault(io => io.OrderId.HasValue)?.Order;
+            var title = "Payment Received";
+            var message = firstOrder != null
+                ? $"Payment received for order (#{NotificationFormatHelper.GetOrderNumber(firstOrder.Id)})"
+                : $"Payment received for invoice (#{NotificationFormatHelper.GetInvoiceNumber(invoice.InvoiceNumber)})";
+            await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.Success, NotificationReferenceType.Invoice, invoice.Id, performedBy);
+            await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, message, NotificationType.Success, NotificationReferenceType.Invoice, invoice.Id, performedBy);
+        }
+        catch
+        {
+            // Must not fail invoice update
+        }
 
         return await GetInvoiceByIdAsync(invoiceId) ?? throw new InvalidOperationException("Failed to update invoice.");
     }

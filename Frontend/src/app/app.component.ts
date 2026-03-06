@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import { RealtimeNotificationService } from '@core/services/realtime-notification.service';
 
 @Component({
   selector: 'app-root',
@@ -10,4 +11,8 @@ import { Component } from '@angular/core';
 })
 export class AppComponent {
   title = 'Hawk Merchandising Web Portal';
+
+  constructor(private realtimeNotificationService: RealtimeNotificationService) {
+    // Injected to initialize SignalR connection when user logs in
+  }
 }

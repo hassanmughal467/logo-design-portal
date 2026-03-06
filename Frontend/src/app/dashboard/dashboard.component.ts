@@ -3,10 +3,12 @@ import { Router } from '@angular/router';
 import { AuthService } from '@core/services/auth.service';
 import { ApiService } from '@core/services/api.service';
 import { DashboardService, DashboardData } from '@core/services/dashboard.service';
+import { NotificationService } from '@core/services/notification.service';
+import { RealtimeNotificationService } from '@core/services/realtime-notification.service';
 import { User } from '@shared/models/user.model';
 import { Order, OrderStatus } from '@shared/models/order.model';
 import { MessageService } from 'primeng/api';
-import { Subject, firstValueFrom } from 'rxjs';
+import { Observable, Subject, firstValueFrom } from 'rxjs';
 import { takeUntil, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -152,13 +154,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
     totalInvoicesPending: 0
   };
 
+  notificationUnreadCount$!: Observable<number>;
+
   constructor(
     private authService: AuthService,
     private dashboardService: DashboardService,
+    private notificationService: NotificationService,
+    private realtimeNotification: RealtimeNotificationService,
     private messageService: MessageService,
     private router: Router,
     private apiService: ApiService
-  ) {}
+  ) {
+    this.notificationUnreadCount$ = this.notificationService.unreadCount$;
+  }
 
   ngOnInit(): void {
     // Initialize stats with default values
@@ -186,6 +194,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
         // Always load dashboard data, even if user is null (will show empty state)
         this.loadDashboardData();
       });
+
+    // Real-time order updates: refresh dashboard when order events arrive
+    this.realtimeNotification.orderUpdates$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.handleOrderUpdate());
+  }
+
+  private handleOrderUpdate(): void {
+    // Refresh dashboard so order grids and stats stay in sync
+    if (this.user) {
+      this.loadDashboardData();
+    }
   }
 
   ngOnDestroy(): void {
@@ -203,6 +223,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.updateStats(data);
           this.setupCharts(data);
           // Load client-specific data
+          // Notifications for both Client and Admin
+          this.notifications = data.notifications || [];
           if (this.user?.role === 'Client') {
             this.invoices = data.invoices || [];
             this.galleryItems = data.galleryItems || [];
@@ -1391,9 +1413,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.user?.role === 'Client';
   }
 
-  getUnreadNotificationsCount(): number {
-    return this.notifications.filter(n => !n.isRead).length;
-  }
 
   formatRelativeDate(date: Date | string | null): string {
     if (!date) return 'N/A';
