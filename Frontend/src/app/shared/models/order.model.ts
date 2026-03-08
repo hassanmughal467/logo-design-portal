@@ -37,6 +37,8 @@ export interface Order {
     firstName: string;
     lastName: string;
   };
+  /** For Client view: masked display when designer assigned (e.g. "Company Design Team") */
+  assignedDesignerDisplayName?: string;
   
   // Cancellation fields
   cancellationReason?: string;

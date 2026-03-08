@@ -1,6 +1,7 @@
 using Xunit;
 using Moq;
 using LogoDesignPortal.Application.Services;
+using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using AutoMapper;
 using LogoDesignPortal.Domain.Entities;
@@ -21,7 +22,9 @@ public class InvoiceServiceTests
         
         _invoiceService = new InvoiceService(
             _contextMock.Object,
-            _mapperMock.Object
+            _mapperMock.Object,
+            Mock.Of<INotificationService>(),
+            Mock.Of<IRealtimeEntityUpdateSender>()
         );
     }
 

@@ -216,24 +216,30 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   }
 
   navigateFromNotification(notification: Notification): void {
+    const url = notification.redirectUrl?.trim();
+    if (url) {
+      this.router.navigateByUrl(url.startsWith('/') ? url : `/${url}`);
+      return;
+    }
     const refType = (notification.referenceType ?? 'Order').toLowerCase();
     const refId = notification.referenceId ?? notification.orderId;
-    if (!refId) return;
-
+    const orderId = notification.orderId ?? (refType === 'order' ? refId : null);
     switch (refType) {
       case 'order':
-        this.router.navigate(['/orders', refId]);
+        if (refId) this.router.navigate(['/orders', refId]);
         break;
       case 'invoice':
-        this.router.navigate(['/invoices', refId]);
+        if (refId) this.router.navigate(['/invoices', refId]);
         break;
       case 'message':
-        this.router.navigate(['/orders', notification.orderId ?? refId, 'messages']);
+        if (orderId) this.router.navigate(['/orders', orderId]);
+        else if (refId) this.router.navigate(['/messages']);
+        break;
+      case 'system':
+        this.router.navigate(['/users']);
         break;
       default:
-        if (notification.orderId) {
-          this.router.navigate(['/orders', notification.orderId]);
-        }
+        if (orderId || refId) this.router.navigate(['/orders', orderId ?? refId]);
     }
   }
 

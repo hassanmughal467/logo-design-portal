@@ -5,6 +5,7 @@ import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { FileType } from '@shared/models/file.model';
+import { isOrderLocked } from '@shared/utils/order-locking';
 
 @Component({
   selector: 'app-file-upload',
@@ -77,11 +78,21 @@ export class FileUploadComponent implements OnInit {
           this.order = order;
           this.loading = false;
           
-          // Check if order is completed or final approved
+          // Check if order is locked (terminal status)
+          const orderLocked = isOrderLocked(order.status);
+          
+          // Check if order is completed or final approved (legacy check)
           const isCompleted = order.status === 'Completed' || order.status === 'FinalApproved';
           
           // Check if uploads are disabled
-          if (isCompleted) {
+          if (orderLocked) {
+            this.messageService.add({
+              severity: 'info',
+              summary: 'Order Closed',
+              detail: 'This order is completed and is now read-only. File uploads are not allowed.'
+            });
+            this.uploadForm.disable();
+          } else if (isCompleted) {
             // For completed orders, only allow if admin has explicitly enabled uploads
             if (this.userRole !== 'Admin' && this.userRole !== 'SuperAdmin') {
               // Clients and designers cannot upload on completed orders unless admin enabled it
@@ -126,20 +137,28 @@ export class FileUploadComponent implements OnInit {
   onFileSelect(event: any): void {
     const files: File[] = Array.from(event.files || []);
     
-    // Validate file sizes (max 10MB each)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    const invalidFiles = files.filter(file => file.size > maxSize);
-    
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const vectorExtensions = ['.svg', '.pdf', '.ai', '.eps', '.psd'];
+    const imageMaxBytes = 10 * 1024 * 1024;  // 10MB
+    const vectorMaxBytes = 25 * 1024 * 1024;  // 25MB
+
+    const getMaxSize = (fileName: string): number => {
+      const ext = '.' + (fileName.split('.').pop() || '').toLowerCase();
+      if (imageExtensions.includes(ext)) return imageMaxBytes;
+      if (vectorExtensions.includes(ext)) return vectorMaxBytes;
+      return imageMaxBytes;
+    };
+
+    const invalidFiles = files.filter(file => file.size > getMaxSize(file.name));
     if (invalidFiles.length > 0) {
       this.messageService.add({
         severity: 'error',
         summary: 'Error',
-        detail: `${invalidFiles.length} file(s) exceed the 10MB limit and were not added`
+        detail: `${invalidFiles.length} file(s) exceed allowed size (images: 10MB, vector/docs: 25MB) and were not added`
       });
     }
-    
-    // Add valid files
-    const validFiles = files.filter(file => file.size <= maxSize);
+
+    const validFiles = files.filter(file => file.size <= getMaxSize(file.name));
     this.selectedFiles = [...this.selectedFiles, ...validFiles];
   }
 
@@ -298,6 +317,8 @@ export class FileUploadComponent implements OnInit {
       this.router.navigate(['/orders', this.orderId]);
     }
   }
+
+  isOrderLocked = isOrderLocked;
 
   get f() {
     return this.uploadForm.controls;

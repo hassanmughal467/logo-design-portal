@@ -80,6 +80,12 @@ export class RealtimeNotificationService implements OnDestroy {
       this.connection.on('OrderCreated', (data: { orderId: string }) => {
         this.orderUpdateSubject.next({ orderId: data.orderId });
       });
+      this.connection.on('OrderAssigned', (data: { orderId: string }) => {
+        this.orderUpdateSubject.next({ orderId: data.orderId });
+      });
+      this.connection.on('PreviewUploaded', (data: { orderId: string }) => {
+        this.orderUpdateSubject.next({ orderId: data.orderId });
+      });
       this.connection.on('OrderStatusChanged', (data: { orderId: string; status: string; updatedBy?: string }) => {
         this.orderUpdateSubject.next({ orderId: data.orderId, status: data.status, updatedBy: data.updatedBy });
       });
@@ -106,6 +112,8 @@ export class RealtimeNotificationService implements OnDestroy {
       this.connection.onreconnected(() => {
         this.realtimeStatus.setConnected(true);
         this.joinUserGroup(userId);
+        // Emit synthetic refresh so dashboards recover from missed events during disconnection
+        this.orderUpdateSubject.next({ orderId: '**reconnect**' });
       });
 
       this.connection.onclose(() => {
@@ -134,11 +142,32 @@ export class RealtimeNotificationService implements OnDestroy {
     const title = (p?.['title'] ?? p?.['Title'] ?? '') as string;
     const message = (p?.['message'] ?? p?.['Message'] ?? '') as string;
     const severity = this.mapTypeToSeverity(type);
+    const redirectUrl = this.buildRedirectUrl(p);
     this.messageService.add({
       severity,
       summary: title,
-      detail: message
+      detail: message,
+      life: 5000,
+      data: redirectUrl ? { redirectUrl } : undefined
     });
+  }
+
+  /** Build redirect URL for all notification types (Order, Invoice, Message, System). */
+  private buildRedirectUrl(p: Record<string, unknown>): string | null {
+    const url = (p?.['redirectUrl'] ?? p?.['RedirectUrl'] ?? '') as string;
+    if (url?.trim()) return url.trim();
+    const refType = ((p?.['referenceType'] ?? p?.['ReferenceType'] ?? 'Order') as string).toLowerCase();
+    const refId = (p?.['referenceId'] ?? p?.['ReferenceId'] ?? p?.['orderId'] ?? p?.['OrderId']) as string | undefined;
+    const orderId = (p?.['orderId'] ?? p?.['OrderId']) as string | undefined;
+    const id = refId ?? orderId;
+    if (!id) return null;
+    switch (refType) {
+      case 'order': return `/orders/${id}`;
+      case 'invoice': return `/invoices/${id}`;
+      case 'message': return orderId ? `/orders/${orderId}` : '/messages';
+      case 'system': return '/users';
+      default: return orderId ? `/orders/${orderId}` : id ? `/orders/${id}` : null;
+    }
   }
 
   private mapTypeToSeverity(type: string): 'info' | 'success' | 'warn' | 'error' {

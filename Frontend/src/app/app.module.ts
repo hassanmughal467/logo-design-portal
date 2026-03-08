@@ -15,6 +15,7 @@ import { ErrorInterceptor } from './core/interceptors/error.interceptor';
 // Components
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
+import { LayoutModule } from './layout/layout.module';
 
 @NgModule({
   declarations: [
@@ -27,6 +28,7 @@ import { AppRoutingModule } from './app-routing.module';
     FormsModule,
     ReactiveFormsModule,
     AppRoutingModule,
+    LayoutModule,
     ToastModule
   ],
   providers: [

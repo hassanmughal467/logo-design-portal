@@ -8,6 +8,10 @@ public class NotificationHub : Hub
 {
     public async Task JoinUserGroup(string userId)
     {
+        if (Context.UserIdentifier != userId)
+        {
+            throw new HubException("You can only join your own notification group.");
+        }
         await Groups.AddToGroupAsync(Context.ConnectionId, $"user-{userId}");
     }
 }

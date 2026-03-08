@@ -44,10 +44,13 @@ public class PaymentsController : ControllerBase
 
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(PaymentResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPayment(Guid id)
     {
-        var payment = await _paymentService.GetPaymentByIdAsync(id);
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var payment = await _paymentService.GetPaymentByIdWithAccessAsync(id, userId, userRole);
         if (payment == null)
         {
             return NotFound(new { error = "Payment not found." });
@@ -57,9 +60,17 @@ public class PaymentsController : ControllerBase
 
     [HttpGet("invoice/{invoiceId}")]
     [ProducesResponseType(typeof(List<PaymentResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPaymentsByInvoice(Guid invoiceId)
     {
-        var payments = await _paymentService.GetPaymentsByInvoiceAsync(invoiceId);
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var payments = await _paymentService.GetPaymentsByInvoiceWithAccessAsync(invoiceId, userId, userRole);
+        if (payments == null)
+        {
+            return NotFound(new { error = "Invoice not found." });
+        }
         return Ok(payments);
     }
 
@@ -111,6 +122,7 @@ public class PaymentsController : ControllerBase
     }
 
     [HttpGet("bank-details")]
+    [Authorize(Roles = "Client,Admin,SuperAdmin")]
     [ProducesResponseType(typeof(BankDetailsResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetBankDetails()
     {
@@ -165,13 +177,48 @@ public class PaymentsController : ControllerBase
     [HttpPost("webhook/paypal")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> PayPalWebhook([FromBody] object webhookData)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> PayPalWebhook()
     {
         try
         {
-            // Handle PayPal webhook
-            // This would verify the webhook signature and process the payment update
-            _logger.LogInformation("PayPal webhook received");
+            // Read raw body for signature verification (must be exact bytes)
+            Request.EnableBuffering();
+            using var reader = new StreamReader(Request.Body, leaveOpen: true);
+            var webhookEventJson = await reader.ReadToEndAsync();
+            Request.Body.Position = 0;
+
+            if (string.IsNullOrWhiteSpace(webhookEventJson))
+            {
+                _logger.LogWarning("PayPal webhook received with empty body");
+                return BadRequest(new { error = "Webhook body is required." });
+            }
+
+            // PayPal sends these headers (case-insensitive)
+            var transmissionId = Request.Headers["Paypal-Transmission-Id"].FirstOrDefault();
+            var transmissionTime = Request.Headers["Paypal-Transmission-Time"].FirstOrDefault();
+            var transmissionSig = Request.Headers["Paypal-Transmission-Sig"].FirstOrDefault();
+            var authAlgo = Request.Headers["Paypal-Auth-Algo"].FirstOrDefault() ?? "SHA256withRSA";
+            var certUrl = Request.Headers["Paypal-Cert-Url"].FirstOrDefault();
+
+            if (string.IsNullOrEmpty(transmissionId) || string.IsNullOrEmpty(transmissionTime) || string.IsNullOrEmpty(transmissionSig) || string.IsNullOrEmpty(certUrl))
+            {
+                _logger.LogWarning("PayPal webhook missing required verification headers");
+                return StatusCode(StatusCodes.Status401Unauthorized, new { error = "Invalid webhook: missing verification headers." });
+            }
+
+            var isValid = await _paymentService.VerifyPayPalWebhookSignatureAsync(
+                transmissionId, transmissionTime, transmissionSig, authAlgo, certUrl, webhookEventJson);
+
+            if (!isValid)
+            {
+                _logger.LogWarning("PayPal webhook signature verification failed");
+                return StatusCode(StatusCodes.Status401Unauthorized, new { error = "Webhook signature verification failed." });
+            }
+
+            // TODO: Process webhook events (e.g. PAYMENT.CAPTURE.COMPLETED) to update payment status
+            _logger.LogInformation("PayPal webhook verified and received successfully");
             return Ok();
         }
         catch (Exception ex)

@@ -150,22 +150,52 @@ export class OrderCreateComponent implements OnInit, OnChanges {
       }
     });
 
-    this.apiService.post<any>('orders', orderData).subscribe({
+    if (this.selectedFiles.length > 0) {
+      this.createOrderWithFiles(orderData);
+    } else {
+      this.apiService.post<any>('orders', orderData).subscribe({
+        next: (order) => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Order created successfully'
+          });
+          this.loading = false;
+          this.orderCreated.emit(order);
+          this.closeModal();
+        },
+        error: (error) => {
+          const msg = error.error?.error || error.error?.message || (typeof error.error === 'string' ? error.error : null);
+          const detail = msg || (error.error?.errors ? JSON.stringify(error.error.errors) : 'Failed to create order');
+          console.error('Order creation failed:', { status: error.status, error: error.error, detail });
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: typeof detail === 'string' ? detail : 'Failed to create order'
+          });
+          this.loading = false;
+        }
+      });
+    }
+  }
+
+  private createOrderWithFiles(orderData: any): void {
+    const formData = new FormData();
+    formData.append('order', JSON.stringify(orderData));
+    this.selectedFiles.forEach(file => {
+      formData.append('files', file);
+    });
+
+    this.apiService.post<any>('orders/with-files', formData).subscribe({
       next: (order) => {
         this.messageService.add({
           severity: 'success',
           summary: 'Success',
-          detail: 'Order created successfully'
+          detail: `Order created with ${this.selectedFiles.length} file(s) successfully`
         });
         this.loading = false;
-        
-        // Upload files if any were selected
-        if (this.selectedFiles.length > 0) {
-          this.uploadFiles(order.id);
-        } else {
-          this.orderCreated.emit(order);
-          this.closeModal();
-        }
+        this.orderCreated.emit(order);
+        this.closeModal();
       },
       error: (error) => {
         const msg = error.error?.error || error.error?.message || (typeof error.error === 'string' ? error.error : null);
@@ -216,23 +246,33 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   }
 
   private addFiles(files: File[]): void {
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.pdf', '.ai', '.eps', '.psd', '.webp'];
-    
-    const invalidSize = files.filter(f => f.size > maxSize);
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const vectorExtensions = ['.svg', '.pdf', '.ai', '.eps', '.psd'];
+    const allowedExtensions = [...imageExtensions, ...vectorExtensions];
+    const imageMaxBytes = 10 * 1024 * 1024;  // 10MB
+    const vectorMaxBytes = 25 * 1024 * 1024;  // 25MB
+
+    const getMaxSize = (fileName: string): number => {
+      const ext = '.' + (fileName.split('.').pop() || '').toLowerCase();
+      if (imageExtensions.includes(ext)) return imageMaxBytes;
+      if (vectorExtensions.includes(ext)) return vectorMaxBytes;
+      return imageMaxBytes;
+    };
+
+    const invalidSize = files.filter(f => f.size > getMaxSize(f.name));
     const invalidType = files.filter(f => {
-      const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+      const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
       return !allowedExtensions.includes(ext) && !f.type.startsWith('image/');
     });
-    
+
     if (invalidSize.length > 0) {
       this.messageService.add({
         severity: 'error',
         summary: 'File Too Large',
-        detail: `${invalidSize.length} file(s) exceed the 10MB limit`
+        detail: `${invalidSize.length} file(s) exceed allowed size (images: 10MB, vector/docs: 25MB)`
       });
     }
-    
+
     if (invalidType.length > 0) {
       this.messageService.add({
         severity: 'error',
@@ -240,11 +280,11 @@ export class OrderCreateComponent implements OnInit, OnChanges {
         detail: `${invalidType.length} file(s) have unsupported formats`
       });
     }
-    
+
     // Filter to valid files and avoid duplicates
     const validFiles = files.filter(f => {
-      const ext = '.' + f.name.split('.').pop()?.toLowerCase();
-      const validSize = f.size <= maxSize;
+      const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+      const validSize = f.size <= getMaxSize(f.name);
       const validType = allowedExtensions.includes(ext) || f.type.startsWith('image/');
       const notDuplicate = !this.selectedFiles.some(existing => existing.name === f.name && existing.size === f.size);
       return validSize && validType && notDuplicate;

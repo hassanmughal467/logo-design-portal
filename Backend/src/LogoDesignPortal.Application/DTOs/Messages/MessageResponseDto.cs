@@ -13,4 +13,8 @@ public class MessageResponseDto
     public bool IsRead { get; set; }
     public DateTime? ReadAt { get; set; }
     public DateTime CreatedAt { get; set; }
+    public bool RequiresAdminApproval { get; set; }
+    public bool ForwardedByAdmin { get; set; }
+    public string? OriginalSenderRole { get; set; }
+    public bool IsRejected { get; set; }
 }

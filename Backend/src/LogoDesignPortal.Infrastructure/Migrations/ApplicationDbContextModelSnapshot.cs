@@ -586,6 +586,9 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
+                    b.Property<Guid?>("PreviewBatchId")
+                        .HasColumnType("char(36)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -603,6 +606,8 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.HasIndex("ApprovedBy");
 
                     b.HasIndex("OrderId");
+
+                    b.HasIndex("PreviewBatchId");
 
                     b.ToTable("LogoFiles");
                 });
@@ -773,20 +778,41 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     b.Property<Guid?>("DeletedBy")
                         .HasColumnType("char(36)");
 
+                    b.Property<bool>("ForwardedByAdmin")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<Guid?>("ForwardedToMessageId")
+                        .HasColumnType("char(36)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsRead")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<bool>("IsRejected")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<Guid?>("OrderId")
                         .HasColumnType("char(36)");
+
+                    b.Property<int?>("OriginalSenderRole")
+                        .HasColumnType("int");
 
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("datetime(6)");
 
                     b.Property<Guid?>("RecipientId")
                         .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("RejectedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("RejectedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<bool>("RequiresAdminApproval")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<Guid>("SenderId")
                         .HasColumnType("char(36)");
@@ -850,6 +876,10 @@ namespace LogoDesignPortal.Infrastructure.Migrations
 
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("RedirectUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.Property<Guid?>("ReferenceId")
                         .HasColumnType("char(36)");
@@ -1258,7 +1288,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000001"),
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3386),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3131),
                             Description = "Create new users",
                             IsDeleted = false,
                             Name = "CreateUser",
@@ -1268,7 +1298,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000002"),
                             Action = "Read",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3399),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3136),
                             Description = "View all users",
                             IsDeleted = false,
                             Name = "ViewUsers",
@@ -1278,7 +1308,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000003"),
                             Action = "Update",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3404),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3143),
                             Description = "Update user information",
                             IsDeleted = false,
                             Name = "UpdateUser",
@@ -1288,7 +1318,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000004"),
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3407),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3148),
                             Description = "Delete users",
                             IsDeleted = false,
                             Name = "DeleteUser",
@@ -1298,7 +1328,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000001"),
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3409),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3152),
                             Description = "Create designer profiles",
                             IsDeleted = false,
                             Name = "CreateDesignerProfile",
@@ -1308,7 +1338,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000002"),
                             Action = "Read",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3417),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3158),
                             Description = "View designer profiles",
                             IsDeleted = false,
                             Name = "ViewDesignerProfiles",
@@ -1318,7 +1348,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("20000000-0000-0000-0000-000000000003"),
                             Action = "Update",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3419),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3161),
                             Description = "Update designer profiles",
                             IsDeleted = false,
                             Name = "UpdateDesignerProfile",
@@ -1328,7 +1358,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("30000000-0000-0000-0000-000000000001"),
                             Action = "Create",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3421),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3165),
                             Description = "Create new orders",
                             IsDeleted = false,
                             Name = "CreateOrder",
@@ -1338,7 +1368,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("30000000-0000-0000-0000-000000000002"),
                             Action = "ReadAll",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3426),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3168),
                             Description = "View all orders in the system",
                             IsDeleted = false,
                             Name = "ViewAllOrders",
@@ -1348,7 +1378,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("30000000-0000-0000-0000-000000000003"),
                             Action = "Assign",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3428),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3176),
                             Description = "Assign orders to designers",
                             IsDeleted = false,
                             Name = "AssignOrder",
@@ -1358,7 +1388,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("30000000-0000-0000-0000-000000000004"),
                             Action = "UpdateStatus",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3430),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3182),
                             Description = "Update order status",
                             IsDeleted = false,
                             Name = "UpdateOrderStatus",
@@ -1368,7 +1398,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("40000000-0000-0000-0000-000000000001"),
                             Action = "Manage",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3432),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3187),
                             Description = "Manage role permissions",
                             IsDeleted = false,
                             Name = "ManagePermissions",
@@ -1378,7 +1408,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("50000000-0000-0000-0000-000000000001"),
                             Action = "Upload",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3434),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3190),
                             Description = "Upload files",
                             IsDeleted = false,
                             Name = "UploadFile",
@@ -1388,7 +1418,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("50000000-0000-0000-0000-000000000002"),
                             Action = "Download",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3436),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3193),
                             Description = "Download files",
                             IsDeleted = false,
                             Name = "DownloadFile",
@@ -1398,7 +1428,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         {
                             Id = new Guid("50000000-0000-0000-0000-000000000003"),
                             Action = "Delete",
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 873, DateTimeKind.Utc).AddTicks(3441),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 300, DateTimeKind.Utc).AddTicks(3275),
                             Description = "Delete files",
                             IsDeleted = false,
                             Name = "DeleteFile",
@@ -1575,7 +1605,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("11111111-1111-1111-1111-111111111111"),
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 875, DateTimeKind.Utc).AddTicks(2726),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 302, DateTimeKind.Utc).AddTicks(7293),
                             Description = "Full system access with all permissions",
                             IsDeleted = false,
                             Name = "SuperAdmin"
@@ -1583,7 +1613,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("22222222-2222-2222-2222-222222222222"),
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 875, DateTimeKind.Utc).AddTicks(2729),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 302, DateTimeKind.Utc).AddTicks(7300),
                             Description = "Administrative access with restricted client data access",
                             IsDeleted = false,
                             Name = "Admin"
@@ -1591,7 +1621,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("33333333-3333-3333-3333-333333333333"),
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 875, DateTimeKind.Utc).AddTicks(2732),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 302, DateTimeKind.Utc).AddTicks(7303),
                             Description = "Designer access without client identity information",
                             IsDeleted = false,
                             Name = "Designer"
@@ -1599,7 +1629,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("44444444-4444-4444-4444-444444444444"),
-                            CreatedAt = new DateTime(2026, 3, 6, 1, 15, 3, 875, DateTimeKind.Utc).AddTicks(2734),
+                            CreatedAt = new DateTime(2026, 3, 6, 13, 22, 3, 302, DateTimeKind.Utc).AddTicks(7307),
                             Description = "Client access to their own data",
                             IsDeleted = false,
                             Name = "Client"

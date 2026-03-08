@@ -11,7 +11,40 @@
   
   <p-confirmDialog></p-confirmDialog>
   
+  <!-- Client view when revision is requested: show status message instead of empty modal -->
+  <div class="order-detail-container revision-pending-view" *ngIf="order && !shouldShowOrderDetails()">
+    <div class="revision-pending-message">
+      <i class="pi pi-refresh" style="font-size: 3rem; color: var(--primary-color); margin-bottom: 1rem;"></i>
+      <h3>Revision in Progress</h3>
+      <p>Your revision has been requested for order <strong>{{ order.title }}</strong>.</p>
+      <p>The designer is currently working on your feedback. You'll be notified when new previews are ready for your review.</p>
+      <p-tag [value]="order.status" [severity]="getStatusSeverity(order.status)"></p-tag>
+    </div>
+  </div>
+  
   <div class="order-detail-container" *ngIf="order && shouldShowOrderDetails()">
+  <!-- Locked order banner -->
+  <div class="order-locked-banner" *ngIf="isOrderLocked(order.status)">
+    <i class="pi pi-lock"></i>
+    <span>Order completed on {{ (order.updatedAt || order.createdAt) | date:'longDate' }}. This order is now closed.</span>
+    <p class="banner-subtext">This order is completed and is now read-only.</p>
+  </div>
+  <!-- Admin Action Panel: Quick actions for mediated workflow -->
+  <div class="admin-action-panel" *ngIf="(isAdmin || isSuperAdmin) && hasPendingPreviewFiles() && !isOrderLocked(order.status)">
+    <h3 class="panel-title"><i class="pi pi-bolt"></i> Admin Quick Actions</h3>
+    <div class="action-group">
+      <span class="action-label">Preview uploaded by designer:</span>
+      <p-button label="View Preview" icon="pi pi-eye" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="activeTab = 0"></p-button>
+      <p-button label="Forward to Client" icon="pi pi-send" severity="success" [styleClass]="'p-button-sm'" (onClick)="openSendFilesDialog()"></p-button>
+      <p-button label="Request Revision" icon="pi pi-refresh" severity="warn" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="openRevisionDialog()"></p-button>
+      <p-button label="Reject Preview" icon="pi pi-times" severity="danger" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="openRevisionDialog()"></p-button>
+    </div>
+    <div class="action-group">
+      <span class="action-label">Client feedback / messages:</span>
+      <p-button label="View Messages" icon="pi pi-inbox" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="router.navigate(['/messages'])"></p-button>
+    </div>
+  </div>
+
   <div class="order-header">
     <div class="header-left">
       <h2>{{ order.title }}</h2>
@@ -22,56 +55,56 @@
     </div>
     <div class="header-actions">
       <p-button 
-        *ngIf="canApproveLogo()"
+        *ngIf="canApproveLogo() && !isOrderLocked(order.status)"
         label="Approve Logo" 
         icon="pi pi-check" 
         (onClick)="approveLogo()"
         [styleClass]="'p-button-success'"
       ></p-button>
       <p-button 
-        *ngIf="canApproveOrder()"
+        *ngIf="canApproveOrder() && !isOrderLocked(order.status)"
         label="Approve Order" 
         icon="pi pi-check" 
         (onClick)="approveOrder()"
         [styleClass]="'p-button-outlined'"
       ></p-button>
       <p-button 
-        *ngIf="canRequestPriceApproval()"
+        *ngIf="canRequestPriceApproval() && !isOrderLocked(order.status)"
         label="Request Price Approval" 
         icon="pi pi-dollar" 
         (onClick)="openPriceApprovalDialog()"
         [styleClass]="'p-button-outlined'"
       ></p-button>
       <p-button 
-        *ngIf="canApprovePrice()"
+        *ngIf="canApprovePrice() && !isOrderLocked(order.status)"
         label="Approve Price" 
         icon="pi pi-check-circle" 
         (onClick)="openPriceApprovalDialog()"
         severity="success"
       ></p-button>
       <p-button 
-        *ngIf="canAssignDesigner()"
+        *ngIf="canAssignDesigner() && !isOrderLocked(order.status)"
         label="Assign Designer" 
         icon="pi pi-user-plus" 
         (onClick)="openAssignDialog()"
         [styleClass]="'p-button-outlined'"
       ></p-button>
       <p-button 
-        *ngIf="canSendFiles()"
+        *ngIf="canSendFiles() && !isOrderLocked(order.status)"
         label="Send Files to Client" 
         icon="pi pi-send" 
         (onClick)="openSendFilesDialog()"
         severity="success"
       ></p-button>
       <p-button 
-        *ngIf="canEditOrder()"
+        *ngIf="canEditOrder() && !isOrderLocked(order.status)"
         label="Edit Order" 
         icon="pi pi-pencil" 
         (onClick)="openEditOrderDialog()"
         [styleClass]="'p-button-outlined'"
       ></p-button>
       <p-button 
-        *ngIf="canCancelOrder()"
+        *ngIf="canCancelOrder() && !isOrderLocked(order.status)"
         label="Cancel Order" 
         icon="pi pi-times-circle" 
         (onClick)="openCancelOrderDialog()"
@@ -79,21 +112,21 @@
         [styleClass]="'p-button-outlined'"
       ></p-button>
       <p-button 
-        *ngIf="canArchiveOrder()"
+        *ngIf="canArchiveOrder() && !isOrderLocked(order.status)"
         label="Archive Order" 
         icon="pi pi-archive" 
         (onClick)="openArchiveConfirmDialog()"
         [styleClass]="'p-button-outlined'"
       ></p-button>
       <p-button 
-        *ngIf="canUnarchiveOrder()"
+        *ngIf="canUnarchiveOrder() && !isOrderLocked(order.status)"
         label="Unarchive Order" 
         icon="pi pi-inbox" 
         (onClick)="unarchiveOrder()"
         [styleClass]="'p-button-outlined'"
       ></p-button>
       <p-button 
-        *ngIf="canRefundOrder()"
+        *ngIf="canRefundOrder() && !isOrderLocked(order.status)"
         label="Refund Order" 
         icon="pi pi-dollar" 
         (onClick)="openRefundDialog()"
@@ -122,9 +155,9 @@
         <label>Deadline:</label>
         <span>{{ order.dueDate | date:'short' }}</span>
       </div>
-      <div class="info-item" *ngIf="order.designer">
-        <label>Designer:</label>
-        <span>{{ order.designer.firstName }} {{ order.designer.lastName }}</span>
+      <div class="info-item" *ngIf="order.designer || order.assignedDesignerDisplayName">
+        <label>Assigned Designer:</label>
+        <span>{{ order.designer ? (order.designer.firstName + ' ' + order.designer.lastName) : order.assignedDesignerDisplayName }}</span>
       </div>
     </div>
 
@@ -161,33 +194,34 @@
         <div class="tab-header">
           <h3>Order Files</h3>
           <p-button 
-            *ngIf="canUploadFiles()"
+            *ngIf="canUploadFiles() && !isOrderLocked(order.status)"
             label="Upload File" 
             icon="pi pi-upload" 
             (onClick)="router.navigate(['/orders', order.id, 'upload'])"
           ></p-button>
           <p-button 
-            *ngIf="canToggleUploads()"
+            *ngIf="canToggleUploads() && !isOrderLocked(order.status)"
             [label]="order.allowUploads ? 'Disable Uploads' : 'Enable Uploads'" 
             [icon]="order.allowUploads ? 'pi pi-lock' : 'pi pi-unlock'" 
             (onClick)="toggleUploads()"
             [styleClass]="order.allowUploads ? 'p-button-warn' : 'p-button-success'"
           ></p-button>
           <p-button 
-            *ngIf="canApproveLogo()"
+            *ngIf="canApproveLogo() && !isOrderLocked(order.status)"
             label="Approve Logo" 
             icon="pi pi-check" 
             (onClick)="approveLogo()"
             [styleClass]="'p-button-success'"
           ></p-button>
           <p-button 
-            *ngIf="canRequestRevision()"
+            *ngIf="canRequestRevision() && !isOrderLocked(order.status)"
             label="Request Revision" 
             icon="pi pi-refresh" 
             (onClick)="openRevisionDialog()"
             [styleClass]="'p-button-warn'"
           ></p-button>
           <p-button 
+            *ngIf="!isOrderLocked(order.status)"
             label="Add Comment" 
             icon="pi pi-comment" 
             (onClick)="openCommentDialog()"
@@ -227,7 +261,7 @@
                   [disabled]="!file.isVisibleToClient && isClient"
                 ></p-button>
                 <p-button 
-                  *ngIf="isAdmin && !file.isAdminApproved"
+                  *ngIf="isAdmin && !file.isAdminApproved && !isOrderLocked(order.status)"
                   icon="pi pi-check" 
                   [styleClass]="'p-button-text'"
                   severity="success"
@@ -251,7 +285,7 @@
         <div class="tab-header">
           <h3>Revision Requests</h3>
           <p-button 
-            *ngIf="canRequestRevision()"
+            *ngIf="canRequestRevision() && !isOrderLocked(order.status)"
             label="Request Revision" 
             icon="pi pi-plus" 
             (onClick)="openRevisionDialog()"
@@ -287,6 +321,7 @@
         <div class="tab-header">
           <h3>Order Comments</h3>
           <p-button 
+            *ngIf="!isOrderLocked(order.status)"
             label="Add Comment" 
             icon="pi pi-plus" 
             (onClick)="openCommentDialog()"
@@ -462,6 +497,20 @@
 >
   <div class="dialog-content">
     <p>Select files to send to client:</p>
+    <div class="file-select-actions" style="margin-bottom: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+      <button 
+        type="button" 
+        class="p-button p-button-text p-button-sm"
+        (click)="selectAllFilesToSend()">
+        <i class="pi pi-check-square"></i> Select All
+      </button>
+      <button 
+        type="button" 
+        class="p-button p-button-text p-button-sm"
+        (click)="deselectAllFilesToSend()">
+        <i class="pi pi-times"></i> Deselect All
+      </button>
+    </div>
     <div class="file-checkbox-list">
       <div *ngFor="let file of files" class="file-checkbox-item">
         <p-checkbox 

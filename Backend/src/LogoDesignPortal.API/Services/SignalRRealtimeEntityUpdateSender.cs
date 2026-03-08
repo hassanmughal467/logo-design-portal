@@ -30,6 +30,38 @@ public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
         }
     }
 
+    public async Task SendOrderAssignedAsync(Guid orderId, Guid designerUserId)
+    {
+        try
+        {
+            await _hubContext.Clients
+                .Group($"user-{designerUserId}")
+                .SendAsync("OrderAssigned", new { orderId });
+        }
+        catch
+        {
+            // Non-critical
+        }
+    }
+
+    public async Task SendPreviewUploadedAsync(Guid orderId, IEnumerable<Guid> adminUserIds)
+    {
+        try
+        {
+            var payload = new { orderId };
+            foreach (var userId in adminUserIds.Distinct())
+            {
+                await _hubContext.Clients
+                    .Group($"user-{userId}")
+                    .SendAsync("PreviewUploaded", payload);
+            }
+        }
+        catch
+        {
+            // Non-critical
+        }
+    }
+
     public async Task SendOrderStatusChangedAsync(Guid orderId, string status, Guid? updatedBy, IEnumerable<Guid> userIds)
     {
         try

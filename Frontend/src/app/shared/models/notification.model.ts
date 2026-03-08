@@ -6,6 +6,8 @@ export interface Notification {
   type: NotificationType;
   referenceType?: NotificationReferenceType;
   referenceId?: string;
+  /** Frontend route to navigate when clicked (e.g. /orders/123, /invoices/456). */
+  redirectUrl?: string;
   isRead: boolean;
   readAt?: Date;
   createdAt: Date;

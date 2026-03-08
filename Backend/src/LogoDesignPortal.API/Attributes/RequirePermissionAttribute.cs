@@ -38,8 +38,8 @@ public class RequirePermissionAttribute : Attribute, IAuthorizationFilter
 
         if (permissionService == null)
         {
-            // If permission service not available, fall back to allowing (for backward compatibility)
-            // In production, you might want to fail here
+            // Deny access when permission service is not configured to prevent bypass in misconfigured environments
+            context.Result = new ForbidResult();
             return;
         }
 

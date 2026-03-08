@@ -6,12 +6,20 @@ public interface IInvoiceService
 {
     Task<InvoiceResponseDto> CreateInvoiceAsync(CreateInvoiceRequestDto request, Guid createdBy);
     Task<InvoiceResponseDto?> GetInvoiceByIdAsync(Guid invoiceId);
+    /// <summary>
+    /// Gets an invoice by ID with access control. Returns null if not found or user lacks access.
+    /// </summary>
+    Task<InvoiceResponseDto?> GetInvoiceByIdWithAccessAsync(Guid invoiceId, Guid userId, string? userRole);
     Task<List<InvoiceResponseDto>> GetInvoicesAsync(Guid? userId, string? userRole);
     Task<List<InvoiceResponseDto>> GetInvoicesByClientAsync(Guid clientId);
     Task<InvoiceResponseDto> UpdateInvoiceAsync(Guid invoiceId, UpdateInvoiceRequestDto request, Guid updatedBy);
     Task<InvoiceResponseDto> MarkInvoiceAsPaidAsync(Guid invoiceId, string? paymentMethod, Guid? performedBy);
     Task<bool> SendInvoiceAsync(Guid invoiceId, Guid? performedBy);
     Task<List<InvoiceLogDto>> GetInvoiceLogsAsync(Guid invoiceId);
+    /// <summary>
+    /// Gets invoice logs with access control. Returns null if user lacks access to the invoice.
+    /// </summary>
+    Task<List<InvoiceLogDto>?> GetInvoiceLogsWithAccessAsync(Guid invoiceId, Guid userId, string? userRole);
     Task UpdateOverdueInvoicesAsync(); // For background job
     Task<InvoiceStatisticsDto> GetInvoiceStatisticsAsync(Guid? userId = null, string? userRole = null);
 }

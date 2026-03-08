@@ -1,9 +1,7 @@
 using LogoDesignPortal.Application.DTOs.Notifications;
 using LogoDesignPortal.Application.Interfaces;
-using LogoDesignPortal.Application.Interfaces.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace LogoDesignPortal.API.Controllers;
@@ -14,50 +12,10 @@ namespace LogoDesignPortal.API.Controllers;
 public class NotificationsController : ControllerBase
 {
     private readonly INotificationService _notificationService;
-    private readonly IApplicationDbContext _context;
-    private readonly ILogger<NotificationsController> _logger;
 
-    public NotificationsController(
-        INotificationService notificationService,
-        IApplicationDbContext context,
-        ILogger<NotificationsController> logger)
+    public NotificationsController(INotificationService notificationService)
     {
         _notificationService = notificationService;
-        _context = context;
-        _logger = logger;
-    }
-
-    /// <summary>
-    /// Diagnostic endpoint for troubleshooting notification creation. SuperAdmin only.
-    /// Returns admin role count, admin user count, and recent notification count.
-    /// </summary>
-    [HttpGet("debug")]
-    [Authorize(Roles = "SuperAdmin")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetDebugInfo()
-    {
-        var adminRoleIds = await _context.Roles
-            .Where(r => r.Name == "Admin" || r.Name == "SuperAdmin")
-            .Select(r => r.Id)
-            .ToListAsync();
-
-        var adminUserCount = await _context.Users
-            .Where(u => !u.IsDeleted && adminRoleIds.Contains(u.RoleId))
-            .CountAsync();
-
-        var notificationCount = await _context.Notifications
-            .Where(n => !n.IsDeleted)
-            .CountAsync();
-
-        return Ok(new
-        {
-            adminRoleCount = adminRoleIds.Count,
-            adminUserCount,
-            notificationCount,
-            message = adminUserCount == 0
-                ? "No Admin/SuperAdmin users found. Notifications will not be created for new orders. Check Users.RoleId matches Admin/SuperAdmin role."
-                : "OK"
-        });
     }
 
     [HttpGet]

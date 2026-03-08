@@ -215,27 +215,27 @@
                   pTooltip="Submit Preview" tooltipPosition="top">
                 </p-button>
 
-                <!-- Admin: Assign Designer -->
+                <!-- Admin: Assign Designer (hidden when order is locked) -->
                 <p-button
-                  *ngIf="canAssignDesigner()"
+                  *ngIf="canAssignDesigner() && !isOrderLocked(order.status)"
                   icon="pi pi-user-plus"
                   styleClass="p-button-text p-button-rounded p-button-sm"
                   (onClick)="openAssignDialog(order)"
                   pTooltip="Assign Designer" tooltipPosition="top">
                 </p-button>
 
-                <!-- Admin/Designer: Upload Files -->
+                <!-- Admin/Designer: Upload Files (hidden when order is completed/locked) -->
                 <p-button
-                  *ngIf="canUploadFiles()"
+                  *ngIf="canUploadFiles() && !isOrderLocked(order.status)"
                   icon="pi pi-upload"
                   styleClass="p-button-text p-button-rounded p-button-sm"
                   (onClick)="openUploadDialog(order)"
                   pTooltip="Upload Files" tooltipPosition="top">
                 </p-button>
 
-                <!-- Admin: Change Status -->
+                <!-- Admin: Change Status (hidden when order is locked) -->
                 <p-button
-                  *ngIf="canChangeStatus()"
+                  *ngIf="canChangeStatus() && !isOrderLocked(order.status)"
                   icon="pi pi-pencil"
                   styleClass="p-button-text p-button-rounded p-button-sm"
                   (onClick)="openStatusDialog(order)"

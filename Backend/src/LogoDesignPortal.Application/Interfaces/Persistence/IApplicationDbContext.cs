@@ -1,5 +1,6 @@
 using LogoDesignPortal.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace LogoDesignPortal.Application.Interfaces.Persistence;
 
@@ -29,4 +30,11 @@ public interface IApplicationDbContext
     DbSet<Settings> Settings { get; }
     DbSet<AuditLog> AuditLogs { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes the given action inside a database transaction, wrapped in the execution strategy.
+    /// Required for MySQL with retry-on-failure: user-initiated transactions must run inside CreateExecutionStrategy().
+    /// </summary>
+    Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
 }

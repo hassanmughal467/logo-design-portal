@@ -98,6 +98,7 @@
                     class="notification-dropdown-item" 
                     *ngFor="let notification of recentNotifications"
                     [class.unread]="!notification.isRead"
+                    style="cursor: pointer"
                     (click)="onNotificationClick(notification); notificationPanel.hide()">
                     <div class="notification-dropdown-icon">
                       <i [class]="getNotificationIcon(notification)"></i>
@@ -107,7 +108,9 @@
                       <span class="notification-aggregation-badge" *ngIf="(notification.aggregationCount ?? 1) > 1">×{{ notification.aggregationCount }}</span>
                       <p class="notification-dropdown-message">{{ notification.message }}</p>
                       <span class="notification-dropdown-date">{{ (notification.lastOccurrenceAt ?? notification.createdAt) | relativeTime }}</span>
-                      <span class="notification-unread-dot" *ngIf="!notification.isRead"></span>
+                    </div>
+                    <div class="notification-dropdown-actions" *ngIf="!notification.isRead">
+                      <span class="notification-unread-dot"></span>
                     </div>
                   </div>
                 </div>

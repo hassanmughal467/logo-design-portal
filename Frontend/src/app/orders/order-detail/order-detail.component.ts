@@ -1,11 +1,12 @@
 import { Component, OnInit, OnDestroy, OnChanges, SimpleChanges, Input, Output, EventEmitter } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus } from '@shared/models/order.model';
+import { isOrderLocked } from '@shared/utils/order-locking';
 import { LogoFile } from '@shared/models/file.model';
 import { OrderRevision } from '@shared/models/revision.model';
 import { OrderComment } from '@shared/models/comment.model';
@@ -63,9 +64,11 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   isSuperAdmin = false;
   
   private destroy$ = new Subject<void>();
+  private isRouteMode = false;
 
   constructor(
     public router: Router,
+    private route: ActivatedRoute,
     private apiService: ApiService,
     private authService: AuthService,
     private messageService: MessageService,
@@ -78,6 +81,17 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     this.isDesigner = user?.role === 'Designer';
     this.isAdmin = user?.role === 'Admin';
     this.isSuperAdmin = user?.role === 'SuperAdmin';
+
+    // When used as route (/orders/:id), load order from route params
+    this.route.paramMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
+      const id = params.get('id');
+      if (id && !this.orderId) {
+        this.isRouteMode = true;
+        this.visible = true;
+        this.orderId = id;
+        this.loadOrder(id);
+      }
+    });
   }
 
   ngOnChanges(): void {
@@ -94,8 +108,12 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   closeModal(): void {
-    this.visible = false;
-    this.visibleChange.emit(false);
+    if (this.isRouteMode) {
+      this.router.navigate(['/orders']);
+    } else {
+      this.visible = false;
+      this.visibleChange.emit(false);
+    }
   }
 
   ngOnDestroy(): void {
@@ -137,7 +155,11 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
             });
           }
           this.loading = false;
-          this.closeModal();
+          if (this.isRouteMode) {
+            this.router.navigate(['/orders']);
+          } else {
+            this.closeModal();
+          }
         }
       });
   }
@@ -341,6 +363,14 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     this.showSendFilesDialog = true;
   }
 
+  selectAllFilesToSend(): void {
+    this.selectedFileIds = this.files.map(f => f.id);
+  }
+
+  deselectAllFilesToSend(): void {
+    this.selectedFileIds = [];
+  }
+
   sendFilesToClient(): void {
     if (!this.order || this.selectedFileIds.length === 0) return;
 
@@ -426,14 +456,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   approveLogo(): void {
-    if (!this.order) {
-      console.warn('Cannot approve: order is null');
-      return;
-    }
-
-    console.log('Approve logo clicked for order:', this.order.id);
-    console.log('Order status:', this.order.status);
-    console.log('Can approve:', this.canApproveLogo());
+    if (!this.order) return;
 
     this.confirmationService.confirm({
       message: 'Once approved, your logo will be marked as completed and ready for invoice.<br>All preview and revision files will be permanently deleted, and only final approved files will be saved. Are you sure you want to proceed?',
@@ -444,11 +467,9 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       acceptButtonStyleClass: 'p-button-primary',
       rejectButtonStyleClass: 'p-button-text',
       accept: () => {
-        console.log('Approval confirmed, calling API...');
         this.apiService.post(`revisions/orders/${this.order!.id}/approve-logo`, {})
           .pipe(takeUntil(this.destroy$)).subscribe({
-            next: (response) => {
-              console.log('Approval successful:', response);
+            next: () => {
               this.messageService.add({
                 severity: 'success',
                 summary: 'Success',
@@ -458,7 +479,6 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
               this.orderUpdated.emit();
             },
             error: (error) => {
-              console.error('Approval error:', error);
               this.messageService.add({
                 severity: 'error',
                 summary: 'Error',
@@ -467,9 +487,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
             }
           });
       },
-      reject: () => {
-        console.log('Approval cancelled by user');
-      }
+      reject: () => {}
     });
   }
 
@@ -509,8 +527,9 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
 
   // File download
   downloadFile(file: LogoFile): void {
-    // Use HttpClient to download with authentication token
-    this.apiService.getBlob(`files/${file.id}/download`).subscribe({
+    this.apiService.getBlob(`files/${file.id}/download`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
       next: (blob: Blob) => {
         // Create a blob URL and trigger download
         const url = window.URL.createObjectURL(blob);
@@ -614,6 +633,11 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       return false;
     }
     return true;
+  }
+
+  /** Admin: Designer uploaded preview files not yet sent to client */
+  hasPendingPreviewFiles(): boolean {
+    return (this.isAdmin || this.isSuperAdmin) && this.files.some(f => !f.isVisibleToClient);
   }
 
   canSendFiles(): boolean {
@@ -848,6 +872,8 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
         }
       });
   }
+
+  isOrderLocked = isOrderLocked;
 
   canUploadFiles(): boolean {
     if (!this.order) return false;

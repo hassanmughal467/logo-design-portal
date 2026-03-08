@@ -43,10 +43,13 @@ public class InvoicesController : ControllerBase
 
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(InvoiceResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetInvoiceById(Guid id)
     {
-        var invoice = await _invoiceService.GetInvoiceByIdAsync(id);
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var invoice = await _invoiceService.GetInvoiceByIdWithAccessAsync(id, userId, userRole);
         if (invoice == null)
         {
             return NotFound(new { error = "Invoice not found." });
@@ -124,17 +127,17 @@ public class InvoicesController : ControllerBase
 
     [HttpGet("{id}/logs")]
     [ProducesResponseType(typeof(List<InvoiceLogDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetInvoiceLogs(Guid id)
     {
-        // Verify invoice exists
-        var invoice = await _invoiceService.GetInvoiceByIdAsync(id);
-        if (invoice == null)
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var logs = await _invoiceService.GetInvoiceLogsWithAccessAsync(id, userId, userRole);
+        if (logs == null)
         {
             return NotFound(new { error = "Invoice not found." });
         }
-
-        var logs = await _invoiceService.GetInvoiceLogsAsync(id);
         return Ok(logs);
     }
 
@@ -181,10 +184,13 @@ public class InvoicesController : ControllerBase
 
     [HttpGet("{id}/download")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DownloadInvoice(Guid id)
     {
-        var invoice = await _invoiceService.GetInvoiceByIdAsync(id);
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var invoice = await _invoiceService.GetInvoiceByIdWithAccessAsync(id, userId, userRole);
         if (invoice == null)
         {
             return NotFound(new { error = "Invoice not found." });

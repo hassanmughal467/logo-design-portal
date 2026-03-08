@@ -256,6 +256,28 @@ public class PaymentService : IPaymentService
         return payment == null ? null : _mapper.Map<PaymentResponseDto>(payment);
     }
 
+    public async Task<PaymentResponseDto?> GetPaymentByIdWithAccessAsync(Guid paymentId, Guid userId, string? userRole)
+    {
+        var payment = await _context.Payments
+            .Include(p => p.Invoice)
+                .ThenInclude(i => i.Client)
+                    .ThenInclude(c => c.User)
+            .FirstOrDefaultAsync(p => p.Id == paymentId && !p.IsDeleted);
+
+        if (payment == null)
+        {
+            return null;
+        }
+
+        // Access control: Client can only access payments for their own invoices; Admin/SuperAdmin can access all
+        if (userRole == "Client" && payment.Invoice.Client.UserId != userId)
+        {
+            return null;
+        }
+
+        return _mapper.Map<PaymentResponseDto>(payment);
+    }
+
     public async Task<List<PaymentResponseDto>> GetPaymentsByInvoiceAsync(Guid invoiceId)
     {
         var payments = await _context.Payments
@@ -265,6 +287,26 @@ public class PaymentService : IPaymentService
             .ToListAsync();
 
         return _mapper.Map<List<PaymentResponseDto>>(payments);
+    }
+
+    public async Task<List<PaymentResponseDto>?> GetPaymentsByInvoiceWithAccessAsync(Guid invoiceId, Guid userId, string? userRole)
+    {
+        var invoice = await _context.Invoices
+            .Include(i => i.Client)
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
+
+        if (invoice == null)
+        {
+            return null;
+        }
+
+        // Access control: Client can only access payments for their own invoices; Admin/SuperAdmin can access all
+        if (userRole == "Client" && invoice.Client.UserId != userId)
+        {
+            return null;
+        }
+
+        return await GetPaymentsByInvoiceAsync(invoiceId);
     }
 
     public async Task<BankDetailsResponseDto> GetBankDetailsAsync()
@@ -440,6 +482,94 @@ public class PaymentService : IPaymentService
         await _context.SaveChangesAsync();
 
         return _mapper.Map<PaymentResponseDto>(payment);
+    }
+
+    public async Task<bool> VerifyPayPalWebhookSignatureAsync(string transmissionId, string transmissionTime, string transmissionSig, string authAlgo, string certUrl, string webhookEventJson)
+    {
+        try
+        {
+            var clientId = await _settingsService.GetSettingAsync("PayPalClientId");
+            var clientSecret = await _settingsService.GetSettingAsync("PayPalClientSecret");
+            var webhookId = await _settingsService.GetSettingAsync("PayPalWebhookId");
+            var useSandbox = (await _settingsService.GetSettingAsync("PayPalUseSandbox"))?.ToLower() == "true";
+
+            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+            {
+                _logger.LogWarning("PayPal credentials not configured for webhook verification");
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(webhookId))
+            {
+                _logger.LogWarning("PayPalWebhookId not configured. Add webhook ID from PayPal Developer Dashboard.");
+                return false;
+            }
+
+            var baseUrl = useSandbox
+                ? "https://api.sandbox.paypal.com"
+                : "https://api.paypal.com";
+
+            var httpClient = _httpClientFactory.CreateClient();
+
+            // Get access token
+            var tokenRequest = new Dictionary<string, string> { { "grant_type", "client_credentials" } };
+            var tokenRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/oauth2/token")
+            {
+                Content = new FormUrlEncodedContent(tokenRequest)
+            };
+            var credentials = Convert.ToBase64String(
+                System.Text.Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
+            tokenRequestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
+            var tokenResponse = await httpClient.SendAsync(tokenRequestMessage);
+
+            if (!tokenResponse.IsSuccessStatusCode)
+            {
+                _logger.LogError("Failed to get PayPal access token for webhook verification");
+                return false;
+            }
+
+            var tokenContent = await tokenResponse.Content.ReadAsStringAsync();
+            var tokenData = JsonSerializer.Deserialize<JsonElement>(tokenContent);
+            var accessToken = tokenData.GetProperty("access_token").GetString();
+
+            // Call PayPal verify-webhook-signature API
+            var verifyRequest = new
+            {
+                transmission_id = transmissionId,
+                transmission_time = transmissionTime,
+                transmission_sig = transmissionSig,
+                auth_algo = authAlgo,
+                cert_url = certUrl,
+                webhook_id = webhookId,
+                webhook_event = JsonSerializer.Deserialize<JsonElement>(webhookEventJson)
+            };
+
+            var verifyJson = JsonSerializer.Serialize(verifyRequest);
+            var verifyRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/notifications/verify-webhook-signature")
+            {
+                Content = new StringContent(verifyJson, System.Text.Encoding.UTF8, "application/json")
+            };
+            verifyRequestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+            var verifyResponse = await httpClient.SendAsync(verifyRequestMessage);
+
+            if (!verifyResponse.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("PayPal webhook verification API returned {StatusCode}", verifyResponse.StatusCode);
+                return false;
+            }
+
+            var verifyContent = await verifyResponse.Content.ReadAsStringAsync();
+            var verifyData = JsonSerializer.Deserialize<JsonElement>(verifyContent);
+            var status = verifyData.GetProperty("verification_status").GetString();
+
+            return status?.ToUpper() == "SUCCESS";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error verifying PayPal webhook signature");
+            return false;
+        }
     }
 
     // Private helper methods

@@ -29,6 +29,9 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
             .HasConversion<int>()
             .HasDefaultValue(NotificationReferenceType.Order);
 
+        builder.Property(e => e.RedirectUrl)
+            .HasMaxLength(500);
+
         builder.HasOne(e => e.User)
             .WithMany()
             .HasForeignKey(e => e.UserId)

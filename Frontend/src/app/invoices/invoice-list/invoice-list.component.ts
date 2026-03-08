@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { MessageService } from 'primeng/api';
 import { Subject, firstValueFrom } from 'rxjs';
@@ -98,12 +99,25 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private messageService: MessageService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private route: ActivatedRoute,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
     this.loadInvoices();
     this.loadStatistics();
+  }
+
+  /** Open invoice detail when navigated via /invoices/:id (e.g. from notification click) */
+  private openInvoiceFromRoute(): void {
+    const id = this.route.snapshot.paramMap.get('id');
+    if (!id) return;
+    const invoice = this.invoices.find(inv => inv.id === id || inv.id?.toLowerCase() === id?.toLowerCase());
+    if (invoice) {
+      this.openDetailDialog(invoice);
+      this.cdr.markForCheck();
+    }
   }
 
   loadStatistics(): void {
@@ -144,6 +158,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           this.calculateStats(invoices);
           this.loading = false;
           this.cdr.markForCheck();
+          this.openInvoiceFromRoute();
         },
         error: (error) => {
           console.error('Error loading invoices:', error);
@@ -152,6 +167,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           this.calculateStats(this.invoices);
           this.loading = false;
           this.cdr.markForCheck();
+          this.openInvoiceFromRoute();
         }
       });
   }

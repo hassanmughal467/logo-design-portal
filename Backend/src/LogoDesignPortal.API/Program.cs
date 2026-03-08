@@ -108,6 +108,12 @@ builder.Services.AddSingleton<LogoDesignPortal.Application.Interfaces.IRealtimeE
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// File storage initialization at startup (ensures directories exist before first upload)
+builder.Services.AddSingleton<LogoDesignPortal.API.Services.FileStorageInitializer>();
+
+// Orphan file cleanup - runs every 24 hours, scans preview (Temporary) storage only
+builder.Services.AddHostedService<LogoDesignPortal.API.Services.OrphanFileCleanupService>();
+
 // CORS - origins from config (appsettings.Production.json when deployed to IIS)
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? new[] { "http://localhost:4200", "https://localhost:4200", "http://localhost:83", "http://209.209.42.42", "http://209.209.42.42:83", "http://209.209.42.42:4200", "https://admin.hawkmerchandising.com" };
@@ -160,6 +166,10 @@ app.UseMiddleware<RateLimitingMiddleware>();
 
 app.MapControllers();
 app.MapHub<LogoDesignPortal.API.Hubs.NotificationHub>("/hubs/notifications");
+
+// Initialize file storage directories at startup (Files, Files/Temporary, Files/Permanent)
+var fileStorageInitializer = app.Services.GetRequiredService<LogoDesignPortal.API.Services.FileStorageInitializer>();
+fileStorageInitializer.Initialize();
 
 // Ensure database is created and seeded (async to avoid blocking startup)
 _ = Task.Run(async () =>
@@ -244,6 +254,7 @@ static async Task SeedPaymentSettingsAsync(ApplicationDbContext context, ILogger
             new { Key = "PayPalClientId", Value = "DUMMY_PAYPAL_CLIENT_ID_FOR_TESTING", Category = "Payment" },
             new { Key = "PayPalClientSecret", Value = "DUMMY_PAYPAL_CLIENT_SECRET_FOR_TESTING", Category = "Payment" },
             new { Key = "PayPalUseSandbox", Value = "true", Category = "Payment" },
+            new { Key = "PayPalWebhookId", Value = "", Category = "Payment" },
             
             // Wise Settings
             new { Key = "WiseApiKey", Value = "DUMMY_WISE_API_KEY_FOR_TESTING", Category = "Payment" },

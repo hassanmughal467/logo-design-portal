@@ -22,6 +22,8 @@ public class OrderResponseDto
     public string? StylePreferences { get; set; }
     public ClientInfoDto? Client { get; set; }
     public DesignerInfoDto? Designer { get; set; }
+    /// <summary>For Client view: masked display when designer is assigned (e.g. "Company Design Team"). Admin/SuperAdmin see full Designer.</summary>
+    public string? AssignedDesignerDisplayName { get; set; }
     public int FileCount { get; set; }
     public int VisibleFileCount { get; set; } // Files visible to current user
     public int RevisionCount { get; set; }

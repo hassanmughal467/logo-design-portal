@@ -245,6 +245,29 @@ public class InvoiceService : IInvoiceService
         return MapToInvoiceResponseDto(invoice);
     }
 
+    public async Task<InvoiceResponseDto?> GetInvoiceByIdWithAccessAsync(Guid invoiceId, Guid userId, string? userRole)
+    {
+        var invoice = await _context.Invoices
+            .Include(i => i.Client)
+                .ThenInclude(c => c.User)
+            .Include(i => i.InvoiceOrders)
+                .ThenInclude(io => io.Order)
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
+
+        if (invoice == null)
+        {
+            return null;
+        }
+
+        // Access control: Client can only access their own invoices; Admin/SuperAdmin can access all
+        if (userRole == "Client" && invoice.Client.UserId != userId)
+        {
+            return null;
+        }
+
+        return MapToInvoiceResponseDto(invoice);
+    }
+
     public async Task<List<InvoiceResponseDto>> GetInvoicesAsync(Guid? userId, string? userRole)
     {
         var query = _context.Invoices
@@ -486,6 +509,16 @@ public class InvoiceService : IInvoiceService
 
             return dto;
         }).ToList();
+    }
+
+    public async Task<List<InvoiceLogDto>?> GetInvoiceLogsWithAccessAsync(Guid invoiceId, Guid userId, string? userRole)
+    {
+        var invoice = await GetInvoiceByIdWithAccessAsync(invoiceId, userId, userRole);
+        if (invoice == null)
+        {
+            return null;
+        }
+        return await GetInvoiceLogsAsync(invoiceId);
     }
 
     public async Task UpdateOverdueInvoicesAsync()

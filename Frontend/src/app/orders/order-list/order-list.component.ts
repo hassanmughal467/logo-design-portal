@@ -8,6 +8,7 @@ import { FileUpload } from 'primeng/fileupload';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus, OrderPriority } from '@shared/models/order.model';
+import { isOrderLocked as checkOrderLocked } from '@shared/utils/order-locking';
 
 interface SummaryCard {
   label: string;
@@ -150,6 +151,10 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   private handleOrderUpdate(data: { orderId: string; status?: string; invoiceId?: string }): void {
     const orderId = data.orderId?.toLowerCase?.() ?? data.orderId;
+    if (orderId === '**reconnect**') {
+      this.loadOrders();
+      return;
+    }
     const existing = this.orders.find(o => (o.id ?? '').toLowerCase() === orderId);
     if (existing) {
       if (data.status) {
@@ -445,7 +450,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
         firstName: (backendOrder.designer || backendOrder.Designer)?.firstName || (backendOrder.designer || backendOrder.Designer)?.FirstName || '',
         lastName: (backendOrder.designer || backendOrder.Designer)?.lastName || (backendOrder.designer || backendOrder.Designer)?.LastName || '',
         email: (backendOrder.designer || backendOrder.Designer)?.email || (backendOrder.designer || backendOrder.Designer)?.Email
-      } : undefined
+      } : undefined,
+      assignedDesignerDisplayName: backendOrder.assignedDesignerDisplayName || backendOrder.AssignedDesignerDisplayName
     };
   }
 
@@ -585,6 +591,10 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   canUploadFiles(): boolean {
     return this.isAdmin || this.isSuperAdmin || this.isDesigner;
+  }
+
+  isOrderLocked(status: string | undefined | null): boolean {
+    return checkOrderLocked(status);
   }
 
   canGenerateInvoice(order: Order): boolean {
@@ -771,14 +781,25 @@ export class OrderListComponent implements OnInit, OnDestroy {
     const files: File[] = event.files ? Array.from(event.files) : [];
     if (files.length === 0) return;
 
-    const maxSize = 10 * 1024 * 1024;
-    const invalidFiles = files.filter(file => file.size > maxSize);
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const vectorExtensions = ['.svg', '.pdf', '.ai', '.eps', '.psd'];
+    const imageMaxBytes = 10 * 1024 * 1024;  // 10MB
+    const vectorMaxBytes = 25 * 1024 * 1024;  // 25MB
+
+    const getMaxSize = (fileName: string): number => {
+      const ext = '.' + (fileName.split('.').pop() || '').toLowerCase();
+      if (imageExtensions.includes(ext)) return imageMaxBytes;
+      if (vectorExtensions.includes(ext)) return vectorMaxBytes;
+      return imageMaxBytes;
+    };
+
+    const invalidFiles = files.filter(file => file.size > getMaxSize(file.name));
     if (invalidFiles.length > 0) {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: `${invalidFiles.length} file(s) exceed the 10MB limit` });
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: `${invalidFiles.length} file(s) exceed allowed size (images: 10MB, vector/docs: 25MB)` });
     }
 
     const validFiles = files.filter(file => {
-      if (file.size > maxSize) return false;
+      if (file.size > getMaxSize(file.name)) return false;
       return !this.selectedFiles.some(ef => ef.name === file.name && ef.size === file.size);
     });
 

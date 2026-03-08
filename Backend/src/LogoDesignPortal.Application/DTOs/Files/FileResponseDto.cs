@@ -22,4 +22,8 @@ public class FileResponseDto
     public string? ApprovedByName { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public DateTime CreatedAt { get; set; }
+    /// <summary>
+    /// Groups preview files from same designer upload session. Admin sends by batch.
+    /// </summary>
+    public Guid? PreviewBatchId { get; set; }
 }

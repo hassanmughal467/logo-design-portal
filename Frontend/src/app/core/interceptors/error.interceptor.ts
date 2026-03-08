@@ -15,10 +15,8 @@ export class ErrorInterceptor implements HttpInterceptor {
   ) {}
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    console.log('HTTP Request intercepted:', request.method, request.url);
     return next.handle(request).pipe(
       catchError((error: HttpErrorResponse) => {
-        console.error('HTTP Error intercepted:', error.status, error.url, error.error);
         let errorMessage = 'An unknown error occurred';
 
         if (error.error instanceof ErrorEvent) {
@@ -66,10 +64,8 @@ export class ErrorInterceptor implements HttpInterceptor {
                   summary: 'Access Denied',
                   detail: errorMessage
                 });
-              } else {
-                // Silently handle expected 403 errors - these are handled gracefully by the services
-                console.log('403 error on endpoint - silently handled (expected for some user roles):', requestUrl || errorUrl);
               }
+              // Expected 403 on certain endpoints - services handle gracefully, no toast needed
               break;
 
             case 404:

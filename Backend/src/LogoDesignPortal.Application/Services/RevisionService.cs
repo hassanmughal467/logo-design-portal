@@ -24,7 +24,11 @@ public class RevisionService : IRevisionService
     private readonly string _fileStoragePath;
     private readonly string _temporaryStoragePath;
     private readonly string _permanentStoragePath;
-    private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+
+    private static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+    private static readonly string[] VectorExtensions = { ".svg", ".pdf", ".ai", ".eps", ".psd" };
+    private const long ImageMaxBytes = 10 * 1024 * 1024; // 10MB
+    private const long VectorMaxBytes = 25 * 1024 * 1024; // 25MB
 
     public RevisionService(
         IApplicationDbContext context,
@@ -61,6 +65,25 @@ public class RevisionService : IRevisionService
         {
             _logger.LogWarning(ex, "Cannot create file storage directories at {Path}. Revision uploads will fail until write permissions are granted to the IIS App Pool identity.", _fileStoragePath);
         }
+    }
+
+    private static long GetMaxSizeForExtension(string extension)
+    {
+        var ext = extension.ToLowerInvariant();
+        if (ImageExtensions.Contains(ext)) return ImageMaxBytes;
+        if (VectorExtensions.Contains(ext)) return VectorMaxBytes;
+        return ImageMaxBytes;
+    }
+
+    private static void ValidateRevisionFile(IFormFile file)
+    {
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var allowed = ImageExtensions.Concat(VectorExtensions).Distinct().ToArray();
+        if (!allowed.Contains(ext))
+            throw new InvalidOperationException($"File type '{ext}' is not allowed for file '{file.FileName}'.");
+        var maxSize = GetMaxSizeForExtension(ext);
+        if (file.Length > maxSize)
+            throw new InvalidOperationException($"File '{file.FileName}' exceeds maximum allowed size ({(ImageExtensions.Contains(ext) ? "10MB" : "25MB")}).");
     }
 
     public async Task<bool> CanRequestRevisionAsync(Guid orderId, Guid userId, string userRole)
@@ -116,6 +139,9 @@ public class RevisionService : IRevisionService
         if (order == null)
             throw new InvalidOperationException("Order not found.");
 
+        if (OrderLockingHelper.IsOrderLocked(order.Status))
+            throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
+
         if (order.Client.UserId != requestedBy)
             throw new ForbiddenAccessException("You don't have permission to request revision for this order.");
 
@@ -157,19 +183,14 @@ public class RevisionService : IRevisionService
         // Upload revision files if provided
         if (request.Files != null && request.Files.Length > 0)
         {
-            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".svg", ".pdf", ".ai", ".eps", ".psd" };
-            
             foreach (var file in request.Files)
             {
                 if (file == null || file.Length == 0)
                     continue;
 
-                if (file.Length > MaxFileSize)
-                    throw new InvalidOperationException($"File '{file.FileName}' exceeds maximum allowed size (10MB).");
+                ValidateRevisionFile(file);
 
                 var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
-                if (!allowedExtensions.Contains(fileExtension))
-                    throw new InvalidOperationException($"File type '{fileExtension}' is not allowed for file '{file.FileName}'.");
 
                 var fileName = $"{Guid.NewGuid()}{fileExtension}";
                 var filePath = Path.Combine(_temporaryStoragePath, fileName);
@@ -202,13 +223,15 @@ public class RevisionService : IRevisionService
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = requestedBy;
 
+        _logger.LogInformation("RevisionRequested. OrderId={OrderId}, UserId={UserId}", orderId, requestedBy);
+
         // Create audit log
         await CreateAuditLogAsync("RequestRevision", "Order", orderId, requestedBy,
             $"Revision requested: {request.Instructions}");
 
         await _context.SaveChangesAsync();
 
-        // Notify Admin and Designer: Client rejected preview (revision requested)
+        // Notify Admin and Designer: Client requested revision
         try
         {
             var clientName = await _context.Users
@@ -217,8 +240,8 @@ public class RevisionService : IRevisionService
                 .FirstOrDefaultAsync() ?? "Client";
             if (string.IsNullOrEmpty(clientName)) clientName = "Client";
             var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
-            var title = "Preview Rejected";
-            var message = $"{clientName} rejected the preview for order (#{orderNumber})";
+            var title = "Revision Requested";
+            var message = $"{clientName} requested a revision for order (#{orderNumber})";
             await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId, requestedBy);
             await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, message, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId, requestedBy);
             if (order.DesignerId.HasValue)
@@ -525,21 +548,46 @@ public class RevisionService : IRevisionService
         return _mapper.Map<OrderResponseDto>(updatedOrder);
     }
 
+    /// <summary>
+    /// Deletes only designer-uploaded preview files. Never deletes Reference or Final files.
+    /// Rule: FileType = Preview AND UploadedBy = Designer (for this order).
+    /// </summary>
     private async Task DeletePreviewFilesAsync(Guid orderId)
     {
-        var previewFiles = await _context.LogoFiles
-            .Where(f => f.OrderId == orderId && f.FileType == FileType.Preview && !f.IsDeleted)
-            .ToListAsync();
+        var order = await _context.LogoOrders
+            .Include(o => o.Designer)
+            .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
-        foreach (var file in previewFiles)
+        List<LogoFile> previewFilesToDelete;
+        if (order?.DesignerId == null)
+        {
+            previewFilesToDelete = await _context.LogoFiles
+                .Where(f => f.OrderId == orderId && f.FileType == FileType.Preview && !f.IsDeleted)
+                .ToListAsync();
+        }
+        else
+        {
+            var designerUserId = await _context.DesignerProfiles
+                .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
+                .Select(d => d.UserId)
+                .FirstOrDefaultAsync();
+
+            previewFilesToDelete = await _context.LogoFiles
+                .Where(f => f.OrderId == orderId
+                    && f.FileType == FileType.Preview
+                    && f.UploadedBy == designerUserId
+                    && !f.IsDeleted)
+                .ToListAsync();
+        }
+
+        foreach (var file in previewFilesToDelete)
         {
             if (System.IO.File.Exists(file.FilePath))
             {
                 System.IO.File.Delete(file.FilePath);
             }
         }
-
-        _context.LogoFiles.RemoveRange(previewFiles);
+        _context.LogoFiles.RemoveRange(previewFilesToDelete);
     }
 
     private async Task DeleteRevisionFilesAsync(Guid orderId)

@@ -198,12 +198,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // Real-time order updates: refresh dashboard when order events arrive
     this.realtimeNotification.orderUpdates$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.handleOrderUpdate());
+      .subscribe((data) => this.handleOrderUpdate(data));
   }
 
-  private handleOrderUpdate(): void {
-    // Refresh dashboard so order grids and stats stay in sync
-    if (this.user) {
+  private handleOrderUpdate(data?: { orderId?: string }): void {
+    // On reconnect, always refresh to recover from missed events
+    if (data?.orderId === '**reconnect**' || this.user) {
       this.loadDashboardData();
     }
   }
@@ -696,6 +696,35 @@ export class DashboardComponent implements OnInit, OnDestroy {
   navigateToOrder(orderId: string): void {
     this.selectedOrderId = orderId;
     this.showOrderDetailModal = true;
+  }
+
+  /** Navigate to the appropriate page when clicking a notification */
+  onNotificationClick(notification: any): void {
+    const url = notification.redirectUrl?.trim();
+    if (url) {
+      this.router.navigateByUrl(url.startsWith('/') ? url : `/${url}`);
+      return;
+    }
+    const refType = (notification.referenceType ?? 'Order').toLowerCase();
+    const refId = notification.referenceId ?? notification.orderId;
+    const orderId = notification.orderId ?? (refType === 'order' ? refId : null);
+    switch (refType) {
+      case 'order':
+        if (refId) this.router.navigate(['/orders', refId]);
+        break;
+      case 'invoice':
+        if (refId) this.router.navigate(['/invoices', refId]);
+        break;
+      case 'message':
+        if (orderId) this.router.navigate(['/orders', orderId]);
+        else if (refId) this.router.navigate(['/messages']);
+        break;
+      case 'system':
+        this.router.navigate(['/users']);
+        break;
+      default:
+        if (orderId || refId) this.router.navigate(['/orders', orderId ?? refId]);
+    }
   }
 
   onOrderDetailClose(): void {

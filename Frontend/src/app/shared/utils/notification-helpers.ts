@@ -62,7 +62,7 @@ export function getActionLabel(notification: Notification): string | null {
 
 /** Whether the notification has a navigable target */
 export function hasNavigableTarget(notification: Notification): boolean {
-  return !!(notification.referenceId ?? notification.orderId);
+  return !!(notification.redirectUrl?.trim() || (notification.referenceId ?? notification.orderId));
 }
 
 /** Format reference ID as user-friendly display: Order #ORD-6806CDB7 or Invoice #INV-6806CDB7 */

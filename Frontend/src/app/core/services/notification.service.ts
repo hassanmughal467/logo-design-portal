@@ -121,6 +121,7 @@ export class NotificationService implements OnDestroy {
       type: n.type ?? n.Type ?? 'Info',
       referenceType: n.referenceType ?? n.ReferenceType,
       referenceId: n.referenceId ?? n.ReferenceId ? String(n.referenceId ?? n.ReferenceId) : undefined,
+      redirectUrl: n.redirectUrl ?? n.RedirectUrl ?? undefined,
       isRead: n.isRead ?? n.IsRead ?? false,
       readAt: n.readAt ?? n.ReadAt,
       createdAt: new Date(n.createdAt ?? n.CreatedAt ?? Date.now()),

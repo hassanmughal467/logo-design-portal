@@ -53,6 +53,7 @@ public class NotificationService : INotificationService
             existing.LastOccurrenceAt = now;
             existing.Message = NotificationMessageAggregator.BuildAggregatedMessage(message, existing.AggregationCount);
             existing.UpdatedAt = now;
+            existing.RedirectUrl ??= NotificationRedirectHelper.BuildRedirectUrl(referenceType, refId, orderId);
 
             await _context.SaveChangesAsync();
 
@@ -60,6 +61,8 @@ public class NotificationService : INotificationService
             await _realtimeSender.SendNotificationToUserAsync(userId, dto);
             return dto;
         }
+
+        var redirectUrl = NotificationRedirectHelper.BuildRedirectUrl(referenceType, refId, orderId);
 
         var notification = new Notification
         {
@@ -71,6 +74,7 @@ public class NotificationService : INotificationService
             Type = type,
             ReferenceType = referenceType,
             ReferenceId = refId,
+            RedirectUrl = redirectUrl,
             IsRead = false,
             CreatedAt = now,
             CreatedBy = createdBy,
@@ -138,13 +142,8 @@ public class NotificationService : INotificationService
                 if (user != null && !string.IsNullOrEmpty(user.Email))
                 {
                     var frontendUrl = _configuration["Email:FrontendUrl"] ?? "http://localhost:4200";
-                    var link = dto.ReferenceType switch
-                    {
-                        "Order" when dto.ReferenceId.HasValue => $"{frontendUrl}/orders/{dto.ReferenceId}",
-                        "Invoice" when dto.ReferenceId.HasValue => $"{frontendUrl}/invoices/{dto.ReferenceId}",
-                        "Message" when dto.OrderId.HasValue => $"{frontendUrl}/orders/{dto.OrderId}/messages",
-                        _ => $"{frontendUrl}/notifications"
-                    };
+                    var path = !string.IsNullOrEmpty(dto.RedirectUrl) ? dto.RedirectUrl.TrimStart('/') : "notifications";
+                    var link = $"{frontendUrl.TrimEnd('/')}/{path}";
                     var htmlBody = $@"
 <!DOCTYPE html>
 <html>

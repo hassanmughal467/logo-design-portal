@@ -22,6 +22,7 @@ public class FilesController : ControllerBase
     }
 
     [HttpPost("upload/{orderId}")]
+    [RequestSizeLimit(50 * 1024 * 1024)]
     [ProducesResponseType(typeof(FileUploadResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UploadFile(Guid orderId, IFormFile file, [FromForm] string? fileType = "Reference", [FromForm] string? description = null)
@@ -44,6 +45,7 @@ public class FilesController : ControllerBase
     }
 
     [HttpPost("upload-multiple/{orderId}")]
+    [RequestSizeLimit(50 * 1024 * 1024)]
     [ProducesResponseType(typeof(List<FileUploadResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UploadMultipleFiles(Guid orderId, [FromForm] IFormFile[] files, [FromForm] string? fileType = "Reference", [FromForm] string? description = null)

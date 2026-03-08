@@ -9,6 +9,10 @@ public class NotificationResponseDto
     public string Type { get; set; } = string.Empty;
     public string ReferenceType { get; set; } = "Order";
     public Guid? ReferenceId { get; set; }
+    /// <summary>
+    /// Frontend route to navigate when the notification is clicked (e.g. /orders/123, /invoices/456).
+    /// </summary>
+    public string? RedirectUrl { get; set; }
     public bool IsRead { get; set; }
     public DateTime? ReadAt { get; set; }
     public DateTime CreatedAt { get; set; }

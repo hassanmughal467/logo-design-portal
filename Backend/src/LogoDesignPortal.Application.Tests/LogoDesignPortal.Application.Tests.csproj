@@ -21,11 +21,14 @@
     </PackageReference>
     <PackageReference Include="Moq" Version="4.20.70" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\LogoDesignPortal.Application\LogoDesignPortal.Application.csproj" />
     <ProjectReference Include="..\LogoDesignPortal.Domain\LogoDesignPortal.Domain.csproj" />
+    <ProjectReference Include="..\LogoDesignPortal.Infrastructure\LogoDesignPortal.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

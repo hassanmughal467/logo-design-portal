@@ -12,6 +12,16 @@ public interface IRealtimeEntityUpdateSender
     Task SendOrderCreatedAsync(Guid orderId, IEnumerable<Guid> userIds);
 
     /// <summary>
+    /// Notifies when admin assigns a designer to an order. Sent to Designer.
+    /// </summary>
+    Task SendOrderAssignedAsync(Guid orderId, Guid designerUserId);
+
+    /// <summary>
+    /// Notifies when designer uploads preview files. Sent to Admin/SuperAdmin.
+    /// </summary>
+    Task SendPreviewUploadedAsync(Guid orderId, IEnumerable<Guid> adminUserIds);
+
+    /// <summary>
     /// Notifies when order status changes (e.g. admin marks Completed).
     /// </summary>
     Task SendOrderStatusChangedAsync(Guid orderId, string status, Guid? updatedBy, IEnumerable<Guid> userIds);

@@ -40,6 +40,42 @@ public class OrdersController : ControllerBase
         }
     }
 
+    [HttpPost("with-files")]
+    [Authorize(Roles = "Client")]
+    [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [RequestSizeLimit(50 * 1024 * 1024)]
+    public async Task<IActionResult> CreateOrderWithFiles([FromForm] string order, [FromForm] IFormFileCollection files, [FromForm] string? description = null)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(order))
+                return BadRequest(new { error = "Order data is required." });
+            if (files == null || files.Count == 0)
+                return BadRequest(new { error = "At least one reference file is required." });
+
+            var request = System.Text.Json.JsonSerializer.Deserialize<CreateOrderRequestDto>(order, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (request == null)
+                return BadRequest(new { error = "Invalid order data." });
+
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                return Unauthorized(new { error = "User identity could not be determined." });
+
+            var fileArray = files.ToArray();
+            var result = await _orderService.CreateOrderWithFilesAsync(request, fileArray, userId, description);
+            return CreatedAtAction(nameof(GetOrderById), new { id = result.Id }, result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            return BadRequest(new { error = $"Invalid order JSON: {ex.Message}" });
+        }
+    }
+
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -214,6 +250,26 @@ public class OrdersController : ControllerBase
         }
     }
 
+    [HttpPost("{id}/send-preview-batch")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SendPreviewBatchToClient(Guid id, [FromBody] SendPreviewBatchRequestDto? request)
+    {
+        try
+        {
+            if (request == null)
+                return BadRequest(new { error = "PreviewBatchId is required." });
+            var sentBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var order = await _orderService.SendPreviewBatchToClientAsync(id, request.PreviewBatchId, sentBy);
+            return Ok(order);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPut("{id}")]
     [Authorize(Roles = "Client")]
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
@@ -336,12 +392,20 @@ public class OrdersController : ControllerBase
     [HttpGet("{id}/logs")]
     [Authorize]
     [ProducesResponseType(typeof(List<OrderLogResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetOrderLogs(Guid id)
     {
         try
         {
-            var logs = await _orderService.GetOrderLogsAsync(id);
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            var logs = await _orderService.GetOrderLogsWithAccessAsync(id, userId, userRole);
             return Ok(logs);
+        }
+        catch (ForbiddenAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
         catch (Exception ex)
         {

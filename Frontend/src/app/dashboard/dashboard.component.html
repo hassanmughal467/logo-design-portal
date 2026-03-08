@@ -460,7 +460,7 @@
           <p class="empty-text">No notifications</p>
         </div>
         <div class="notifications-list" *ngIf="notifications.length > 0">
-          <div class="notification-item" *ngFor="let notification of notifications" [class.unread]="!notification.isRead" (click)="notification.orderId && navigateToOrder(notification.orderId)" [style.cursor]="notification.orderId ? 'pointer' : 'default'">
+          <div class="notification-item" *ngFor="let notification of notifications" [class.unread]="!notification.isRead" (click)="onNotificationClick(notification)" [style.cursor]="(notification.redirectUrl || notification.referenceId || notification.orderId) ? 'pointer' : 'default'">
             <div class="notification-icon">
               <i [class]="'pi ' + (notification.type?.includes('Order') ? 'pi-shopping-cart' : 'pi-file')"></i>
             </div>
@@ -547,7 +547,7 @@
           <p class="empty-text">No notifications</p>
         </div>
         <div class="notifications-list" *ngIf="notifications.length > 0">
-          <div class="notification-item" *ngFor="let notification of notifications" [class.unread]="!notification.isRead" (click)="notification.orderId && navigateToOrder(notification.orderId)" [style.cursor]="notification.orderId ? 'pointer' : 'default'">
+          <div class="notification-item" *ngFor="let notification of notifications" [class.unread]="!notification.isRead" (click)="onNotificationClick(notification)" [style.cursor]="(notification.redirectUrl || notification.referenceId || notification.orderId) ? 'pointer' : 'default'">
             <div class="notification-icon">
               <i [class]="'pi ' + (notification.type?.includes('Order') ? 'pi-shopping-cart' : 'pi-file')"></i>
             </div>

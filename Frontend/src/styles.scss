@@ -720,3 +720,13 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-color);
 }
+
+/* Notification dropdown items - pointer cursor and unread highlight (overlay may render outside component) */
+.notification-dropdown-item {
+  cursor: pointer !important;
+
+  &.unread {
+    background: rgba(33, 150, 243, 0.08) !important;
+    border-left: 3px solid #2196F3 !important;
+  }
+}

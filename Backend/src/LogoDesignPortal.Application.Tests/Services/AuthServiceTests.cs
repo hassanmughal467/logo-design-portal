@@ -30,6 +30,7 @@ public class AuthServiceTests
             _contextMock.Object,
             _jwtTokenServiceMock.Object,
             _emailServiceMock.Object,
+            Mock.Of<LogoDesignPortal.Application.Interfaces.INotificationService>(),
             _configurationMock.Object
         );
     }

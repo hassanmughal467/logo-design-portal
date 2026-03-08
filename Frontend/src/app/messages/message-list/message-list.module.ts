@@ -10,6 +10,9 @@ import { CardModule } from 'primeng/card';
 import { TooltipModule } from 'primeng/tooltip';
 import { InputTextModule } from 'primeng/inputtext';
 import { BadgeModule } from 'primeng/badge';
+import { DialogModule } from 'primeng/dialog';
+import { DropdownModule } from 'primeng/dropdown';
+import { InputTextareaModule } from 'primeng/inputtextarea';
 
 @NgModule({
   declarations: [MessageListComponent],
@@ -21,7 +24,10 @@ import { BadgeModule } from 'primeng/badge';
     CardModule,
     TooltipModule,
     InputTextModule,
-    BadgeModule
+    BadgeModule,
+    DialogModule,
+    DropdownModule,
+    InputTextareaModule
   ]
 })
 export class MessageListModule { }

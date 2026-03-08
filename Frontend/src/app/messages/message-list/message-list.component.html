@@ -77,6 +77,22 @@
               pTooltip="Mark as Read"
               tooltipPosition="top">
             </p-button>
+            <p-button 
+              *ngIf="isAdmin && message.requiresAdminApproval && !message.isRejected && !message.forwardedByAdmin"
+              icon="pi pi-send" 
+              styleClass="p-button-text p-button-rounded p-button-sm p-button-success"
+              (onClick)="openForwardDialog(message)"
+              pTooltip="Forward"
+              tooltipPosition="top">
+            </p-button>
+            <p-button 
+              *ngIf="isAdmin && message.requiresAdminApproval && !message.isRejected"
+              icon="pi pi-times" 
+              styleClass="p-button-text p-button-rounded p-button-sm p-button-danger"
+              (onClick)="rejectMessage(message)"
+              pTooltip="Reject"
+              tooltipPosition="top">
+            </p-button>
           </td>
         </tr>
       </ng-template>
@@ -93,4 +109,41 @@
       </ng-template>
     </p-table>
   </p-card>
+
+  <!-- Forward Message Dialog (Admin) -->
+  <p-dialog 
+    [(visible)]="showForwardDialog" 
+    header="Forward Message" 
+    [modal]="true"
+    [style]="{width: '500px'}"
+    [closable]="true"
+    (onHide)="showForwardDialog = false">
+    <div class="forward-dialog-content" *ngIf="selectedMessage">
+      <p><strong>Original:</strong> {{ selectedMessage.content }}</p>
+      <div class="form-group">
+        <label>Forward to</label>
+        <p-dropdown 
+          [(ngModel)]="forwardTargetUserId"
+          [options]="availableForwardTargets"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select recipient"
+          [styleClass]="'w-full'">
+        </p-dropdown>
+      </div>
+      <div class="form-group">
+        <label>Edit message (optional)</label>
+        <textarea 
+          pInputTextarea 
+          [(ngModel)]="forwardEditedContent"
+          rows="4"
+          class="w-full">
+        </textarea>
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button label="Cancel" icon="pi pi-times" (onClick)="showForwardDialog = false" [styleClass]="'p-button-text'"></p-button>
+      <p-button label="Forward" icon="pi pi-send" (onClick)="forwardMessage()" [disabled]="!forwardTargetUserId" severity="success"></p-button>
+    </ng-template>
+  </p-dialog>
 </div>

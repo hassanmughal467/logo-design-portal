@@ -55,5 +55,7 @@ public class LogoFileConfiguration : IEntityTypeConfiguration<LogoFile>
             .WithMany()
             .HasForeignKey(e => e.ApprovedBy)
             .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasIndex(e => e.PreviewBatchId);
     }
 }

@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ApiService } from '@core/services/api.service';
+import { AuthService } from '@core/services/auth.service';
 import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -16,6 +17,10 @@ export interface Message {
   isRead: boolean;
   readAt?: Date;
   createdAt: Date;
+  requiresAdminApproval?: boolean;
+  forwardedByAdmin?: boolean;
+  originalSenderRole?: string;
+  isRejected?: boolean;
 }
 
 @Component({
@@ -30,15 +35,23 @@ export class MessageListComponent implements OnInit, OnDestroy {
   first = 0;
   rows = 10;
   unreadCount = 0;
+  isAdmin = false;
+  showForwardDialog = false;
+  selectedMessage: Message | null = null;
+  forwardTargetUserId = '';
+  forwardEditedContent = '';
+  availableForwardTargets: { label: string; value: string }[] = [];
 
   private destroy$ = new Subject<void>();
 
   constructor(
     private apiService: ApiService,
+    private authService: AuthService,
     private messageService: MessageService
   ) {}
 
   ngOnInit(): void {
+    this.isAdmin = this.authService.getCurrentUser()?.role === 'Admin' || this.authService.getCurrentUser()?.role === 'SuperAdmin';
     this.loadMessages();
   }
 
@@ -66,7 +79,11 @@ export class MessageListComponent implements OnInit, OnDestroy {
             content: m.content,
             isRead: m.isRead,
             readAt: m.readAt,
-            createdAt: m.createdAt
+            createdAt: m.createdAt,
+            requiresAdminApproval: m.requiresAdminApproval,
+            forwardedByAdmin: m.forwardedByAdmin,
+            originalSenderRole: m.originalSenderRole,
+            isRejected: m.isRejected
           }));
           this.unreadCount = this.messages.filter(m => !m.isRead).length;
           this.loading = false;
@@ -90,6 +107,69 @@ export class MessageListComponent implements OnInit, OnDestroy {
           }
         }
       });
+  }
+
+  openForwardDialog(msg: Message): void {
+    this.selectedMessage = msg;
+    this.forwardEditedContent = msg.content;
+    this.forwardTargetUserId = '';
+    this.loadForwardTargets(msg);
+    this.showForwardDialog = true;
+  }
+
+  loadForwardTargets(msg: Message): void {
+    if (!msg.orderId) {
+      this.availableForwardTargets = [];
+      return;
+    }
+    this.apiService.get<any>(`orders/${msg.orderId}`).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (order) => {
+        const targets: { label: string; value: string }[] = [];
+        const d = order.designer || order.Designer;
+        const c = order.client || order.Client;
+        if (msg.originalSenderRole === 'Client' && d?.userId) {
+          const name = `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Designer';
+          targets.push({ label: `Designer: ${name}`, value: d.userId });
+        }
+        if (msg.originalSenderRole === 'Designer' && c?.userId) {
+          const label = c.companyName || `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Client';
+          targets.push({ label: `Client: ${label}`, value: c.userId });
+        }
+        this.availableForwardTargets = targets;
+      },
+      error: () => { this.availableForwardTargets = []; }
+    });
+  }
+
+  forwardMessage(): void {
+    if (!this.selectedMessage || !this.forwardTargetUserId) return;
+    this.apiService.post('messages/forward', {
+      messageId: this.selectedMessage.id,
+      targetUserId: this.forwardTargetUserId,
+      editedContent: this.forwardEditedContent || undefined
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Message forwarded' });
+        this.showForwardDialog = false;
+        this.selectedMessage = null;
+        this.loadMessages();
+      },
+      error: (err) => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to forward' });
+      }
+    });
+  }
+
+  rejectMessage(msg: Message): void {
+    this.apiService.post('messages/reject', { messageId: msg.id }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.messageService.add({ severity: 'info', summary: 'Rejected', detail: 'Message rejected' });
+        this.loadMessages();
+      },
+      error: (err) => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to reject' });
+      }
+    });
   }
 
   formatDate(date: Date | string | undefined): string {

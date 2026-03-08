@@ -118,6 +118,23 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
     return `${days.toFixed(1)} days`;
   }
 
+  getStatusSeverity(status: string): string {
+    const severityMap: { [key: string]: string } = {
+      'Pending': 'warning',
+      'InProgress': 'info',
+      'WaitingForAdminApproval': 'warning',
+      'PriceApprovalPending': 'info',
+      'Assigned': 'info',
+      'PreviewUploaded': 'info',
+      'Approved': 'success',
+      'FinalApproved': 'success',
+      'Completed': 'success',
+      'Cancelled': 'danger',
+      'RevisionRequested': 'warn'
+    };
+    return severityMap[status] || 'secondary';
+  }
+
   goBack(): void {
     this.router.navigate(['/designers']);
   }

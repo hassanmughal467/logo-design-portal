@@ -11,14 +11,23 @@ public class RateLimitingMiddleware
     private const int MaxRequestsPerMinute = 60;
     private const int MaxAuthRequestsPerMinute = 5; // Stricter for auth endpoints
 
-    public RateLimitingMiddleware(RequestDelegate next, ILogger<RateLimitingMiddleware> logger)
+    private readonly bool _isRateLimitDisabled;
+
+    public RateLimitingMiddleware(RequestDelegate next, ILogger<RateLimitingMiddleware> logger, IWebHostEnvironment env)
     {
         _next = next;
         _logger = logger;
+        _isRateLimitDisabled = env.IsDevelopment() || string.Equals(Environment.GetEnvironmentVariable("DISABLE_RATE_LIMIT"), "true", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
+        if (_isRateLimitDisabled)
+        {
+            await _next(context);
+            return;
+        }
+
         // Skip rate limiting for CORS preflight requests
         if (context.Request.Method == "OPTIONS")
         {

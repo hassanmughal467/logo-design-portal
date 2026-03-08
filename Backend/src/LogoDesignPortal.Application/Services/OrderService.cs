@@ -7,6 +7,7 @@ using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -19,67 +20,22 @@ public class OrderService : IOrderService
     private readonly IMapper _mapper;
     private readonly INotificationService _notificationService;
     private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
+    private readonly IFileService _fileService;
     private readonly ILogger<OrderService> _logger;
 
-    public OrderService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender, ILogger<OrderService> logger)
+    public OrderService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender, IFileService fileService, ILogger<OrderService> logger)
     {
         _context = context;
         _mapper = mapper;
         _notificationService = notificationService;
         _entityUpdateSender = entityUpdateSender;
+        _fileService = fileService;
         _logger = logger;
     }
 
     public async Task<OrderResponseDto> CreateOrderAsync(CreateOrderRequestDto request, Guid clientId)
     {
-        var client = await _context.ClientProfiles
-            .Include(c => c.User)
-            .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
-
-        // Fallback for legacy clients without profile (before CompanyName was mandatory)
-        if (client == null)
-        {
-            var user = await _context.Users
-                .Include(u => u.Role)
-                .FirstOrDefaultAsync(u => u.Id == clientId && !u.IsDeleted);
-
-            if (user == null || user.Role?.Name != "Client")
-            {
-                throw new InvalidOperationException("Client profile not found. Please ensure the client has a company name set in their profile.");
-            }
-
-            // Check for soft-deleted profile (UserId has unique constraint - can't create duplicate)
-            var deletedProfile = await _context.ClientProfiles
-                .Include(c => c.User)
-                .FirstOrDefaultAsync(c => c.UserId == clientId && c.IsDeleted);
-
-            if (deletedProfile != null)
-            {
-                deletedProfile.IsDeleted = false;
-                deletedProfile.DeletedAt = null;
-                deletedProfile.DeletedBy = null;
-                deletedProfile.CompanyName = string.IsNullOrEmpty(deletedProfile.CompanyName) ? $"{user.FirstName} {user.LastName}".Trim() : deletedProfile.CompanyName;
-                if (string.IsNullOrEmpty(deletedProfile.CompanyName)) deletedProfile.CompanyName = "Personal";
-                deletedProfile.UpdatedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
-                client = deletedProfile;
-            }
-            else
-            {
-                client = new ClientProfile
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = user.Id,
-                    CompanyName = $"{user.FirstName} {user.LastName}".Trim(),
-                    ContactName = $"{user.FirstName} {user.LastName}".Trim(),
-                    CreatedAt = DateTime.UtcNow
-                };
-                if (string.IsNullOrEmpty(client.CompanyName)) client.CompanyName = "Personal";
-                _context.ClientProfiles.Add(client);
-                await _context.SaveChangesAsync();
-                client = await _context.ClientProfiles.Include(c => c.User).FirstAsync(c => c.Id == client.Id);
-            }
-        }
+        var client = await EnsureClientExistsAsync(clientId);
 
         var order = _mapper.Map<LogoOrder>(request);
         order.Id = Guid.NewGuid();
@@ -116,6 +72,8 @@ public class OrderService : IOrderService
 
         await _context.SaveChangesAsync();
 
+        _logger.LogInformation("OrderCreated. OrderId={OrderId}, UserId={UserId}", order.Id, clientId);
+
         // Notify all Admin and SuperAdmin users about the new order
         var clientName = $"{client.User.FirstName} {client.User.LastName}".Trim();
         if (string.IsNullOrEmpty(clientName)) clientName = client.CompanyName ?? "A client";
@@ -136,6 +94,141 @@ public class OrderService : IOrderService
         }
 
         return await GetOrderByIdAsync(order.Id, clientId, "Client");
+    }
+
+    public async Task<OrderResponseDto> CreateOrderWithFilesAsync(CreateOrderRequestDto request, IFormFile[] files, Guid clientId, string? description = null)
+    {
+        if (files == null || files.Length == 0)
+            throw new InvalidOperationException("At least one reference file is required for order creation.");
+
+        var client = await EnsureClientExistsAsync(clientId);
+
+        List<LogoFile>? preparedFiles = null;
+        LogoOrder? order = null;
+
+        try
+        {
+            await _context.ExecuteInTransactionAsync(async (ct) =>
+            {
+                order = _mapper.Map<LogoOrder>(request);
+                order.Id = Guid.NewGuid();
+                order.ClientId = client.Id;
+                order.CreatedAt = DateTime.UtcNow;
+                order.CreatedBy = clientId;
+
+                _context.LogoOrders.Add(order);
+
+                var statusHistory = new OrderStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = order.Id,
+                    PreviousStatus = OrderStatus.WaitingForAdminApproval,
+                    NewStatus = OrderStatus.WaitingForAdminApproval,
+                    ChangedBy = clientId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.OrderStatusHistories.Add(statusHistory);
+
+                await CreateOrderLogAsync(order.Id, OrderAction.Created, null, OrderStatus.WaitingForAdminApproval, "Client", clientId, "Order created with files");
+
+                preparedFiles = await _fileService.PrepareReferenceFilesForOrderAsync(order.Id, files, clientId, description);
+                foreach (var f in preparedFiles)
+                {
+                    _context.LogoFiles.Add(f);
+                }
+
+                await _context.SaveChangesAsync(ct);
+            });
+        }
+        catch
+        {
+            if (preparedFiles != null)
+            {
+                foreach (var f in preparedFiles)
+                {
+                    try
+                    {
+                        if (System.IO.File.Exists(f.FilePath))
+                            System.IO.File.Delete(f.FilePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete orphaned file {Path} after order creation rollback.", f.FilePath);
+                    }
+                }
+            }
+            throw;
+        }
+
+        var clientName = $"{client.User.FirstName} {client.User.LastName}".Trim();
+        if (string.IsNullOrEmpty(clientName)) clientName = client.CompanyName ?? "A client";
+        var orderNumber = NotificationFormatHelper.GetOrderNumber(order.Id);
+        var title = "New Order Submitted";
+        var message = $"{clientName} placed a new order (#{orderNumber})";
+
+        try
+        {
+            await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.OrderStatusChange, NotificationReferenceType.Order, order.Id);
+            await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, message, NotificationType.OrderStatusChange, NotificationReferenceType.Order, order.Id);
+            var adminUserIds = await GetAdminAndSuperAdminUserIdsAsync();
+            await _entityUpdateSender.SendOrderCreatedAsync(order!.Id, adminUserIds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create notifications for new order {OrderId}. Order was created successfully.", order!.Id);
+        }
+
+        return await GetOrderByIdAsync(order!.Id, clientId, "Client");
+    }
+
+    private async Task<ClientProfile> EnsureClientExistsAsync(Guid clientId)
+    {
+        var client = await _context.ClientProfiles
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
+
+        if (client == null)
+        {
+            var user = await _context.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == clientId && !u.IsDeleted);
+
+            if (user == null || user.Role?.Name != "Client")
+                throw new InvalidOperationException("Client profile not found. Please ensure the client has a company name set in their profile.");
+
+            var deletedProfile = await _context.ClientProfiles
+                .Include(c => c.User)
+                .FirstOrDefaultAsync(c => c.UserId == clientId && c.IsDeleted);
+
+            if (deletedProfile != null)
+            {
+                deletedProfile.IsDeleted = false;
+                deletedProfile.DeletedAt = null;
+                deletedProfile.DeletedBy = null;
+                deletedProfile.CompanyName = string.IsNullOrEmpty(deletedProfile.CompanyName) ? $"{user.FirstName} {user.LastName}".Trim() : deletedProfile.CompanyName;
+                if (string.IsNullOrEmpty(deletedProfile.CompanyName)) deletedProfile.CompanyName = "Personal";
+                deletedProfile.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                client = deletedProfile;
+            }
+            else
+            {
+                client = new ClientProfile
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    CompanyName = $"{user.FirstName} {user.LastName}".Trim(),
+                    ContactName = $"{user.FirstName} {user.LastName}".Trim(),
+                    CreatedAt = DateTime.UtcNow
+                };
+                if (string.IsNullOrEmpty(client.CompanyName)) client.CompanyName = "Personal";
+                _context.ClientProfiles.Add(client);
+                await _context.SaveChangesAsync();
+                client = await _context.ClientProfiles.Include(c => c.User).FirstAsync(c => c.Id == client.Id);
+            }
+        }
+
+        return client;
     }
 
     public async Task<OrderResponseDto?> GetOrderByIdAsync(Guid orderId, Guid? userId, string? userRole)
@@ -193,6 +286,7 @@ public class OrderService : IOrderService
             response.Client = new ClientInfoDto
             {
                 Id = order.Client.Id,
+                UserId = order.Client.UserId,
                 CompanyName = order.Client.CompanyName,
                 FirstName = order.Client.User.FirstName,
                 LastName = order.Client.User.LastName,
@@ -204,6 +298,17 @@ public class OrderService : IOrderService
         if (userRole == "Designer")
         {
             response.Client = null; // Remove client info completely
+        }
+
+        // Mask designer identity from Client: show "Company Design Team" instead
+        if (userRole == "Client" && response.Designer != null)
+        {
+            response.AssignedDesignerDisplayName = "Company Design Team";
+            response.Designer = null; // Hide designer name, email, profile, userId
+        }
+        else if (userRole == "Client" && order.DesignerId.HasValue)
+        {
+            response.AssignedDesignerDisplayName = "Company Design Team";
         }
 
         return response;
@@ -247,6 +352,13 @@ public class OrderService : IOrderService
         foreach (var order in response)
         {
             order.HasInvoice = clientOrderIdsWithInvoices.Contains(order.Id);
+            // Mask designer identity from Client
+            var orig = orders.FirstOrDefault(o => o.Id == order.Id);
+            if (order.Designer != null || (orig != null && orig.DesignerId.HasValue))
+            {
+                order.AssignedDesignerDisplayName = "Company Design Team";
+                order.Designer = null;
+            }
         }
 
         return response;
@@ -327,6 +439,7 @@ public class OrderService : IOrderService
                         order.Client = new ClientInfoDto
                         {
                             Id = originalOrder.Client.Id,
+                            UserId = originalOrder.Client.UserId,
                             CompanyName = originalOrder.Client.CompanyName,
                             FirstName = originalOrder.Client.User.FirstName,
                             LastName = originalOrder.Client.User.LastName,
@@ -356,6 +469,11 @@ public class OrderService : IOrderService
         if (order == null)
         {
             throw new InvalidOperationException("Order not found.");
+        }
+
+        if (OrderLockingHelper.IsOrderLocked(order.Status))
+        {
+            throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
         }
 
         var designer = await _context.DesignerProfiles
@@ -391,6 +509,8 @@ public class OrderService : IOrderService
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
 
+        _logger.LogInformation("DesignerAssigned. OrderId={OrderId}, AssignedBy={AssignedBy}, DesignerId={DesignerId}", orderId, assignedBy, designerId);
+
         // Notify designer: Order assigned
         try
         {
@@ -407,6 +527,7 @@ public class OrderService : IOrderService
                 orderId,
                 assignedBy
             );
+            await _entityUpdateSender.SendOrderAssignedAsync(orderId, designerId);
         }
         catch (Exception ex)
         {
@@ -426,6 +547,11 @@ public class OrderService : IOrderService
         if (order == null)
         {
             throw new InvalidOperationException("Order not found.");
+        }
+
+        if (OrderLockingHelper.IsOrderLocked(order.Status))
+        {
+            throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
         }
 
         if (!Enum.TryParse<OrderStatus>(request.Status, out var newStatus))
@@ -495,6 +621,11 @@ public class OrderService : IOrderService
             );
         }
 
+        if (newStatus == OrderStatus.FinalApproved)
+        {
+            _logger.LogInformation("FinalApproved. OrderId={OrderId}, UserId={UserId}", orderId, userId);
+        }
+
         // When client approves preview (FinalApproved), notify Admin and Designer
         if (newStatus == OrderStatus.FinalApproved && order.Client != null && order.Client.UserId == userId)
         {
@@ -502,11 +633,12 @@ public class OrderService : IOrderService
             if (string.IsNullOrEmpty(clientName)) clientName = "Client";
             var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
             var approveTitle = "Preview Approved";
-            var approveMessage = $"{clientName} approved the preview for order (#{orderNumber})";
+            var approveMessageForAdmin = $"{clientName} approved the preview for order (#{orderNumber})";
+            var approveMessageForDesigner = $"Client approved the preview for order (#{orderNumber})"; // Designer must not see client name
             try
             {
-                await _notificationService.CreateNotificationForRoleAsync("Admin", approveTitle, approveMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId);
-                await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", approveTitle, approveMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId);
+                await _notificationService.CreateNotificationForRoleAsync("Admin", approveTitle, approveMessageForAdmin, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId);
+                await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", approveTitle, approveMessageForAdmin, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId);
                 if (order.DesignerId.HasValue)
                 {
                     var designerUserId = await _context.DesignerProfiles
@@ -515,7 +647,7 @@ public class OrderService : IOrderService
                         .FirstOrDefaultAsync();
                     if (designerUserId != Guid.Empty)
                     {
-                        await _notificationService.CreateNotificationAsync(designerUserId, approveTitle, approveMessage, NotificationType.OrderStatusChange, orderId, NotificationReferenceType.Order, orderId, userId);
+                        await _notificationService.CreateNotificationAsync(designerUserId, approveTitle, approveMessageForDesigner, NotificationType.OrderStatusChange, orderId, NotificationReferenceType.Order, orderId, userId);
                     }
                 }
             }
@@ -525,18 +657,19 @@ public class OrderService : IOrderService
             }
         }
 
-        // When client rejects preview (RevisionRequested), notify Admin and Designer
+        // When client requests revision (RevisionRequested), notify Admin and Designer
         if (newStatus == OrderStatus.RevisionRequested && order.Client != null && order.Client.UserId == userId)
         {
             var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
             if (string.IsNullOrEmpty(clientName)) clientName = "Client";
             var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
-            var rejectTitle = "Preview Rejected";
-            var rejectMessage = $"{clientName} rejected the preview for order (#{orderNumber})";
+            var revisionTitle = "Revision Requested";
+            var revisionMessageForAdmin = $"{clientName} requested a revision for order (#{orderNumber})";
+            var revisionMessageForDesigner = $"Client requested a revision for order (#{orderNumber})"; // Designer must not see client name
             try
             {
-                await _notificationService.CreateNotificationForRoleAsync("Admin", rejectTitle, rejectMessage, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId);
-                await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", rejectTitle, rejectMessage, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId);
+                await _notificationService.CreateNotificationForRoleAsync("Admin", revisionTitle, revisionMessageForAdmin, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId);
+                await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", revisionTitle, revisionMessageForAdmin, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId);
                 if (order.DesignerId.HasValue)
                 {
                     var designerUserId = await _context.DesignerProfiles
@@ -545,7 +678,7 @@ public class OrderService : IOrderService
                         .FirstOrDefaultAsync();
                     if (designerUserId != Guid.Empty)
                     {
-                        await _notificationService.CreateNotificationAsync(designerUserId, rejectTitle, rejectMessage, NotificationType.RevisionRequest, orderId, NotificationReferenceType.Order, orderId, userId);
+                        await _notificationService.CreateNotificationAsync(designerUserId, revisionTitle, revisionMessageForDesigner, NotificationType.RevisionRequest, orderId, NotificationReferenceType.Order, orderId, userId);
                         var adminUserIds = await GetAdminAndSuperAdminUserIdsAsync();
                         var designerUserIds = new[] { designerUserId };
                         await _entityUpdateSender.SendPreviewRejectedAsync(orderId, clientName, adminUserIds.Concat(designerUserIds));
@@ -733,6 +866,35 @@ public class OrderService : IOrderService
         return await GetOrderByIdAsync(orderId, approvedBy, "Admin");
     }
 
+    public async Task<OrderResponseDto> SendPreviewBatchToClientAsync(Guid orderId, Guid previewBatchId, Guid sentBy)
+    {
+        var order = await _context.LogoOrders
+            .Include(o => o.Client)
+                .ThenInclude(c => c.User)
+            .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+
+        if (order == null)
+            throw new InvalidOperationException("Order not found.");
+
+        if (OrderLockingHelper.IsOrderLocked(order.Status))
+            throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
+
+        var files = await _context.LogoFiles
+            .Where(f => f.OrderId == orderId && f.PreviewBatchId == previewBatchId && !f.IsDeleted)
+            .ToListAsync();
+
+        if (files.Count == 0)
+            throw new InvalidOperationException("No preview files found for this batch. Admin must send entire preview batch.");
+
+        foreach (var f in files)
+        {
+            if (f.FileType != Domain.Enums.FileType.Preview)
+                throw new InvalidOperationException("Only preview files can be sent via preview batch. File type mismatch.");
+        }
+
+        return await SendFilesToClientInternalAsync(order, files, sentBy);
+    }
+
     public async Task<OrderResponseDto> SendFilesToClientAsync(Guid orderId, List<Guid> fileIds, Guid sentBy)
     {
         var order = await _context.LogoOrders
@@ -745,6 +907,11 @@ public class OrderService : IOrderService
             throw new InvalidOperationException("Order not found.");
         }
 
+        if (OrderLockingHelper.IsOrderLocked(order.Status))
+        {
+            throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
+        }
+
         var files = await _context.LogoFiles
             .Where(f => fileIds.Contains(f.Id) && f.OrderId == orderId && !f.IsDeleted)
             .ToListAsync();
@@ -754,7 +921,44 @@ public class OrderService : IOrderService
             throw new InvalidOperationException("Some files were not found.");
         }
 
-        // Make files visible to client
+        // Validate: when sending preview files, must send entire batch (no partial delivery)
+        var previewFiles = files.Where(f => f.FileType == Domain.Enums.FileType.Preview).ToList();
+        if (previewFiles.Count > 0)
+        {
+            var batchIds = previewFiles.Select(f => f.PreviewBatchId).Where(id => id.HasValue).Distinct().ToList();
+            if (batchIds.Count > 1)
+                throw new InvalidOperationException("Admin must send entire preview batch. Cannot mix files from different batches.");
+            if (batchIds.Count == 1)
+            {
+                var fullBatchCount = await _context.LogoFiles
+                    .CountAsync(f => f.OrderId == orderId && f.PreviewBatchId == batchIds[0] && !f.IsDeleted);
+                if (previewFiles.Count != fullBatchCount)
+                    throw new InvalidOperationException("Admin must send entire preview batch. Partial delivery is not allowed.");
+            }
+        }
+
+        return await SendFilesToClientInternalAsync(order, files, sentBy);
+    }
+
+    private async Task<OrderResponseDto> SendFilesToClientInternalAsync(LogoOrder order, List<LogoFile> files, Guid sentBy)
+    {
+        // Set version = delivery round for Preview files (1st batch=1, 2nd batch=2, etc.)
+        var previewFiles = files.Where(f => f.FileType == Domain.Enums.FileType.Preview).ToList();
+        if (previewFiles.Count > 0)
+        {
+            var previouslySentBatchCount = await _context.LogoFiles
+                .Where(f => f.OrderId == order.Id && f.IsVisibleToClient && f.PreviewBatchId != null && !f.IsDeleted)
+                .Where(f => !previewFiles.Select(p => p.PreviewBatchId).Contains(f.PreviewBatchId))
+                .Select(f => f.PreviewBatchId)
+                .Distinct()
+                .CountAsync();
+            var deliveryVersion = previouslySentBatchCount + 1;
+            foreach (var file in previewFiles)
+            {
+                file.VersionNumber = deliveryVersion;
+            }
+        }
+
         foreach (var file in files)
         {
             file.IsVisibleToClient = true;
@@ -765,20 +969,18 @@ public class OrderService : IOrderService
             file.UpdatedBy = sentBy;
         }
 
-        // Update order status
         var previousStatus = order.Status;
         order.Status = OrderStatus.PreviewDelivered;
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = sentBy;
 
-        // Create status history
         var statusHistory = new OrderStatusHistory
         {
             Id = Guid.NewGuid(),
             OrderId = order.Id,
             PreviousStatus = previousStatus,
             NewStatus = OrderStatus.PreviewDelivered,
-            Notes = $"Files sent to client for review",
+            Notes = "Files sent to client for review",
             ChangedBy = sentBy,
             CreatedAt = DateTime.UtcNow
         };
@@ -786,22 +988,22 @@ public class OrderService : IOrderService
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
 
-        // Create notification for client via NotificationService
-        var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+        _logger.LogInformation("PreviewForwarded. OrderId={OrderId}, UserId={UserId}, FileCount={FileCount}", order.Id, sentBy, files.Count);
+
+        var orderNumber = NotificationFormatHelper.GetOrderNumber(order.Id);
         await _notificationService.CreateNotificationAsync(
-            order.Client.UserId,
+            order.Client!.UserId,
             "Preview Files Available",
             $"Preview files were uploaded for order (#{orderNumber})",
             NotificationType.FileUpload,
-            orderId,
+            order.Id,
             NotificationReferenceType.Order,
-            orderId
+            order.Id
         );
 
-        // Real-time entity update: PreviewDelivered - client grid refreshes
-        await _entityUpdateSender.SendPreviewDeliveredAsync(orderId, OrderStatus.PreviewDelivered.ToString(), order.Client.UserId);
+        await _entityUpdateSender.SendPreviewDeliveredAsync(order.Id, OrderStatus.PreviewDelivered.ToString(), order.Client.UserId);
 
-        return await GetOrderByIdAsync(orderId, sentBy, "Admin");
+        return await GetOrderByIdAsync(order.Id, sentBy, "Admin");
     }
 
     public async Task<OrderResponseDto> UpdateOrderAsync(Guid orderId, UpdateOrderRequestDto request, Guid userId)
@@ -825,6 +1027,11 @@ public class OrderService : IOrderService
         if (client == null || order.ClientId != client.Id)
         {
             throw new UnauthorizedAccessException("You can only update your own orders.");
+        }
+
+        if (OrderLockingHelper.IsOrderLocked(order.Status))
+        {
+            throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
         }
 
         // Only allow updates if order is still waiting for admin approval or price approval pending
@@ -884,6 +1091,11 @@ public class OrderService : IOrderService
         if (order == null)
         {
             throw new InvalidOperationException("Order not found.");
+        }
+
+        if (OrderLockingHelper.IsOrderLocked(order.Status))
+        {
+            throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
         }
 
         var previousStatus = order.Status;
@@ -1166,6 +1378,41 @@ public class OrderService : IOrderService
         }).ToList();
     }
 
+    public async Task<List<OrderLogResponseDto>> GetOrderLogsWithAccessAsync(Guid orderId, Guid userId, string? userRole)
+    {
+        // Verify user has access to the order (same rules as GetOrderById)
+        var order = await _context.LogoOrders
+            .Include(o => o.Client)
+            .Include(o => o.Designer)
+            .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+
+        if (order == null)
+        {
+            return new List<OrderLogResponseDto>();
+        }
+
+        if (userRole == "Client" && order.Client.UserId != userId)
+        {
+            throw new ForbiddenAccessException("You don't have access to this order.");
+        }
+
+        if (userRole == "Designer")
+        {
+            if (order.DesignerId == null)
+            {
+                throw new ForbiddenAccessException("You don't have access to this order.");
+            }
+            var designer = await _context.DesignerProfiles
+                .FirstOrDefaultAsync(d => d.UserId == userId && !d.IsDeleted);
+            if (designer == null || order.DesignerId != designer.Id)
+            {
+                throw new ForbiddenAccessException("You don't have access to this order.");
+            }
+        }
+
+        return await GetOrderLogsAsync(orderId);
+    }
+
     public async Task<OrderResponseDto> SetAllowUploadsAsync(Guid orderId, bool allowUploads, Guid userId)
     {
         var order = await _context.LogoOrders
@@ -1179,6 +1426,11 @@ public class OrderService : IOrderService
         if (order == null)
         {
             throw new InvalidOperationException("Order not found.");
+        }
+
+        if (OrderLockingHelper.IsOrderLocked(order.Status))
+        {
+            throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
         }
 
         order.AllowUploads = allowUploads;

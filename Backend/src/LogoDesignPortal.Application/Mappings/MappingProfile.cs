@@ -8,6 +8,7 @@ using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Payments;
 using LogoDesignPortal.Application.DTOs.Revisions;
 using LogoDesignPortal.Application.DTOs.Users;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 
@@ -48,6 +49,7 @@ public class MappingProfile : Profile
 
         // Client Profile mappings
         CreateMap<ClientProfile, ClientInfoDto>()
+            .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.UserId))
             .ForMember(dest => dest.Email, opt => opt.MapFrom(src => src.User.Email))
             .ForMember(dest => dest.FirstName, opt => opt.MapFrom(src => src.User.FirstName))
             .ForMember(dest => dest.LastName, opt => opt.MapFrom(src => src.User.LastName));
@@ -57,11 +59,15 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.FirstName, opt => opt.MapFrom(src => src.User.FirstName))
             .ForMember(dest => dest.LastName, opt => opt.MapFrom(src => src.User.LastName));
 
-        // Notification mappings
+        // Notification mappings - build RedirectUrl when null (e.g. legacy notifications)
         CreateMap<Notification, NotificationResponseDto>()
             .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type.ToString()))
             .ForMember(dest => dest.ReferenceType, opt => opt.MapFrom(src => src.ReferenceType.ToString()))
-            .ForMember(dest => dest.ReferenceId, opt => opt.MapFrom(src => src.ReferenceId ?? src.OrderId));
+            .ForMember(dest => dest.ReferenceId, opt => opt.MapFrom(src => src.ReferenceId ?? src.OrderId))
+            .ForMember(dest => dest.RedirectUrl, opt => opt.MapFrom(src =>
+                !string.IsNullOrEmpty(src.RedirectUrl)
+                    ? src.RedirectUrl
+                    : NotificationRedirectHelper.BuildRedirectUrl(src.ReferenceType, src.ReferenceId ?? src.OrderId, src.OrderId)));
 
         // Comment mappings
         CreateMap<OrderComment, CommentResponseDto>()

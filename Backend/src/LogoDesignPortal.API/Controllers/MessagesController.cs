@@ -43,8 +43,8 @@ public class MessagesController : ControllerBase
     public async Task<IActionResult> GetMessageById(Guid id)
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var messages = await _messageService.GetMessagesAsync(userId, null);
-        var message = messages.FirstOrDefault(m => m.Id == id);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var message = await _messageService.GetMessageByIdAsync(id, userId, userRole);
         if (message == null)
         {
             return NotFound(new { error = "Message not found." });
@@ -67,7 +67,8 @@ public class MessagesController : ControllerBase
     public async Task<IActionResult> GetMessagesByOrder(Guid orderId)
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var messages = await _messageService.GetMessagesByOrderAsync(orderId, userId);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var messages = await _messageService.GetMessagesByOrderAsync(orderId, userId, userRole);
         return Ok(messages);
     }
 
@@ -79,7 +80,44 @@ public class MessagesController : ControllerBase
         try
         {
             var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var message = await _messageService.MarkAsReadAsync(id, userId);
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            var message = await _messageService.MarkAsReadAsync(id, userId, userRole);
+            return Ok(message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("forward")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(typeof(MessageResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ForwardMessage([FromBody] ForwardMessageRequestDto request)
+    {
+        try
+        {
+            var adminUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var message = await _messageService.ForwardMessageAsync(request, adminUserId);
+            return Ok(message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("reject")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(typeof(MessageResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RejectMessage([FromBody] RejectMessageRequestDto request)
+    {
+        try
+        {
+            var adminUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var message = await _messageService.RejectMessageAsync(request, adminUserId);
             return Ok(message);
         }
         catch (InvalidOperationException ex)

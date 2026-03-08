@@ -135,7 +135,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("designer-profiles")]
-    [Authorize] // Must be authenticated
+    [Authorize(Roles = "SuperAdmin,Admin")] // Clients must not access designer directory
     [RequirePermission("ViewDesignerProfiles")] // Permission-based: SuperAdmin can grant to Admin
     [ProducesResponseType(typeof(List<DesignerProfileResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

@@ -22,6 +22,12 @@ public class LogoFile : BaseEntity
     public Guid? ApprovedBy { get; set; } // Admin who approved
     public DateTime? ApprovedAt { get; set; }
 
+    /// <summary>
+    /// Groups preview files from the same designer upload session.
+    /// Admin must send entire batch - no partial preview delivery.
+    /// </summary>
+    public Guid? PreviewBatchId { get; set; }
+
     // Navigation properties
     public LogoOrder Order { get; set; } = null!;
     public User? ApprovedByUser { get; set; }

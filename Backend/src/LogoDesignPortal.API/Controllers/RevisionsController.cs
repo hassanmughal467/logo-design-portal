@@ -24,6 +24,7 @@ public class RevisionsController : ControllerBase
 
     [HttpPost("orders/{orderId}/request")]
     [Authorize(Roles = "Client")]
+    [RequestSizeLimit(50 * 1024 * 1024)]
     [ProducesResponseType(typeof(RevisionResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

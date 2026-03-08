@@ -179,10 +179,19 @@ public class AuthController : ControllerBase
     [HttpPost("reset-superadmin-password")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ResetSuperAdminPassword()
     {
         try
         {
+            // Restrict to localhost only for security - prevents remote password reset attacks
+            var remoteIp = HttpContext.Connection.RemoteIpAddress;
+            if (remoteIp != null && !System.Net.IPAddress.IsLoopback(remoteIp))
+            {
+                _logger.LogWarning("ResetSuperAdminPassword rejected - request from non-localhost: {RemoteIp}", remoteIp);
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = "This endpoint is only available from localhost." });
+            }
+
             _logger.LogInformation("Resetting SuperAdmin password to default");
             await _authService.ResetSuperAdminPasswordAsync();
             _logger.LogInformation("SuperAdmin password reset successfully");

@@ -11,6 +11,10 @@ public class Notification : BaseEntity
     public NotificationType Type { get; set; } = NotificationType.Info;
     public NotificationReferenceType ReferenceType { get; set; } = NotificationReferenceType.Order;
     public Guid? ReferenceId { get; set; } // OrderId, InvoiceId, MessageId, etc.
+    /// <summary>
+    /// Frontend route to navigate when the notification is clicked (e.g. /orders/123, /invoices/456).
+    /// </summary>
+    public string? RedirectUrl { get; set; }
     public bool IsRead { get; set; } = false;
     public DateTime? ReadAt { get; set; }
 
