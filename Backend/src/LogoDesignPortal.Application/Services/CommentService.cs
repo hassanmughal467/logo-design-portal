@@ -1,5 +1,6 @@
 using AutoMapper;
 using LogoDesignPortal.Application.DTOs.Comments;
+using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
@@ -22,29 +23,66 @@ public class CommentService : ICommentService
         _notificationService = notificationService;
     }
 
-    public async Task<CommentResponseDto> CreateCommentAsync(Guid orderId, CreateCommentRequestDto request, Guid createdBy)
+    /// <summary>
+    /// Validates that the user has access to the order.
+    /// Client → own orders only; Designer → assigned orders only; Admin/SuperAdmin → all.
+    /// </summary>
+    private async Task<LogoOrder> EnsureOrderAccessAsync(Guid orderId, Guid userId, string? userRole)
     {
         var order = await _context.LogoOrders
+            .Include(o => o.Client)
+                .ThenInclude(c => c.User)
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
-        {
             throw new InvalidOperationException("Order not found.");
+
+        if (userRole == "Client")
+        {
+            if (order.Client?.UserId != userId)
+                throw new ForbiddenAccessException("You don't have access to this order.");
+        }
+        else if (userRole == "Designer")
+        {
+            if (order.DesignerId == null)
+                throw new ForbiddenAccessException("You don't have access to this order.");
+            var designer = await _context.DesignerProfiles
+                .FirstOrDefaultAsync(d => d.UserId == userId && !d.IsDeleted);
+            if (designer == null || order.DesignerId != designer.Id)
+                throw new ForbiddenAccessException("You don't have access to this order.");
+        }
+        else if (userRole != "Admin" && userRole != "SuperAdmin")
+        {
+            throw new ForbiddenAccessException("You don't have access to this order.");
         }
 
+        return order;
+    }
+
+    public async Task<CommentResponseDto> CreateCommentAsync(Guid orderId, CreateCommentRequestDto request, Guid createdBy, string? userRole)
+    {
+        var order = await EnsureOrderAccessAsync(orderId, createdBy, userRole);
+
         if (OrderLockingHelper.IsOrderLocked(order.Status))
-        {
             throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
-        }
 
         var user = await _context.Users
             .Include(u => u.Role)
             .FirstOrDefaultAsync(u => u.Id == createdBy && !u.IsDeleted);
 
         if (user == null)
-        {
             throw new InvalidOperationException("User not found.");
-        }
+
+        var creatorRole = user.Role?.Name ?? string.Empty;
+
+        // Clients cannot create internal comments
+        var isInternal = creatorRole == "Client" ? false : request.IsInternal;
+
+        // Designer comments default to not visible to client until Admin approves
+        var visibleToClient = creatorRole == "Designer" ? false : !isInternal;
+        var commentType = creatorRole == "Designer" ? CommentType.DesignerFeedback
+            : isInternal ? CommentType.Internal
+            : CommentType.General;
 
         var comment = new OrderComment
         {
@@ -52,7 +90,9 @@ public class CommentService : ICommentService
             OrderId = orderId,
             Content = request.Content,
             CreatedBy = createdBy,
-            IsInternal = request.IsInternal,
+            IsInternal = isInternal,
+            CommentType = commentType,
+            VisibleToClient = visibleToClient,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -60,7 +100,6 @@ public class CommentService : ICommentService
         await _context.SaveChangesAsync();
 
         // Notify Admin and SuperAdmin when Designer or Client adds a comment
-        var creatorRole = user.Role?.Name ?? string.Empty;
         if (creatorRole == "Designer" || creatorRole == "Client")
         {
             try
@@ -79,28 +118,46 @@ public class CommentService : ICommentService
             }
         }
 
-        var response = _mapper.Map<CommentResponseDto>(comment);
-        response.CreatedByName = $"{user.FirstName} {user.LastName}";
-        response.CreatedByRole = user.Role?.Name ?? string.Empty;
-
+        var response = MapToResponse(comment, user, userRole);
         return response;
     }
 
     public async Task<List<CommentResponseDto>> GetOrderCommentsAsync(Guid orderId, Guid? userId, string? userRole)
     {
+        await EnsureOrderAccessAsync(orderId, userId ?? Guid.Empty, userRole);
+
         var query = _context.OrderComments
             .Include(c => c.CreatedByUser)
                 .ThenInclude(u => u.Role)
             .Where(c => c.OrderId == orderId && !c.IsDeleted);
 
-        // Clients can only see non-internal comments
+        // Client visibility: non-internal AND (VisibleToClient OR created by Client/Admin/SuperAdmin)
         if (userRole == "Client")
         {
-            query = query.Where(c => !c.IsInternal);
+            query = query.Where(c => !c.IsInternal && (c.VisibleToClient
+                || (c.CreatedByUser.Role != null && (c.CreatedByUser.Role.Name == "Client" || c.CreatedByUser.Role.Name == "Admin" || c.CreatedByUser.Role.Name == "SuperAdmin"))));
         }
 
         var comments = await query.OrderBy(c => c.CreatedAt).ToListAsync();
-        return _mapper.Map<List<CommentResponseDto>>(comments);
+        var dtos = new List<CommentResponseDto>();
+
+        foreach (var c in comments)
+        {
+            var dto = _mapper.Map<CommentResponseDto>(c);
+            var creatorRole = c.CreatedByUser.Role?.Name ?? string.Empty;
+            dto.CreatedByName = $"{c.CreatedByUser.FirstName} {c.CreatedByUser.LastName}".Trim();
+            if (string.IsNullOrEmpty(dto.CreatedByName)) dto.CreatedByName = creatorRole;
+            dto.CreatedByRole = creatorRole;
+            dto.CommentType = c.CommentType.ToString();
+
+            // Mask designer identity when viewer is Client
+            if (userRole == "Client" && creatorRole == "Designer")
+                dto.CreatedByName = "Design Team";
+
+            dtos.Add(dto);
+        }
+
+        return dtos;
     }
 
     public async Task<bool> DeleteCommentAsync(Guid commentId, Guid userId, string userRole)
@@ -110,20 +167,15 @@ public class CommentService : ICommentService
             .FirstOrDefaultAsync(c => c.Id == commentId && !c.IsDeleted);
 
         if (comment == null)
-        {
             return false;
-        }
+
+        await EnsureOrderAccessAsync(comment.OrderId, userId, userRole);
 
         if (comment.Order != null && OrderLockingHelper.IsOrderLocked(comment.Order.Status))
-        {
             throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
-        }
 
-        // Only allow deletion by creator or admin/superadmin
         if (comment.CreatedBy != userId && userRole != "Admin" && userRole != "SuperAdmin")
-        {
             throw new UnauthorizedAccessException("You don't have permission to delete this comment.");
-        }
 
         comment.IsDeleted = true;
         comment.DeletedAt = DateTime.UtcNow;
@@ -131,5 +183,104 @@ public class CommentService : ICommentService
         await _context.SaveChangesAsync();
 
         return true;
+    }
+
+    public async Task<CommentResponseDto?> SetCommentVisibilityAsync(Guid commentId, SetCommentVisibilityRequestDto request, Guid userId, string userRole)
+    {
+        if (userRole != "Admin" && userRole != "SuperAdmin")
+            throw new UnauthorizedAccessException("Only Admin can approve comment visibility.");
+
+        var comment = await _context.OrderComments
+            .Include(c => c.CreatedByUser)
+                .ThenInclude(u => u.Role)
+            .FirstOrDefaultAsync(c => c.Id == commentId && !c.IsDeleted);
+
+        if (comment == null)
+            return null;
+
+        await EnsureOrderAccessAsync(comment.OrderId, userId, userRole);
+
+        comment.VisibleToClient = request.VisibleToClient;
+        await _context.SaveChangesAsync();
+
+        return MapToResponse(comment, comment.CreatedByUser, userRole);
+    }
+
+    public async Task MarkOrderCommentsAsReadAsync(Guid orderId, Guid userId, string userRole)
+    {
+        await EnsureOrderAccessAsync(orderId, userId, userRole);
+
+        var comments = await _context.OrderComments
+            .Where(c => c.OrderId == orderId && !c.IsDeleted)
+            .ToListAsync();
+
+        foreach (var c in comments)
+        {
+            if (userRole == "Client" && !c.IsReadByClient)
+                c.IsReadByClient = true;
+            else if (userRole == "Designer" && !c.IsReadByDesigner)
+                c.IsReadByDesigner = true;
+            else if ((userRole == "Admin" || userRole == "SuperAdmin") && !c.IsReadByAdmin)
+                c.IsReadByAdmin = true;
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<OrderCommentUnreadCountsDto> GetOrderCommentUnreadCountsAsync(Guid orderId, Guid userId, string? userRole)
+    {
+        await EnsureOrderAccessAsync(orderId, userId, userRole);
+
+        var query = _context.OrderComments
+            .Include(c => c.CreatedByUser)
+                .ThenInclude(u => u.Role)
+            .Where(c => c.OrderId == orderId && !c.IsDeleted);
+
+        // Client only sees comments visible to them (same filter as GetOrderComments)
+        if (userRole == "Client")
+        {
+            query = query.Where(c => !c.IsInternal && (c.VisibleToClient
+                || (c.CreatedByUser.Role != null && (c.CreatedByUser.Role.Name == "Client" || c.CreatedByUser.Role.Name == "Admin" || c.CreatedByUser.Role.Name == "SuperAdmin"))));
+        }
+
+        var unreadByUser = userRole == "Client"
+            ? await query.CountAsync(c => !c.IsReadByClient)
+            : userRole == "Designer"
+                ? await query.CountAsync(c => !c.IsReadByDesigner)
+                : await query.CountAsync(c => !c.IsReadByAdmin);
+
+        return new OrderCommentUnreadCountsDto
+        {
+            UnreadFiles = 0, // Placeholder for future file read tracking
+            UnreadRevisions = 0, // Placeholder for future revision read tracking
+            UnreadComments = unreadByUser
+        };
+    }
+
+    private static CommentResponseDto MapToResponse(OrderComment comment, User createdByUser, string? viewerRole)
+    {
+        var creatorRole = createdByUser.Role?.Name ?? string.Empty;
+        var createdByName = $"{createdByUser.FirstName} {createdByUser.LastName}".Trim();
+        if (string.IsNullOrEmpty(createdByName)) createdByName = creatorRole;
+
+        if (viewerRole == "Client" && creatorRole == "Designer")
+            createdByName = "Design Team";
+
+        return new CommentResponseDto
+        {
+            Id = comment.Id,
+            OrderId = comment.OrderId,
+            Content = comment.Content,
+            CreatedBy = comment.CreatedBy,
+            CreatedByName = createdByName,
+            CreatedByRole = creatorRole,
+            IsInternal = comment.IsInternal,
+            CommentType = comment.CommentType.ToString(),
+            VisibleToClient = comment.VisibleToClient,
+            IsReadByClient = comment.IsReadByClient,
+            IsReadByDesigner = comment.IsReadByDesigner,
+            IsReadByAdmin = comment.IsReadByAdmin,
+            CreatedAt = comment.CreatedAt
+        };
     }
 }

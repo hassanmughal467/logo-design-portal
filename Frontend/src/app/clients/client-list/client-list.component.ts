@@ -52,10 +52,11 @@ export class ClientListComponent implements OnInit, OnDestroy {
   loadClients(): void {
     this.loading = true;
     // Fetch users with Client role and transform to Client interface
-    this.apiService.get<any[]>('users')
+    this.apiService.get<any>('users?page=1&pageSize=500')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (users) => {
+        next: (response) => {
+          const users = ApiService.extractItems<any>(response);
           // Filter and transform to clients
           this.clients = users
             .filter(u => u.role === 'Client' || u.roleName === 'Client')
@@ -77,7 +78,6 @@ export class ClientListComponent implements OnInit, OnDestroy {
           this.loading = false;
         },
         error: (error) => {
-          console.error('Error loading clients:', error);
           this.clients = [];
           this.loading = false;
         }
@@ -86,14 +86,15 @@ export class ClientListComponent implements OnInit, OnDestroy {
 
   private loadClientStats(): void {
     // Load orders to calculate client statistics
-    this.apiService.get<any[]>('orders')
+    this.apiService.get<any>('orders?page=1&pageSize=500')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (orders) => {
+        next: (response) => {
+          const orders = ApiService.extractItems<any>(response);
           // Calculate stats per client
           const clientStats = new Map<string, { orders: number; spent: number; lastOrder?: Date }>();
           
-          orders.forEach(order => {
+          orders.forEach((order: any) => {
             const clientId = order.clientId;
             if (!clientStats.has(clientId)) {
               clientStats.set(clientId, { orders: 0, spent: 0 });

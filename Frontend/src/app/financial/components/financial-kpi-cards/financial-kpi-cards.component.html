@@ -1,0 +1,90 @@
+<div class="kpi-cards" *ngIf="data">
+  <div class="kpi-card kpi-revenue">
+    <div class="kpi-icon"><i class="pi pi-wallet"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ formatCurrency(data.totalRevenue) }}</span>
+      <span class="kpi-label">Total Revenue</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-month">
+    <div class="kpi-icon"><i class="pi pi-calendar"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ formatCurrency(data.revenueThisMonth) }}</span>
+      <span class="kpi-label">Revenue This Month</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-week">
+    <div class="kpi-icon"><i class="pi pi-calendar-plus"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ formatCurrency(data.revenueThisWeek) }}</span>
+      <span class="kpi-label">Revenue This Week</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-aov">
+    <div class="kpi-icon"><i class="pi pi-percentage"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ formatCurrency(data.averageOrderValue) }}</span>
+      <span class="kpi-label">Average Order Value</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-orders">
+    <div class="kpi-icon"><i class="pi pi-shopping-cart"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ data.totalOrders | number }}</span>
+      <span class="kpi-label">Total Orders</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-growth" [class.positive]="data.revenueGrowthPercent >= 0" [class.negative]="data.revenueGrowthPercent < 0">
+    <div class="kpi-icon"><i class="pi pi-chart-line"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ formatPercent(data.revenueGrowthPercent) }}</span>
+      <span class="kpi-label">Revenue Growth</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-paid">
+    <div class="kpi-icon"><i class="pi pi-check-circle"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ data.invoicesPaid | number }}</span>
+      <span class="kpi-label">Invoices Paid</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-pending">
+    <div class="kpi-icon"><i class="pi pi-clock"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ data.invoicesPending | number }}</span>
+      <span class="kpi-label">Invoices Pending</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-overdue">
+    <div class="kpi-icon"><i class="pi pi-exclamation-triangle"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ data.overdueInvoices | number }}</span>
+      <span class="kpi-label">Overdue Invoices</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-outstanding">
+    <div class="kpi-icon"><i class="pi pi-dollar"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ formatCurrency(data.outstandingBalance) }}</span>
+      <span class="kpi-label">Outstanding Balance</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-collected">
+    <div class="kpi-icon"><i class="pi pi-money-bill"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ formatCurrency(data.collectedRevenue) }}</span>
+      <span class="kpi-label">Collected Revenue</span>
+    </div>
+  </div>
+  <div class="kpi-card kpi-refunded">
+    <div class="kpi-icon"><i class="pi pi-undo"></i></div>
+    <div class="kpi-content">
+      <span class="kpi-value">{{ formatCurrency(data.refundedAmount) }}</span>
+      <span class="kpi-label">Refunded Amount</span>
+    </div>
+  </div>
+</div>
+
+<div *ngIf="loading" class="kpi-skeleton">
+  <div class="skeleton-card" *ngFor="let i of [1,2,3,4,5,6]"></div>
+</div>

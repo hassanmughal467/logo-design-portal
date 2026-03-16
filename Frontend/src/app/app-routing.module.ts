@@ -62,20 +62,44 @@ const routes: Routes = [
         data: { roles: ['SuperAdmin', 'Admin'] }
       },
       {
+        path: 'client-pricing',
+        loadChildren: () => import('./client-pricing/client-pricing.module').then(m => m.ClientPricingModule),
+        canActivate: [RoleGuard],
+        data: { roles: ['SuperAdmin', 'Admin'] }
+      },
+      {
+        path: 'designer-pricing',
+        loadChildren: () => import('./designer-pricing/designer-pricing.module').then(m => m.DesignerPricingModule),
+        canActivate: [RoleGuard],
+        data: { roles: ['SuperAdmin', 'Admin'] }
+      },
+      {
         path: 'projects',
         loadChildren: () => import('./projects/projects.module').then(m => m.ProjectsModule)
       },
       {
         path: 'invoices',
-        loadChildren: () => import('./invoices/invoices.module').then(m => m.InvoicesModule)
+        loadChildren: () => import('./invoices/invoices.module').then(m => m.InvoicesModule),
+        canActivate: [RoleGuard],
+        data: { roles: ['SuperAdmin', 'Admin', 'Client'] }
       },
       {
         path: 'analytics',
-        loadChildren: () => import('./analytics/analytics.module').then(m => m.AnalyticsModule)
+        loadChildren: () => import('./analytics/analytics.module').then(m => m.AnalyticsModule),
+        canActivate: [RoleGuard],
+        data: { roles: ['SuperAdmin', 'Admin', 'Client'] }
       },
       {
         path: 'financial',
-        loadChildren: () => import('./financial/financial.module').then(m => m.FinancialModule)
+        loadChildren: () => import('./financial/financial.module').then(m => m.FinancialModule),
+        canActivate: [RoleGuard],
+        data: { roles: ['SuperAdmin', 'Admin', 'Client', 'Designer'] }
+      },
+      {
+        path: 'client-intelligence',
+        loadChildren: () => import('./client-intelligence/client-intelligence.module').then(m => m.ClientIntelligenceModule),
+        canActivate: [RoleGuard],
+        data: { roles: ['SuperAdmin', 'Admin'] }
       },
       {
         path: 'messages',

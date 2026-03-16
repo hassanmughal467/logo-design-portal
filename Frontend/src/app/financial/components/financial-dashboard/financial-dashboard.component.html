@@ -1,0 +1,60 @@
+<div class="financial-dashboard">
+  <!-- Row 1: KPI Cards -->
+  <div class="dashboard-row">
+    <app-financial-kpi-cards [data]="overview" [loading]="loading"></app-financial-kpi-cards>
+  </div>
+
+  <div *ngIf="apiError" class="api-error-banner">
+    <i class="pi pi-exclamation-triangle"></i>
+    <div>
+      <strong>Financial API unavailable.</strong> Ensure the backend is running.
+      <a (click)="loadData()" class="retry-link">Retry</a>
+    </div>
+  </div>
+
+  <div *ngIf="!loading && !apiError" class="dashboard-charts">
+    <!-- Row 2: Billing Queue (Admin) -->
+    <div class="dashboard-row full-width">
+      <app-billing-queue></app-billing-queue>
+    </div>
+
+    <!-- Row 2b: Designer Payout Overview (Admin) -->
+    <div class="dashboard-row full-width">
+      <app-designer-payout-overview></app-designer-payout-overview>
+    </div>
+
+    <!-- Row 3: Revenue Trend -->
+    <div class="dashboard-row full-width">
+      <app-revenue-trend-chart [items]="revenueTrendItems"></app-revenue-trend-chart>
+    </div>
+
+    <!-- Row 4: Orders vs Revenue -->
+    <div class="dashboard-row full-width">
+      <app-orders-revenue-chart [items]="ordersVsRevenueItems"></app-orders-revenue-chart>
+    </div>
+
+    <!-- Row 5: Revenue by Package | Invoice Status -->
+    <div class="dashboard-row two-col">
+      <app-package-revenue-chart [items]="packageRevenueItems"></app-package-revenue-chart>
+      <app-invoice-status-chart [items]="invoiceStatusItems"></app-invoice-status-chart>
+    </div>
+
+    <!-- Row 6: Revenue by Designer | Revenue by Client -->
+    <div class="dashboard-row two-col">
+      <app-designer-revenue-chart [items]="designerRevenueItems"></app-designer-revenue-chart>
+      <app-client-revenue-chart [items]="clientRevenueItems"></app-client-revenue-chart>
+    </div>
+
+    <!-- Row 7: Weekly Revenue | Average Order Value -->
+    <div class="dashboard-row two-col">
+      <app-weekly-revenue-chart [items]="weeklyRevenueItems"></app-weekly-revenue-chart>
+      <app-order-value-chart [items]="orderValueItems"></app-order-value-chart>
+    </div>
+
+    <!-- Row 8: Financial Activity Feed | Revenue Forecast -->
+    <div class="dashboard-row two-col">
+      <app-financial-activity-feed [items]="activityItems"></app-financial-activity-feed>
+      <app-revenue-forecast-chart [items]="forecastItems"></app-revenue-forecast-chart>
+    </div>
+  </div>
+</div>

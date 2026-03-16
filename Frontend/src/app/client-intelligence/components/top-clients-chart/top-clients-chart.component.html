@@ -1,0 +1,11 @@
+<div class="top-clients-chart">
+  <apx-chart *ngIf="chartOptions" [series]="chartOptions.series" [chart]="chartOptions.chart"
+    [plotOptions]="chartOptions.plotOptions" [colors]="chartOptions.colors"
+    [xaxis]="chartOptions.xaxis" [yaxis]="chartOptions.yaxis"
+    [dataLabels]="chartOptions.dataLabels" [tooltip]="chartOptions.tooltip">
+  </apx-chart>
+  <div *ngIf="!items?.length" class="empty-state">
+    <i class="pi pi-inbox"></i>
+    <p>No client revenue data available</p>
+  </div>
+</div>

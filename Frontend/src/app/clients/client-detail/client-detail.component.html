@@ -22,6 +22,14 @@
     <p>Loading client details...</p>
   </div>
 
+  <!-- Error State -->
+  <div *ngIf="loadFailed && !loading" class="error-container">
+    <i class="pi pi-exclamation-triangle" style="font-size: 3rem; color: var(--red-500); margin-bottom: 1rem;"></i>
+    <h3>Failed to Load Client</h3>
+    <p>{{ errorMessage || 'An error occurred while loading the client.' }}</p>
+    <button pButton type="button" label="Back" icon="pi pi-arrow-left" (click)="goBack()" class="p-button-outlined"></button>
+  </div>
+
   <!-- Client Info Card -->
   <div *ngIf="!loading && client" class="client-info-section">
     <p-card styleClass="info-card">
@@ -49,6 +57,16 @@
         <div class="info-item">
           <label>Last Order</label>
           <p>{{ formatDate(client.lastOrderDate) }}</p>
+        </div>
+        <div class="info-item">
+          <label>Customer Type</label>
+          <p-tag 
+            *ngIf="client.customerType"
+            [value]="client.customerType"
+            severity="info"
+            [rounded]="true">
+          </p-tag>
+          <p *ngIf="!client.customerType">—</p>
         </div>
         <div class="info-item">
           <label>Status</label>
@@ -102,7 +120,7 @@
                   <td>{{ order.title }}</td>
                   <td>
                     <p-tag 
-                      [value]="order.status" 
+                      [value]="formatStatus(order.status)" 
                       [severity]="getStatusSeverity(order.status)"
                       [rounded]="true">
                     </p-tag>
@@ -225,7 +243,7 @@
                   <p-button 
                     icon="pi pi-download" 
                     styleClass="p-button-text p-button-rounded"
-                    (onClick)="downloadFile(file.id)"
+                    (onClick)="downloadFile(file)"
                     pTooltip="Download">
                   </p-button>
                 </div>
@@ -235,6 +253,278 @@
             <div *ngIf="!filesLoading && files.length === 0" class="empty-state">
               <i class="pi pi-file empty-icon"></i>
               <p>No files found</p>
+            </div>
+          </div>
+        </p-tabPanel>
+
+        <!-- Financial Overview Tab -->
+        <p-tabPanel header="Financial Overview" leftIcon="pi pi-wallet">
+          <div class="tab-content">
+            <div class="tab-header">
+              <h3>Financial Overview</h3>
+              <p class="subtitle">Spending and invoice insights for this client (filtered by ClientId)</p>
+            </div>
+
+            <!-- Activity Overview -->
+            <div class="analytics-collapsible-section">
+              <h4 class="analytics-section-toggle" (click)="financialActivityCollapsed = !financialActivityCollapsed"
+                [attr.aria-expanded]="!financialActivityCollapsed" role="button" tabindex="0"
+                (keydown.enter)="financialActivityCollapsed = !financialActivityCollapsed"
+                (keydown.space)="financialActivityCollapsed = !financialActivityCollapsed; $event.preventDefault()">
+                <i class="pi pi-chevron-right analytics-chevron" [class.collapsed]="financialActivityCollapsed"></i>
+                <i class="pi pi-chart-bar"></i> Activity Overview
+              </h4>
+              <div class="analytics-section-body" [class.collapsed]="financialActivityCollapsed">
+                <div class="analytics-kpi-grid">
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-info"><i class="pi pi-calendar"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ financialKpis.ordersThisMonth }}</span>
+                      <span class="kpi-label">Orders This Month</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon"><i class="pi pi-shopping-cart"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ financialKpis.totalOrders }}</span>
+                      <span class="kpi-label">Total Orders</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-success"><i class="pi pi-check-circle"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ financialKpis.completedOrders }}</span>
+                      <span class="kpi-label">Completed Orders</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-warning"><i class="pi pi-clock"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ financialKpis.pendingOrders }}</span>
+                      <span class="kpi-label">Pending Orders</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Financial Overview -->
+            <div class="analytics-collapsible-section">
+              <h4 class="analytics-section-toggle" (click)="financialOverviewCollapsed = !financialOverviewCollapsed"
+                [attr.aria-expanded]="!financialOverviewCollapsed" role="button" tabindex="0"
+                (keydown.enter)="financialOverviewCollapsed = !financialOverviewCollapsed"
+                (keydown.space)="financialOverviewCollapsed = !financialOverviewCollapsed; $event.preventDefault()">
+                <i class="pi pi-chevron-right analytics-chevron" [class.collapsed]="financialOverviewCollapsed"></i>
+                <i class="pi pi-wallet"></i> Financial Overview
+              </h4>
+              <div class="analytics-section-body" [class.collapsed]="financialOverviewCollapsed">
+                <div class="analytics-kpi-grid">
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-primary"><i class="pi pi-wallet"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ formatCurrency(financialKpis.lifetimeSpend) }}</span>
+                      <span class="kpi-label">Lifetime Spend</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-info"><i class="pi pi-chart-line"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ formatCurrency(financialKpis.spendThisMonth) }}</span>
+                      <span class="kpi-label">Spend This Month</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-warning"><i class="pi pi-percentage"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ formatCurrency(financialKpis.averageOrderValue) }}</span>
+                      <span class="kpi-label">Average Order Value</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-success"><i class="pi pi-check-circle"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ financialKpis.paidInvoices }}</span>
+                      <span class="kpi-label">Paid Invoices</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-warning"><i class="pi pi-clock"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ financialKpis.pendingInvoices }}</span>
+                      <span class="kpi-label">Pending Invoices</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Financial Charts -->
+            <div class="analytics-collapsible-section">
+              <h4 class="analytics-section-toggle" (click)="financialChartsCollapsed = !financialChartsCollapsed"
+                [attr.aria-expanded]="!financialChartsCollapsed" role="button" tabindex="0"
+                (keydown.enter)="financialChartsCollapsed = !financialChartsCollapsed"
+                (keydown.space)="financialChartsCollapsed = !financialChartsCollapsed; $event.preventDefault()">
+                <i class="pi pi-chevron-right analytics-chevron" [class.collapsed]="financialChartsCollapsed"></i>
+                <i class="pi pi-chart-line"></i> Charts
+              </h4>
+              <div class="analytics-section-body" [class.collapsed]="financialChartsCollapsed">
+                <div class="analytics-charts-grid">
+                  <p-card styleClass="chart-card">
+                    <h4 class="chart-title"><i class="pi pi-chart-line"></i> Monthly Spending Trend</h4>
+                    <div class="chart-container" style="height: 280px;">
+                      <p-chart *ngIf="monthlySpendingChartData" type="line" [data]="monthlySpendingChartData" [options]="spendingChartOptions"></p-chart>
+                      <div *ngIf="!monthlySpendingChartData" class="chart-empty"><p>No spending data</p></div>
+                    </div>
+                  </p-card>
+                  <p-card styleClass="chart-card">
+                    <h4 class="chart-title"><i class="pi pi-box"></i> Spending by Package</h4>
+                    <div class="chart-container" style="height: 280px;">
+                      <p-chart *ngIf="spendingByPackageChartData" type="bar" [data]="spendingByPackageChartData" [options]="packageChartOptions"></p-chart>
+                      <div *ngIf="!spendingByPackageChartData" class="chart-empty"><p>No package data</p></div>
+                    </div>
+                  </p-card>
+                </div>
+                <div class="analytics-charts-grid">
+                  <p-card styleClass="chart-card">
+                    <h4 class="chart-title"><i class="pi pi-file-pdf"></i> Invoice Status Distribution</h4>
+                    <div class="chart-container" style="height: 280px;">
+                      <p-chart *ngIf="invoiceStatusChartData" type="doughnut" [data]="invoiceStatusChartData" [options]="invoiceStatusChartOptions"></p-chart>
+                      <div *ngIf="!invoiceStatusChartData" class="chart-empty"><p>No invoice data</p></div>
+                    </div>
+                  </p-card>
+                  <p-card styleClass="chart-card">
+                    <h4 class="chart-title"><i class="pi pi-chart-bar"></i> Orders vs Spending</h4>
+                    <div class="chart-container" style="height: 280px;">
+                      <p-chart *ngIf="ordersVsSpendingChartData" type="bar" [data]="ordersVsSpendingChartData" [options]="ordersVsSpendingOptions"></p-chart>
+                      <div *ngIf="!ordersVsSpendingChartData" class="chart-empty"><p>No data</p></div>
+                    </div>
+                  </p-card>
+                </div>
+              </div>
+            </div>
+          </div>
+        </p-tabPanel>
+
+        <!-- Detail Analytics Tab -->
+        <p-tabPanel header="Detail Analytics" leftIcon="pi pi-chart-bar">
+          <div class="tab-content">
+            <div class="tab-header">
+              <h3>Client Analytics</h3>
+              <p class="subtitle">Usage insights for this client (filtered by ClientId)</p>
+            </div>
+
+            <!-- Usage Summary Cards -->
+            <div class="analytics-collapsible-section">
+              <h4 class="analytics-section-toggle" (click)="clientDetailKpiCollapsed = !clientDetailKpiCollapsed"
+                [attr.aria-expanded]="!clientDetailKpiCollapsed" role="button" tabindex="0"
+                (keydown.enter)="clientDetailKpiCollapsed = !clientDetailKpiCollapsed"
+                (keydown.space)="clientDetailKpiCollapsed = !clientDetailKpiCollapsed; $event.preventDefault()">
+                <i class="pi pi-chevron-right analytics-chevron" [class.collapsed]="clientDetailKpiCollapsed"></i>
+                <i class="pi pi-chart-bar"></i> Usage Summary
+              </h4>
+              <div class="analytics-section-body" [class.collapsed]="clientDetailKpiCollapsed">
+                <div class="analytics-kpi-grid">
+                  <div class="kpi-card">
+                    <div class="kpi-icon"><i class="pi pi-shopping-cart"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ analyticsKpis.totalOrders }}</span>
+                      <span class="kpi-label">Total Orders</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-info"><i class="pi pi-calendar"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ analyticsKpis.ordersThisMonth }}</span>
+                      <span class="kpi-label">Orders This Month</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-success"><i class="pi pi-check-circle"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ analyticsKpis.completedOrders }}</span>
+                      <span class="kpi-label">Completed Orders</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-warning"><i class="pi pi-refresh"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ analyticsKpis.revisionRequests }}</span>
+                      <span class="kpi-label">Revision Requests</span>
+                    </div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-icon kpi-primary"><i class="pi pi-clock"></i></div>
+                    <div class="kpi-content">
+                      <span class="kpi-value">{{ analyticsKpis.averageDeliveryTime }} days</span>
+                      <span class="kpi-label">Average Delivery Time</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="analytics-collapsible-section">
+              <h4 class="analytics-section-toggle" (click)="clientDetailChartsCollapsed = !clientDetailChartsCollapsed"
+                [attr.aria-expanded]="!clientDetailChartsCollapsed" role="button" tabindex="0"
+                (keydown.enter)="clientDetailChartsCollapsed = !clientDetailChartsCollapsed"
+                (keydown.space)="clientDetailChartsCollapsed = !clientDetailChartsCollapsed; $event.preventDefault()">
+                <i class="pi pi-chevron-right analytics-chevron" [class.collapsed]="clientDetailChartsCollapsed"></i>
+                <i class="pi pi-chart-line"></i> Charts
+              </h4>
+              <div class="analytics-section-body" [class.collapsed]="clientDetailChartsCollapsed">
+                <div class="analytics-charts-grid">
+                  <p-card styleClass="chart-card">
+                    <h4 class="chart-title"><i class="pi pi-calendar"></i> Monthly Orders Trend</h4>
+                    <div class="chart-container" style="height: 280px;">
+                      <p-chart *ngIf="ordersPerMonthChartData" type="bar" [data]="ordersPerMonthChartData" [options]="chartOptions"></p-chart>
+                      <div *ngIf="!ordersPerMonthChartData" class="chart-empty"><p>No order data</p></div>
+                    </div>
+                  </p-card>
+                  <p-card styleClass="chart-card">
+                    <h4 class="chart-title"><i class="pi pi-box"></i> Package Usage Distribution</h4>
+                    <div class="chart-container" style="height: 280px;">
+                      <p-chart *ngIf="packageUsageChartData" type="bar" [data]="packageUsageChartData" [options]="chartOptions"></p-chart>
+                      <div *ngIf="!packageUsageChartData" class="chart-empty"><p>No order data</p></div>
+                    </div>
+                  </p-card>
+                </div>
+                <div class="analytics-charts-grid">
+                  <p-card styleClass="chart-card">
+                    <h4 class="chart-title"><i class="pi pi-chart-line"></i> Average Delivery Time Trend</h4>
+                    <div class="chart-container" style="height: 280px;">
+                      <p-chart *ngIf="deliveryTimeTrendChartData" type="line" [data]="deliveryTimeTrendChartData" [options]="lineChartOptions"></p-chart>
+                      <div *ngIf="!deliveryTimeTrendChartData" class="chart-empty"><p>No completed orders</p></div>
+                    </div>
+                  </p-card>
+                  <p-card styleClass="chart-card">
+                    <h4 class="chart-title"><i class="pi pi-refresh"></i> Revision Statistics</h4>
+                    <div class="chart-container" style="height: 280px;">
+                      <p-chart *ngIf="revisionStatsChartData" type="doughnut" [data]="revisionStatsChartData" [options]="revisionChartOptions"></p-chart>
+                      <div *ngIf="!revisionStatsChartData" class="chart-empty"><p>No revision data</p></div>
+                    </div>
+                  </p-card>
+                </div>
+              </div>
+            </div>
+
+            <!-- Insights Panel -->
+            <div class="analytics-collapsible-section" *ngIf="insights.length > 0">
+              <h4 class="analytics-section-toggle" (click)="clientDetailInsightsCollapsed = !clientDetailInsightsCollapsed"
+                [attr.aria-expanded]="!clientDetailInsightsCollapsed" role="button" tabindex="0"
+                (keydown.enter)="clientDetailInsightsCollapsed = !clientDetailInsightsCollapsed"
+                (keydown.space)="clientDetailInsightsCollapsed = !clientDetailInsightsCollapsed; $event.preventDefault()">
+                <i class="pi pi-chevron-right analytics-chevron" [class.collapsed]="clientDetailInsightsCollapsed"></i>
+                <i class="pi pi-lightbulb"></i> Insights
+              </h4>
+              <div class="analytics-section-body" [class.collapsed]="clientDetailInsightsCollapsed">
+                <div class="insights-panel">
+                  <div class="insight-item" *ngFor="let insight of insights" [ngClass]="'insight-' + insight.severity">
+                    <i class="pi" [ngClass]="insight.icon || 'pi pi-info-circle'"></i>
+                    <span>{{ insight.message }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </p-tabPanel>

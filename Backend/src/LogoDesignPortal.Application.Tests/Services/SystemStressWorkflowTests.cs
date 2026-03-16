@@ -256,14 +256,17 @@ public class SystemStressWorkflowTests : IAsyncDisposable
         Assert.NotNull(order);
         Assert.Equal(OrderStatus.InProgress.ToString(), order.Status);
 
-        // 3. Designer uploads preview batch (3 files)
+        // 3. Designer uploads preview batch (3 files) - first batch requires design category, type, proposed price
         var previewBatch1 = new[]
         {
             FormFileTestHelper.Create(fileName: $"prev1_{orderIndex}.png"),
             FormFileTestHelper.Create(fileName: $"prev2_{orderIndex}.png"),
             FormFileTestHelper.Create(fileName: $"prev3_{orderIndex}.png")
         };
-        var uploadResult1 = await fileService.UploadMultipleFilesAsync(orderId, previewBatch1, _designerUserId, "Preview");
+        var uploadResult1 = await fileService.UploadMultipleFilesAsync(orderId, previewBatch1, _designerUserId, "Preview",
+            designCategory: (int)DesignCategory.EmbroideryDigitizing,
+            designType: (int)DesignType.LeftChest,
+            proposedPrice: 100m);
         Assert.Equal(3, uploadResult1.Count);
         var previewUploads = 3;
 
@@ -302,9 +305,13 @@ public class SystemStressWorkflowTests : IAsyncDisposable
         order = await orderService.SendFilesToClientAsync(orderId, fileIds2, _adminUserId);
         Assert.Equal(OrderStatus.PreviewDelivered.ToString(), order.Status);
 
-        // 8. Client approves final design
+        // 8. Client approves final design (status -> ClientApproved)
         var approveDto = new ApproveLogoDto { Notes = $"Approved order {orderIndex}" };
         order = await revisionService.ApproveLogoAsync(orderId, approveDto, clientUserId);
+        Assert.Equal(OrderStatus.ClientApproved.ToString(), order.Status);
+
+        // 9. Admin marks order Completed
+        order = await orderService.UpdateOrderStatusAsync(orderId, new UpdateOrderStatusRequestDto { Status = OrderStatus.Completed.ToString() }, _adminUserId, "Admin");
         var finalApprovals = 1;
         Assert.Equal(OrderStatus.Completed.ToString(), order.Status);
 

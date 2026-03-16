@@ -1,0 +1,146 @@
+.client-churn-dashboard {
+  position: relative;
+  min-height: 200px;
+
+  .dashboard-row {
+    margin-bottom: 1.5rem;
+    display: grid;
+    gap: 1.5rem;
+
+    &.full-width {
+      grid-template-columns: 1fr;
+    }
+
+    &.two-col {
+      grid-template-columns: repeat(2, 1fr);
+      @media (max-width: 992px) {
+        grid-template-columns: 1fr;
+      }
+    }
+  }
+
+  .kpi-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .kpi-card {
+    background: var(--surface-card);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border: 1px solid var(--surface-border);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    transition: all 0.2s ease;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .kpi-icon {
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .kpi-content {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      min-width: 0;
+    }
+
+    .kpi-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text-color);
+      line-height: 1.2;
+    }
+
+    .kpi-label {
+      font-size: 0.75rem;
+      color: var(--text-color-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    &.kpi-healthy .kpi-icon {
+      background: linear-gradient(135deg, #10b981, #059669);
+    }
+
+    &.kpi-warning .kpi-icon {
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+    }
+
+    &.kpi-high-risk .kpi-icon {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+    }
+
+    &.kpi-churn .kpi-icon {
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    }
+  }
+
+  .loading-overlay {
+    display: flex;
+    justify-content: center;
+    padding: 3rem;
+  }
+
+  .api-error-banner {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    color: #dc2626;
+
+    .retry-link {
+      margin-left: 0.5rem;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+
+    h3 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-color);
+
+      i {
+        font-size: 1.1rem;
+        color: var(--primary-color);
+      }
+    }
+  }
+
+  .chart-card {
+    ::ng-deep .p-card-body {
+      padding: 1.25rem 1.5rem;
+    }
+  }
+}

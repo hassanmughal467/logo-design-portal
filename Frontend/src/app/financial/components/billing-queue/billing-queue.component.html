@@ -1,0 +1,121 @@
+<div class="billing-queue">
+  <p-confirmDialog></p-confirmDialog>
+  <p-card styleClass="billing-queue-card">
+    <ng-template pTemplate="header">
+      <div class="card-header">
+        <h3 class="card-title"><i class="pi pi-inbox"></i> Billing Queue</h3>
+        <p class="card-subtitle">Clients with uninvoiced completed orders. Click a client to generate an invoice.</p>
+      </div>
+    </ng-template>
+
+    <div *ngIf="loading" class="loading-row">
+      <p-progressSpinner strokeWidth="4" [style]="{width: '40px', height: '40px'}"></p-progressSpinner>
+      <span>Loading billing queue...</span>
+    </div>
+
+    <div *ngIf="!loading && queue.length === 0" class="empty-state">
+      <i class="pi pi-check-circle"></i>
+      <p>No uninvoiced completed orders. All caught up!</p>
+    </div>
+
+    <p-table *ngIf="!loading && queue.length > 0" [value]="queue" [rowHover]="true" styleClass="p-datatable-sm p-datatable-striped">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Client</th>
+          <th>Company</th>
+          <th style="text-align: right">Uninvoiced Orders</th>
+          <th style="text-align: right">Total Pending</th>
+          <th style="width: 120px"></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-item>
+        <tr (click)="onClientClick(item)" class="clickable-row">
+          <td>{{ item.clientName }}</td>
+          <td>{{ item.companyName }}</td>
+          <td style="text-align: right">{{ item.uninvoicedOrderCount }}</td>
+          <td style="text-align: right">{{ formatCurrency(item.totalPendingAmount) }}</td>
+          <td>
+            <button pButton type="button" icon="pi pi-file-edit" class="p-button-rounded p-button-text p-button-sm" (click)="onClientClick(item); $event.stopPropagation()" pTooltip="Create Invoice"></button>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </p-card>
+
+  <!-- Create Invoice Dialog -->
+  <p-dialog [(visible)]="displayCreateInvoiceDialog" [header]="'Create Invoice - ' + (selectedClient?.companyName || selectedClient?.clientName || '')" [modal]="true" [style]="{width: '560px'}" [closable]="true" (onHide)="closeDialog()">
+    <div *ngIf="selectedClient" class="create-invoice-dialog">
+      <div class="form-group">
+        <label>Billing Period (optional)</label>
+        <input pInputText [(ngModel)]="billingPeriod" placeholder="e.g. March 2026" class="w-full" />
+      </div>
+
+      <div class="orders-section">
+        <div class="orders-header">
+          <span>Select orders to include</span>
+          <div class="order-actions">
+            <button pButton type="button" label="Select All" class="p-button-text p-button-sm" (click)="selectAll()"></button>
+            <button pButton type="button" label="Select None" class="p-button-text p-button-sm" (click)="selectNone()"></button>
+          </div>
+        </div>
+
+        <div *ngIf="ordersLoading" class="orders-loading">
+          <p-progressSpinner strokeWidth="4" [style]="{width: '32px', height: '32px'}"></p-progressSpinner>
+          <span>Loading orders...</span>
+        </div>
+
+        <div *ngIf="!ordersLoading && eligibleOrders.length === 0" class="orders-empty">
+          No eligible orders found.
+        </div>
+
+        <div *ngIf="!ordersLoading && eligibleOrders.length > 0" class="orders-table-wrapper">
+          <table class="orders-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Order</th>
+                <th>Default Price</th>
+                <th>Editable Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let order of eligibleOrders" class="order-row" [class.selected]="isSelected(order.orderId)">
+                <td>
+                  <p-checkbox [binary]="true" [ngModel]="isSelected(order.orderId)" (ngModelChange)="toggleOrder(order.orderId)" [inputId]="'order-' + order.orderId"></p-checkbox>
+                </td>
+                <td>
+                  <div class="order-info">
+                    <span class="order-number">Order #{{ order.orderNumber }}</span>
+                    <span class="order-title">{{ order.title }}</span>
+                  </div>
+                </td>
+                <td>{{ formatCurrency(order.price) }}</td>
+                <td>
+                  <p-inputNumber 
+                    *ngIf="isSelected(order.orderId)"
+                    [(ngModel)]="orderEditablePrices[order.orderId]"
+                    mode="decimal"
+                    [min]="0"
+                    [maxFractionDigits]="2"
+                    [style]="{width: '100px'}"
+                    (ngModelChange)="onPriceChange(order.orderId, $event)"
+                  ></p-inputNumber>
+                  <span *ngIf="!isSelected(order.orderId)">-</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div *ngIf="!ordersLoading && eligibleOrders.length > 0" class="selected-total">
+          <strong>Selected Total: {{ formatCurrency(selectedTotal) }}</strong>
+        </div>
+      </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <button pButton type="button" label="Cancel" class="p-button-text" (click)="closeDialog()"></button>
+      <button pButton type="button" label="Create Invoice" icon="pi pi-file-edit" [loading]="createInvoiceLoading" [disabled]="selectedOrderIds.size === 0" (click)="createInvoice()"></button>
+    </ng-template>
+  </p-dialog>
+</div>

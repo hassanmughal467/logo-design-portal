@@ -1,20 +1,14 @@
 <div class="orders-page">
-  <!-- Page Header -->
-  <div class="page-header">
-    <div class="header-content">
-      <h1 class="page-title">{{ pageTitle }}</h1>
-      <p class="page-subtitle">{{ pageSubtitle }}</p>
-    </div>
-    <div class="header-actions">
+  <app-page-header [title]="pageTitle" [subtitle]="pageSubtitle">
+    <div *ngIf="canCreateOrder()" actions>
       <p-button
-        *ngIf="canCreateOrder()"
         label="Create Order"
         icon="pi pi-plus"
         (onClick)="createOrder()"
         styleClass="p-button-primary">
       </p-button>
     </div>
-  </div>
+  </app-page-header>
 
   <!-- Loading State -->
   <div *ngIf="loading" class="loading-container">
@@ -26,19 +20,16 @@
   <ng-container *ngIf="!loading">
 
     <!-- Role-Specific Summary Cards -->
-    <div class="summary-cards" *ngIf="orders.length > 0">
-      <div class="summary-card" *ngFor="let card of summaryCards"
-        [class]="'summary-' + card.color"
-        [class.clickable]="card.filterStatus !== undefined"
-        (click)="onSummaryCardClick(card)">
-        <div class="summary-card-icon" [class]="'bg-' + card.color">
-          <i [class]="card.icon"></i>
-        </div>
-        <div class="summary-card-info">
-          <span class="summary-card-value">{{ card.value }}</span>
-          <span class="summary-card-label">{{ card.label }}</span>
-        </div>
-      </div>
+    <div class="kpi-grid" *ngIf="orders.length > 0">
+      <app-kpi-card
+        *ngFor="let card of summaryCards"
+        [label]="card.label"
+        [value]="card.value"
+        [icon]="card.icon"
+        [variant]="card.color === 'secondary' ? 'neutral' : card.color"
+        [clickable]="card.filterStatus !== undefined"
+        (cardClick)="onSummaryCardClick(card)">
+      </app-kpi-card>
     </div>
 
     <!-- Quick Filter Chips -->
@@ -54,7 +45,8 @@
     </div>
 
     <!-- Orders Grid -->
-    <p-card styleClass="orders-card">
+    <app-card-container>
+      <app-data-table-wrapper>
       <p-table
         [value]="filteredOrders"
         [loading]="loading"
@@ -259,17 +251,16 @@
         <ng-template pTemplate="emptymessage">
           <tr>
             <td [attr.colspan]="isAdminOrSuper ? 8 : 6" class="empty-message">
-              <div class="empty-state">
-                <i class="pi pi-shopping-cart empty-icon"></i>
-                <p class="empty-text" *ngIf="!selectedStatus && !globalFilter">No orders found</p>
-                <p class="empty-text" *ngIf="selectedStatus || globalFilter">No orders match your filters</p>
+              <app-empty-state
+                icon="pi pi-shopping-cart"
+                [title]="(selectedStatus || globalFilter) ? 'No orders match your filters' : 'No orders found'">
                 <p-button *ngIf="selectedStatus || globalFilter"
                   label="Clear Filters" icon="pi pi-filter-slash"
                   styleClass="p-button-text p-button-sm" (onClick)="clearAllFilters()"></p-button>
                 <p-button *ngIf="canCreateOrder() && !selectedStatus && !globalFilter"
                   label="Create Order" icon="pi pi-plus"
                   styleClass="p-button-primary" (onClick)="createOrder()"></p-button>
-              </div>
+              </app-empty-state>
             </td>
           </tr>
         </ng-template>
@@ -284,7 +275,8 @@
           </div>
         </ng-template>
       </p-table>
-    </p-card>
+      </app-data-table-wrapper>
+    </app-card-container>
   </ng-container>
 
   <!-- Order Create Modal -->
@@ -411,8 +403,8 @@
           mode="basic"
           [multiple]="true"
           [auto]="false"
-          accept="image/*,.pdf,.ai,.eps,.psd,.svg"
-          [maxFileSize]="10000000"
+          accept="image/*,.pdf,.ai,.eps,.psd,.svg,.pes,.dst,.jef,.exp,.vp3,.xxx,.hus,.art,.vip,.vip3,.shv,.pec,.jpm,.sew,.emb,.csd,.pcs,.phb,.phc,.stx,.s10,.dsb,.zsk"
+          [maxFileSize]="26214400"
           (onSelect)="onFileSelect($event)"
           chooseLabel="Choose Files"
           [showUploadButton]="false"
@@ -421,8 +413,8 @@
         </p-fileUpload>
         <small class="help-text">
           <i class="pi pi-info-circle"></i>
-          Maximum file size: 10MB per file<br>
-          Supported formats: JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD<br>
+          Maximum file size: 10MB (images), 25MB (vector/embroidery)<br>
+          Supported formats: JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD, embroidery (PES, DST, JEF, EXP, etc.)<br>
           You can select multiple files at once
         </small>
 

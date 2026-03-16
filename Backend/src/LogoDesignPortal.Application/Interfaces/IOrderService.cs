@@ -1,3 +1,4 @@
+using LogoDesignPortal.Application.DTOs.Common;
 using LogoDesignPortal.Application.DTOs.Orders;
 using Microsoft.AspNetCore.Http;
 
@@ -14,6 +15,7 @@ public interface IOrderService
     Task<List<OrderResponseDto>> GetOrdersByClientAsync(Guid clientId);
     Task<List<OrderResponseDto>> GetOrdersByDesignerAsync(Guid designerId);
     Task<List<OrderResponseDto>> GetAllOrdersAsync(string? userRole);
+    Task<PagedResultDto<OrderResponseDto>> GetOrdersPagedAsync(string? userRole, int page, int pageSize);
     Task<OrderResponseDto> AssignOrderToDesignerAsync(Guid orderId, Guid designerId, Guid assignedBy);
     Task<OrderResponseDto> UpdateOrderStatusAsync(Guid orderId, UpdateOrderStatusRequestDto request, Guid userId, string? userRole = null);
     Task<OrderResponseDto> RequestPriceApprovalAsync(Guid orderId, RequestPriceApprovalDto request, Guid requestedBy);
@@ -35,4 +37,9 @@ public interface IOrderService
     /// </summary>
     Task<List<OrderLogResponseDto>> GetOrderLogsWithAccessAsync(Guid orderId, Guid userId, string? userRole);
     Task<OrderResponseDto> SetAllowUploadsAsync(Guid orderId, bool allowUploads, Guid userId);
+
+    /// <summary>
+    /// Admin updates the client charge price for an order. Can be done anytime before invoice generation.
+    /// </summary>
+    Task<OrderResponseDto> UpdateClientChargePriceAsync(Guid orderId, UpdateClientChargePriceRequestDto request, Guid userId, string? userRole = null);
 }

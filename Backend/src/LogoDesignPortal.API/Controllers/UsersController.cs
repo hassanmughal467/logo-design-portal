@@ -1,4 +1,6 @@
 using LogoDesignPortal.API.Attributes;
+using LogoDesignPortal.API.Extensions;
+using LogoDesignPortal.API.Models;
 using LogoDesignPortal.Application.DTOs.Users;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -15,12 +17,27 @@ namespace LogoDesignPortal.API.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
+    private readonly IPermissionService _permissionService;
     private readonly ILogger<UsersController> _logger;
 
-    public UsersController(IUserService userService, ILogger<UsersController> logger)
+    public UsersController(IUserService userService, IPermissionService permissionService, ILogger<UsersController> logger)
     {
         _userService = userService;
+        _permissionService = permissionService;
         _logger = logger;
+    }
+
+    [HttpGet("me/permissions")]
+    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyPermissions()
+    {
+        var userId = User.GetUserId();
+        if (userId == null)
+        {
+            return Unauthorized(new { error = "User identity could not be determined." });
+        }
+        var permissions = await _permissionService.GetUserPermissionsAsync(userId.Value);
+        return Ok(permissions);
     }
 
     [HttpPost]
@@ -50,7 +67,7 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> GetUserById(Guid id)
     {
         // Check if user can view this profile (own profile or admin)
-        var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var currentUserId = User.GetUserIdOrThrow();
         var isAdmin = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
         
         // Users can only view their own profile, admins can view any
@@ -70,11 +87,17 @@ public class UsersController : ControllerBase
 
     [HttpGet]
     [Authorize(Roles = "SuperAdmin,Admin")]
-    [ProducesResponseType(typeof(List<UserResponseDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAllUsers()
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
-        var users = await _userService.GetAllUsersAsync();
-        return Ok(users);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var paged = await _userService.GetUsersPagedAsync(page, pageSize);
+        var totalPages = paged.PageSize > 0 ? (int)Math.Ceiling((double)paged.Total / paged.PageSize) : 0;
+        return Ok(new ApiResponse<object>
+        {
+            Data = new { items = paged.Items, total = paged.Total, page = paged.Page, pageSize = paged.PageSize },
+            Meta = new ApiMeta { Total = paged.Total, Page = paged.Page, PageSize = paged.PageSize, TotalPages = totalPages }
+        });
     }
 
     [HttpPut("{id}")]
@@ -88,7 +111,7 @@ public class UsersController : ControllerBase
     {
         try
         {
-            var performedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var performedBy = User.GetUserIdOrThrow();
             var user = await _userService.UpdateUserAsync(id, request, performedBy);
             return Ok(user);
         }
@@ -154,7 +177,7 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> UpdateUserProfile(Guid id, [FromBody] UpdateClientProfileDto request)
     {
         // Check if user can update (own profile or admin)
-        var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var currentUserId = User.GetUserIdOrThrow();
         var isAdmin = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
         
         // Users can only update their own profile, admins can update any
@@ -185,7 +208,7 @@ public class UsersController : ControllerBase
     {
         try
         {
-            var deletedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var deletedBy = User.GetUserIdOrThrow();
             if (permanent)
             {
                 await _userService.HardDeleteUserAsync(id, deletedBy);

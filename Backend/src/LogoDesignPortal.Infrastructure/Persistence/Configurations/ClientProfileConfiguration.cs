@@ -1,4 +1,5 @@
 using LogoDesignPortal.Domain.Entities;
+using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -9,6 +10,11 @@ public class ClientProfileConfiguration : IEntityTypeConfiguration<ClientProfile
     public void Configure(EntityTypeBuilder<ClientProfile> builder)
     {
         builder.HasKey(e => e.Id);
+
+        builder.Property(e => e.BillingType)
+            .IsRequired()
+            .HasConversion<int>()
+            .HasDefaultValue(BillingType.PerLogo);
 
         builder.Property(e => e.CompanyName)
             .IsRequired()
@@ -46,6 +52,10 @@ public class ClientProfileConfiguration : IEntityTypeConfiguration<ClientProfile
 
         builder.Property(e => e.Reference)
             .HasMaxLength(200);
+
+        builder.Property(e => e.CustomerType)
+            .HasConversion<int>()
+            .IsRequired(false);
 
         builder.HasOne(e => e.User)
             .WithOne(u => u.ClientProfile)

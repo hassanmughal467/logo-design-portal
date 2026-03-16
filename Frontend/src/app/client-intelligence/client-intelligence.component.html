@@ -1,0 +1,18 @@
+<div class="client-intelligence-page">
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">Client Intelligence</h1>
+      <p class="page-subtitle">Monitor client behavior, revenue trends, and identify clients likely to stop ordering</p>
+    </div>
+    <div class="header-tabs">
+      <button class="tab-btn" [class.active]="activeTab === 'overview'" (click)="activeTab = 'overview'">
+        <i class="pi pi-chart-bar"></i> Overview
+      </button>
+      <button class="tab-btn" [class.active]="activeTab === 'churn'" (click)="activeTab = 'churn'">
+        <i class="pi pi-user-minus"></i> Churn Prediction
+      </button>
+    </div>
+  </div>
+  <app-client-intelligence-dashboard *ngIf="activeTab === 'overview'"></app-client-intelligence-dashboard>
+  <app-client-churn-dashboard *ngIf="activeTab === 'churn'"></app-client-churn-dashboard>
+</div>

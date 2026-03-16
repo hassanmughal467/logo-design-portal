@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using LogoDesignPortal.Domain.Enums;
 
 namespace LogoDesignPortal.Application.DTOs.Users;
 
@@ -31,6 +32,7 @@ public class CreateUserRequestDto
     public string? InvoiceEmail { get; set; }
 
     // Client Profile fields (optional, used when RoleId is Client)
+    public BillingType? BillingType { get; set; }
     public string? CompanyName { get; set; }
     public string? ContactName { get; set; }
     public string? PhoneNumber { get; set; }
@@ -43,6 +45,7 @@ public class CreateUserRequestDto
     public string? PostalCode { get; set; }
     public string? Website { get; set; }
     public string? Reference { get; set; }
+    public CustomerType? CustomerType { get; set; }
 
     // Designer Profile fields (optional, used when RoleId is Designer)
     public string? Specialization { get; set; }

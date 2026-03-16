@@ -35,6 +35,18 @@ export class UserListComponent implements OnInit, OnDestroy {
   loadingUserDetails = false;
   selectedUsers: User[] = [];
   roles = Object.values(UserRole);
+
+  billingTypeOptions = [
+    { label: 'Per Logo', value: 1 },
+    { label: 'Weekly', value: 2 },
+    { label: 'Monthly', value: 3 }
+  ];
+
+  customerTypeOptions = [
+    { label: 'Residential', value: 'Residential' },
+    { label: 'Business', value: 'Business' },
+    { label: 'Student', value: 'Student' }
+  ];
   
   // Role ID mapping
   private roleIdMap: { [key: string]: string } = {
@@ -50,6 +62,9 @@ export class UserListComponent implements OnInit, OnDestroy {
   globalFilter = '';
   first = 0;
   rows = 10;
+  totalUsers = 0;
+  currentPage = 1;
+  pageSize = 10;
 
   private destroy$ = new Subject<void>();
 
@@ -71,6 +86,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       invoiceEmail: ['', [Validators.email]],
       // Client profile fields
       companyName: [''],
+      billingType: [1], // 1=PerLogo, 2=Weekly, 3=Monthly
       contactName: [''],
       phoneNumber: [''],
       cell: [''],
@@ -82,6 +98,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       postalCode: [''],
       website: [''],
       reference: [''],
+      customerType: [null],
       // Designer profile fields
       specialization: [''],
       bio: [''],
@@ -127,6 +144,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       invoiceEmail: ['', [Validators.email]],
       // Client profile fields
       companyName: [''],
+      billingType: [1], // 1=PerLogo, 2=Weekly, 3=Monthly
       contactName: [''],
       phoneNumber: [''],
       cell: [''],
@@ -138,6 +156,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       postalCode: [''],
       website: [''],
       reference: [''],
+      customerType: [null],
       // Designer profile fields
       specialization: [''],
       bio: [''],
@@ -181,7 +200,6 @@ export class UserListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    console.log('UserListComponent ngOnInit called');
     this.loadUsers();
   }
 
@@ -191,36 +209,19 @@ export class UserListComponent implements OnInit, OnDestroy {
   }
 
   loadUsers(): void {
-    console.log('loadUsers() called');
     this.loading = true;
     const user = this.authService.getCurrentUser();
-    console.log('Current user:', user);
-    console.log('Loading users from endpoint: users');
     
-    this.apiService.get<User[]>('users')
+    this.apiService.get<any>(`users?page=${this.currentPage}&pageSize=${this.rows}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (users) => {
-          console.log('Raw users from API:', users);
-          if (!users || !Array.isArray(users)) {
-            console.warn('Users is not an array:', users);
-            this.users = [];
-            this.loading = false;
-            return;
-          }
-          this.users = users;
-          console.log('Final users array:', this.users);
+        next: (response) => {
+          this.users = ApiService.extractItems<User>(response);
+          const meta = ApiService.extractPagedMeta(response);
+          this.totalUsers = meta.total;
           this.loading = false;
         },
         error: (error) => {
-          console.error('Error loading users:', error);
-          console.error('Error details:', {
-            status: error.status,
-            statusText: error.statusText,
-            message: error.message,
-            error: error.error
-          });
-          
           let errorMessage = 'Failed to load users';
           if (error.status === 403) {
             errorMessage = 'You do not have permission to view users';
@@ -339,6 +340,11 @@ export class UserListComponent implements OnInit, OnDestroy {
     return (this.selectedUserForView as any).invoiceEmail || null;
   }
 
+  getBillingTypeLabel(value: number | undefined): string {
+    const opt = this.billingTypeOptions.find(o => o.value === value);
+    return opt?.label ?? 'Per Logo';
+  }
+
   getClientProfile(): any {
     if (!this.selectedUserForView) return null;
     return (this.selectedUserForView as any).clientProfile || null;
@@ -404,6 +410,7 @@ export class UserListComponent implements OnInit, OnDestroy {
     if (roleName === 'Client') {
       // Mandatory fields for Client
       createRequest.companyName = formValue.companyName || '';
+      createRequest.billingType = formValue.billingType ?? 1;
       createRequest.contactName = formValue.contactName || '';
       createRequest.phoneNumber = formValue.phoneNumber || '';
       // Optional fields
@@ -416,6 +423,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       if (formValue.postalCode) createRequest.postalCode = formValue.postalCode;
       if (formValue.website) createRequest.website = formValue.website;
       if (formValue.reference) createRequest.reference = formValue.reference;
+      if (formValue.customerType) createRequest.customerType = formValue.customerType;
     } else if (roleName === 'Designer') {
       // Optional fields for Designer
       if (formValue.specialization) createRequest.specialization = formValue.specialization;
@@ -474,6 +482,8 @@ export class UserListComponent implements OnInit, OnDestroy {
   onPageChange(event: any): void {
     this.first = event.first;
     this.rows = event.rows;
+    this.currentPage = Math.floor(event.first / event.rows) + 1;
+    this.loadUsers();
   }
 
   viewUser(user: User): void {
@@ -544,6 +554,7 @@ export class UserListComponent implements OnInit, OnDestroy {
             invoiceEmail: (fullUser as any).invoiceEmail || '',
             // Client profile fields
             companyName: (fullUser as any).clientProfile?.companyName || '',
+            billingType: (fullUser as any).clientProfile?.billingType ?? 1,
             contactName: (fullUser as any).clientProfile?.contactName || '',
             phoneNumber: (fullUser as any).clientProfile?.phoneNumber || '',
             cell: (fullUser as any).clientProfile?.cell || '',
@@ -555,6 +566,7 @@ export class UserListComponent implements OnInit, OnDestroy {
             postalCode: (fullUser as any).clientProfile?.postalCode || '',
             website: (fullUser as any).clientProfile?.website || '',
             reference: (fullUser as any).clientProfile?.reference || '',
+            customerType: (fullUser as any).clientProfile?.customerType || null,
             // Designer profile fields
             specialization: (fullUser as any).designerProfile?.specialization || '',
             bio: (fullUser as any).designerProfile?.bio || '',
@@ -637,6 +649,7 @@ export class UserListComponent implements OnInit, OnDestroy {
     // Add profile fields based on role
     if (formValue.role === 'Client') {
       updateRequest.companyName = formValue.companyName || null;
+      updateRequest.billingType = formValue.billingType ?? 1;
       updateRequest.contactName = formValue.contactName || null;
       updateRequest.phoneNumber = formValue.phoneNumber || null;
       updateRequest.cell = formValue.cell || null;
@@ -648,6 +661,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       updateRequest.postalCode = formValue.postalCode || null;
       updateRequest.website = formValue.website || null;
       updateRequest.reference = formValue.reference || null;
+      updateRequest.customerType = formValue.customerType || null;
     } else if (formValue.role === 'Designer') {
       updateRequest.specialization = formValue.specialization || null;
       updateRequest.bio = formValue.bio || null;

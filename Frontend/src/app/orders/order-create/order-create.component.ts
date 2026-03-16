@@ -5,6 +5,7 @@ import { AuthService } from '@core/services/auth.service';
 import { MessageService } from 'primeng/api';
 import { CreateOrderRequest, OrderPriority } from '@shared/models/order.model';
 import { FileType } from '@shared/models/file.model';
+import { DesignCategory, DesignType } from '@shared/models/design-pricing.model';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 
@@ -22,15 +23,36 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   orderForm: FormGroup;
   loading = false;
   uploadingFiles = false;
+  submitError = '';
   minDate: Date = new Date();
   selectedFiles: File[] = [];
   isDragOver = false;
   priorityOptions = [
-    { label: 'Low', value: 1, description: 'No rush — standard queue' },
     { label: 'Normal', value: 2, description: 'Standard timeline' },
-    { label: 'High', value: 3, description: 'Important — faster delivery' },
-    { label: 'Urgent', value: 4, description: 'Rush order — fastest delivery' }
+    { label: 'Rush', value: 4, description: 'Rush order — fastest delivery' }
   ];
+
+  logoCategoryOptions = [
+    { label: 'Embroidery', value: 'embroidery' },
+    { label: 'Digitizing', value: 'digitizing' },
+    { label: 'Vector/Screen Printing', value: 'vector' },
+    { label: 'Custom Patch', value: 'customPatch' }
+  ];
+
+  placementOptions = [
+    { label: 'Left Chest', value: DesignType.LeftChest },
+    { label: 'Jacket Back', value: DesignType.JacketBack }
+  ];
+
+  stitchTypeOptions = [
+    { label: 'Running Stitch', value: 'RUNNING STITCH' },
+    { label: 'Satin', value: 'SATIN' },
+    { label: 'Tatami', value: 'TATAMI' },
+    { label: 'Chain Stitch', value: 'CHAIN STITCH' }
+  ];
+
+  showPlacementDropdown = false;
+  showStylePreferencesDropdown = false;
 
   constructor(
     private fb: FormBuilder,
@@ -40,13 +62,13 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   ) {
     this.orderForm = this.fb.group({
       title: ['', [Validators.required, Validators.minLength(3)]],
-      description: ['', [Validators.required, Validators.minLength(10)]],
-      price: [0, [Validators.required, Validators.min(0.01)]],
+      description: ['', [Validators.required, Validators.maxLength(1000)]],
+      price: [0], // Hidden: admin sets price when no client pricing exists
       priority: [2], // Default to Medium (2)
       deadline: [null],
-      instructions: [''],
+      logoCategory: [null],
+      placement: [null],
       requiredFormats: [''],
-      requirements: [''],
       colorPreferences: [''],
       stylePreferences: ['']
     });
@@ -73,31 +95,67 @@ export class OrderCreateComponent implements OnInit, OnChanges {
       price: data.price || 0,
       priority: data.priority || 2,
       deadline: null, // Always reset deadline for reorders
-      instructions: data.instructions || '',
+      logoCategory: data.logoCategory || null,
+      placement: data.placement || null,
       requiredFormats: data.requiredFormats || '',
-      requirements: data.requirements || '',
       colorPreferences: data.colorPreferences || '',
       stylePreferences: data.stylePreferences || ''
     });
+    this.updatePlacementVisibility();
+    this.updateStylePreferencesVisibility();
     this.orderForm.markAsUntouched();
     this.selectedFiles = [];
   }
 
   resetForm(): void {
+    this.submitError = '';
     this.orderForm.reset({
       title: '',
       description: '',
       price: 0,
       deadline: null,
       priority: 2, // Default to Medium (2)
-      instructions: '',
+      logoCategory: null,
+      placement: null,
       requiredFormats: '',
-      requirements: '',
       colorPreferences: '',
       stylePreferences: ''
     });
+    this.showPlacementDropdown = false;
+    this.showStylePreferencesDropdown = false;
+    this.updateStylePreferencesVisibility();
     this.orderForm.markAsUntouched();
     this.selectedFiles = [];
+  }
+
+  onLogoCategoryChange(): void {
+    this.updatePlacementVisibility();
+    this.updateStylePreferencesVisibility();
+    if (!this.showPlacementDropdown) {
+      this.orderForm.patchValue({ placement: null });
+    }
+    if (!this.showStylePreferencesDropdown) {
+      this.orderForm.patchValue({ stylePreferences: '' });
+    }
+  }
+
+  private updatePlacementVisibility(): void {
+    const category = this.orderForm.get('logoCategory')?.value;
+    this.showPlacementDropdown = category === 'embroidery' || category === 'customPatch';
+  }
+
+  private updateStylePreferencesVisibility(): void {
+    const category = this.orderForm.get('logoCategory')?.value;
+    this.showStylePreferencesDropdown = category === 'embroidery' || category === 'digitizing';
+    const styleControl = this.orderForm.get('stylePreferences');
+    if (styleControl) {
+      if (this.showStylePreferencesDropdown) {
+        styleControl.setValidators(Validators.required);
+      } else {
+        styleControl.clearValidators();
+      }
+      styleControl.updateValueAndValidity();
+    }
   }
 
   closeModal(): void {
@@ -112,6 +170,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
       return;
     }
 
+    this.submitError = '';
     this.loading = true;
     const formValue = this.orderForm.value;
     
@@ -142,7 +201,23 @@ export class OrderCreateComponent implements OnInit, OnChanges {
       orderData.deadline = new Date(formValue.deadline).toISOString();
     }
     
-    const optionalFields = ['instructions', 'requiredFormats', 'requirements', 'colorPreferences', 'stylePreferences'];
+    // Map logo category and placement to backend designCategory/designType
+    const logoCategory = formValue.logoCategory;
+    const placement = formValue.placement;
+    if (logoCategory) {
+      const categoryMap: Record<string, number> = {
+        embroidery: DesignCategory.EmbroideryDigitizing,
+        digitizing: DesignCategory.EmbroideryDigitizing,
+        vector: DesignCategory.VectorScreenPrinting,
+        customPatch: DesignCategory.CustomPatch
+      };
+      orderData.designCategory = categoryMap[logoCategory];
+      if (this.showPlacementDropdown && placement != null) {
+        orderData.designType = placement;
+      }
+    }
+
+    const optionalFields = ['requiredFormats', 'colorPreferences', 'stylePreferences'];
     optionalFields.forEach(field => {
       const value = cleanValue(formValue[field]);
       if (value !== undefined) {
@@ -167,11 +242,11 @@ export class OrderCreateComponent implements OnInit, OnChanges {
         error: (error) => {
           const msg = error.error?.error || error.error?.message || (typeof error.error === 'string' ? error.error : null);
           const detail = msg || (error.error?.errors ? JSON.stringify(error.error.errors) : 'Failed to create order');
-          console.error('Order creation failed:', { status: error.status, error: error.error, detail });
+          this.submitError = typeof detail === 'string' ? detail : 'Failed to create order';
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: typeof detail === 'string' ? detail : 'Failed to create order'
+            detail: this.submitError
           });
           this.loading = false;
         }
@@ -248,14 +323,15 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   private addFiles(files: File[]): void {
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
     const vectorExtensions = ['.svg', '.pdf', '.ai', '.eps', '.psd'];
-    const allowedExtensions = [...imageExtensions, ...vectorExtensions];
+    const embroiderExtensions = ['.pes', '.dst', '.jef', '.exp', '.vp3', '.xxx', '.hus', '.art', '.vip', '.vip3', '.shv', '.pec', '.jpm', '.sew', '.emb', '.csd', '.pcs', '.phb', '.phc', '.stx', '.s10', '.dsb', '.zsk'];
+    const allowedExtensions = [...imageExtensions, ...vectorExtensions, ...embroiderExtensions];
     const imageMaxBytes = 10 * 1024 * 1024;  // 10MB
     const vectorMaxBytes = 25 * 1024 * 1024;  // 25MB
 
     const getMaxSize = (fileName: string): number => {
       const ext = '.' + (fileName.split('.').pop() || '').toLowerCase();
       if (imageExtensions.includes(ext)) return imageMaxBytes;
-      if (vectorExtensions.includes(ext)) return vectorMaxBytes;
+      if (vectorExtensions.includes(ext) || embroiderExtensions.includes(ext)) return vectorMaxBytes;
       return imageMaxBytes;
     };
 
@@ -313,7 +389,12 @@ export class OrderCreateComponent implements OnInit, OnChanges {
       'webp': 'pi-image',
       'ai': 'pi-file',
       'eps': 'pi-file',
-      'psd': 'pi-file'
+      'psd': 'pi-file',
+      'pes': 'pi-file', 'dst': 'pi-file', 'jef': 'pi-file', 'exp': 'pi-file', 'vp3': 'pi-file',
+      'xxx': 'pi-file', 'hus': 'pi-file', 'art': 'pi-file', 'vip': 'pi-file', 'vip3': 'pi-file',
+      'shv': 'pi-file', 'pec': 'pi-file', 'jpm': 'pi-file', 'sew': 'pi-file', 'emb': 'pi-file',
+      'csd': 'pi-file', 'pcs': 'pi-file', 'phb': 'pi-file', 'phc': 'pi-file', 'stx': 'pi-file',
+      's10': 'pi-file', 'dsb': 'pi-file', 'zsk': 'pi-file'
     };
     return iconMap[ext] || 'pi-file';
   }

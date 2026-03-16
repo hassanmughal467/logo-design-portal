@@ -173,6 +173,7 @@ public class OrderServiceFullBatchTests
             Mock.Of<INotificationService>(),
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Mock.Of<IFileService>(),
+            Mock.Of<IClientLogoPricingService>(),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>());
     }
 }

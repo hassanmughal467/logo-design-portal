@@ -69,17 +69,21 @@ export class GalleryComponent implements OnInit, OnDestroy {
   }
 
   downloadFile(item: GalleryItem): void {
-    const token = this.authService.getAccessToken();
-    const baseUrl = this.apiService.getBaseUrl();
-    const url = `${baseUrl}/files/${item.id}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = item.originalFileName;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const fileId = item.fileId || item.id;
+    this.apiService.getBlob(`files/${fileId}/download`).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = item.originalFileName || item.fileName || `file-${fileId}`;
+        link.click();
+        URL.revokeObjectURL(url);
+        this.messageService.add({ severity: 'success', summary: 'Download', detail: 'File downloaded successfully' });
+      },
+      error: (err) => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to download file' });
+      }
+    });
   }
 
   getFileIcon(format?: string): string {

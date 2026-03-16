@@ -1,4 +1,5 @@
 using AutoMapper;
+using LogoDesignPortal.Application.Configuration;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
@@ -6,6 +7,8 @@ using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace LogoDesignPortal.Application.Services;
 
@@ -15,30 +18,52 @@ public class InvoiceService : IInvoiceService
     private readonly IMapper _mapper;
     private readonly INotificationService _notificationService;
     private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
+    private readonly ProductionSafetyOptions _safetyOptions;
+    private readonly ILogger<InvoiceService> _logger;
 
-    public InvoiceService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender)
+    public InvoiceService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender, IOptions<ProductionSafetyOptions> safetyOptions, ILogger<InvoiceService> logger)
     {
         _context = context;
         _mapper = mapper;
         _notificationService = notificationService;
         _entityUpdateSender = entityUpdateSender;
+        _safetyOptions = safetyOptions?.Value ?? new ProductionSafetyOptions();
+        _logger = logger;
     }
 
     public async Task<InvoiceResponseDto> CreateInvoiceAsync(CreateInvoiceRequestDto request, Guid createdBy)
     {
+        if (_safetyOptions.DisableBillingGeneration)
+            throw new InvalidOperationException("Billing temporarily disabled by administrator.");
+
         // Determine which orders to include
         var orderIds = new List<Guid>();
-        
-        // Backward compatibility: support single OrderId
-        if (request.OrderId.HasValue)
+        Dictionary<Guid, decimal>? orderPrices = null; // OrderId -> editable price
+
+        // New: support Orders with editable prices (takes precedence)
+        if (request.Orders != null && request.Orders.Any())
         {
-            orderIds.Add(request.OrderId.Value);
+            // Handle duplicate order IDs: group by OrderId and take last price to avoid crash
+            var uniqueOrders = request.Orders
+                .GroupBy(o => o.OrderId)
+                .Select(g => g.Last())
+                .ToList();
+            orderIds.AddRange(uniqueOrders.Select(o => o.OrderId));
+            orderPrices = uniqueOrders.ToDictionary(o => o.OrderId, o => o.Price);
         }
-        
-        // New: support multiple OrderIds
-        if (request.OrderIds != null && request.OrderIds.Any())
+        else
         {
-            orderIds.AddRange(request.OrderIds);
+            // Backward compatibility: support single OrderId
+            if (request.OrderId.HasValue)
+            {
+                orderIds.Add(request.OrderId.Value);
+            }
+
+            // New: support multiple OrderIds
+            if (request.OrderIds != null && request.OrderIds.Any())
+            {
+                orderIds.AddRange(request.OrderIds);
+            }
         }
 
         // Validate orders exist and get client
@@ -56,6 +81,25 @@ public class InvoiceService : IInvoiceService
                 throw new InvalidOperationException("One or more orders not found.");
             }
 
+            // All orders must be Completed, BillingEligible, and not yet invoiced
+            var nonCompletedOrders = orders.Where(o => o.Status != OrderStatus.Completed).ToList();
+            if (nonCompletedOrders.Any())
+            {
+                throw new InvalidOperationException("All orders must have status Completed before an invoice can be created.");
+            }
+
+            var alreadyInvoiced = orders.Where(o => o.IsInvoiced).ToList();
+            if (alreadyInvoiced.Any())
+            {
+                throw new InvalidOperationException("One or more of these orders have already been invoiced.");
+            }
+
+            var notEligible = orders.Where(o => !o.BillingEligible).ToList();
+            if (notEligible.Any())
+            {
+                throw new InvalidOperationException("One or more orders are not billing eligible.");
+            }
+
             // Ensure all orders belong to the same client
             var firstClientId = orders.First().ClientId;
             if (orders.Any(o => o.ClientId != firstClientId))
@@ -64,17 +108,6 @@ public class InvoiceService : IInvoiceService
             }
 
             clientId = firstClientId;
-
-            // Check if invoice already exists for any of these orders
-            var existingInvoices = await _context.Invoices
-                .Include(i => i.InvoiceOrders)
-                .Where(i => !i.IsDeleted && i.InvoiceOrders.Any(io => orderIds.Contains(io.OrderId!.Value)))
-                .ToListAsync();
-
-            if (existingInvoices.Any())
-            {
-                throw new InvalidOperationException("Invoice already exists for one or more of these orders.");
-            }
         }
         else if (request.ManualItems == null || !request.ManualItems.Any())
         {
@@ -125,18 +158,46 @@ public class InvoiceService : IInvoiceService
 
             foreach (var order in orders)
             {
+                // Financial safety guard: validate order status, price fields, amounts
+                if (order.Status != OrderStatus.Completed)
+                {
+                    _logger.LogWarning("FinancialSafety: Skipping order {OrderId} - status is {Status}, expected Completed", order.Id, order.Status);
+                    throw new InvalidOperationException($"Order {order.Id} must have status Completed for invoicing.");
+                }
+                var chargePrice = order.ClientChargePrice > 0 ? order.ClientChargePrice : (order.ClientPrice ?? order.Price);
+                if (chargePrice < 0)
+                {
+                    _logger.LogWarning("FinancialSafety: Order {OrderId} has negative price. Skipping invoice creation.", order.Id);
+                    throw new InvalidOperationException($"Order {order.Id} has invalid (negative) price. Cannot create invoice.");
+                }
+
+                // Use editable price from request if provided, else ClientChargePrice, else ClientPrice, else Price
+                decimal orderAmount;
+                if (orderPrices != null && orderPrices.TryGetValue(order.Id, out var editablePrice))
+                {
+                    if (editablePrice < 0)
+                        throw new InvalidOperationException($"Invoice item price for order {order.Id} cannot be negative.");
+                    if (editablePrice > 10_000_000)
+                        throw new InvalidOperationException($"Invoice item price for order {order.Id} exceeds maximum allowed (10,000,000).");
+                    orderAmount = editablePrice;
+                }
+                else
+                {
+                    orderAmount = order.ClientChargePrice > 0 ? order.ClientChargePrice : (order.ClientPrice ?? order.Price);
+                }
+
                 var item = new InvoiceOrder
                 {
                     Id = Guid.NewGuid(),
                     InvoiceId = Guid.Empty, // Will be set after invoice creation
                     OrderId = order.Id,
                     Description = order.Title ?? $"Logo Design - Order #{order.Id.ToString().Substring(0, 8)}",
-                    Amount = order.Price,
+                    Amount = orderAmount,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = createdBy
                 };
                 invoiceItems.Add(item);
-                totalAmount += order.Price;
+                totalAmount += orderAmount;
             }
         }
 
@@ -145,6 +206,10 @@ public class InvoiceService : IInvoiceService
         {
             foreach (var manualItem in request.ManualItems)
             {
+                if (manualItem.Amount < 0)
+                    throw new InvalidOperationException("Manual invoice item amount cannot be negative.");
+                if (manualItem.Amount > 10_000_000)
+                    throw new InvalidOperationException("Manual invoice item amount exceeds maximum allowed (10,000,000).");
                 var item = new InvoiceOrder
                 {
                     Id = Guid.NewGuid(),
@@ -161,18 +226,19 @@ public class InvoiceService : IInvoiceService
         }
 
         // Create invoice
-        var billingType = request.BillingType ?? BillingType.PerLogo; // Default for backward compatibility
+        var billingType = request.BillingType ?? client.BillingType;
         var taxAmount = request.TaxAmount ?? 0;
         var invoice = new Invoice
         {
             Id = Guid.NewGuid(),
             ClientId = client.Id,
             InvoiceNumber = invoiceNumber,
-            Amount = totalAmount, // Calculated from items
+            Amount = totalAmount,
             TaxAmount = taxAmount,
-            TotalAmount = totalAmount + taxAmount, // Fixed: Include tax in total amount
+            TotalAmount = totalAmount + taxAmount,
             Status = InvoiceStatus.Pending,
             BillingType = billingType,
+            BillingPeriod = request.BillingPeriod,
             IssueDate = DateTime.UtcNow,
             DueDate = request.DueDate ?? DateTime.UtcNow.AddDays(30),
             PaymentMethod = request.PaymentMethod,
@@ -181,21 +247,33 @@ public class InvoiceService : IInvoiceService
             CreatedAt = DateTime.UtcNow
         };
 
-        _context.Invoices.Add(invoice);
-
-        // Set invoice ID for items and add them
-        foreach (var item in invoiceItems)
+        // Atomic transaction: invoice + items + order updates - all or nothing
+        await _context.ExecuteInTransactionAsync(async (ct) =>
         {
-            item.InvoiceId = invoice.Id;
-            _context.InvoiceOrders.Add(item);
-        }
+            _context.Invoices.Add(invoice);
 
-        // Create audit log
-        await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Created, createdBy, "Invoice created");
+            foreach (var item in invoiceItems)
+            {
+                item.InvoiceId = invoice.Id;
+                _context.InvoiceOrders.Add(item);
+            }
 
-        await _context.SaveChangesAsync();
+            var ordersToUpdate = await _context.LogoOrders.Where(o => orderIds.Contains(o.Id)).ToListAsync(ct);
+            foreach (var order in ordersToUpdate)
+            {
+                order.IsInvoiced = true;
+                order.InvoiceId = invoice.Id;
+            }
 
-        // Notify client: Invoice created
+            await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Created, createdBy, "Invoice created");
+            await _context.SaveChangesAsync(ct);
+        });
+
+        // Structured logging for production monitoring
+        _logger.LogInformation("InvoiceGenerated. InvoiceId={InvoiceId}, OrderIds={OrderIds}, UserId={UserId}, Timestamp={Timestamp}",
+            invoice.Id, string.Join(",", orderIds), createdBy, DateTime.UtcNow);
+
+        // Notify client: Invoice created (SignalR failure must not break operation)
         try
         {
             var firstOrderId = invoiceItems.FirstOrDefault(io => io.OrderId.HasValue)?.OrderId;
@@ -220,9 +298,9 @@ public class InvoiceService : IInvoiceService
                 await _entityUpdateSender.SendInvoiceGeneratedAsync(item.OrderId!.Value, invoice.Id, client.UserId);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Must not fail invoice creation
+            _logger.LogWarning(ex, "SignalR/Notification failed for InvoiceGenerated. InvoiceId={InvoiceId}. Operation succeeded.", invoice.Id);
         }
 
         return await GetInvoiceByIdAsync(invoice.Id) ?? throw new InvalidOperationException("Failed to create invoice.");
@@ -260,7 +338,7 @@ public class InvoiceService : IInvoiceService
         }
 
         // Access control: Client can only access their own invoices; Admin/SuperAdmin can access all
-        if (userRole == "Client" && invoice.Client.UserId != userId)
+        if (userRole == "Client" && (invoice.Client == null || invoice.Client.UserId != userId))
         {
             return null;
         }
@@ -286,11 +364,8 @@ public class InvoiceService : IInvoiceService
 
         var invoices = await query.OrderByDescending(i => i.CreatedAt).ToListAsync();
 
-        // Update status for overdue invoices
-        foreach (var invoice in invoices)
-        {
-            await UpdateInvoiceStatusIfNeededAsync(invoice);
-        }
+        // Batch update overdue status (single SaveChanges instead of per-invoice)
+        await BatchUpdateOverdueInvoicesAsync(invoices);
 
         return invoices.Select(MapToInvoiceResponseDto).ToList();
     }
@@ -314,17 +389,16 @@ public class InvoiceService : IInvoiceService
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync();
 
-        // Update status for overdue invoices
-        foreach (var invoice in invoices)
-        {
-            await UpdateInvoiceStatusIfNeededAsync(invoice);
-        }
+        await BatchUpdateOverdueInvoicesAsync(invoices);
 
         return invoices.Select(MapToInvoiceResponseDto).ToList();
     }
 
     public async Task<InvoiceResponseDto> UpdateInvoiceAsync(Guid invoiceId, UpdateInvoiceRequestDto request, Guid updatedBy)
     {
+        if (_safetyOptions.DisableInvoiceEditing)
+            throw new InvalidOperationException("Invoice editing temporarily disabled by administrator.");
+
         var invoice = await _context.Invoices
             .Include(i => i.InvoiceOrders)
             .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
@@ -386,6 +460,8 @@ public class InvoiceService : IInvoiceService
                     }
                     if (itemUpdate.Amount.HasValue)
                     {
+                        if (itemUpdate.Amount.Value < 0)
+                            throw new InvalidOperationException("Invoice item amount cannot be negative.");
                         existingItem.Amount = itemUpdate.Amount.Value;
                     }
                     existingItem.UpdatedAt = DateTime.UtcNow;
@@ -434,6 +510,9 @@ public class InvoiceService : IInvoiceService
         await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Paid, performedBy, $"Invoice marked as paid. Payment method: {paymentMethod ?? "Not specified"}");
 
         await _context.SaveChangesAsync();
+
+        _logger.LogInformation("PaymentRecorded. InvoiceId={InvoiceId}, UserId={UserId}, Timestamp={Timestamp}",
+            invoiceId, performedBy ?? invoice.CreatedBy, DateTime.UtcNow);
 
         // Notify Admin and SuperAdmin: Payment received
         try
@@ -486,6 +565,11 @@ public class InvoiceService : IInvoiceService
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync();
 
+        var performerIds = logs.Where(l => l.PerformedBy.HasValue).Select(l => l.PerformedBy!.Value).Distinct().ToList();
+        var users = performerIds.Count > 0
+            ? await _context.Users.Where(u => performerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim())
+            : new Dictionary<Guid, string>();
+
         return logs.Select(log =>
         {
             var dto = new InvoiceLogDto
@@ -496,17 +580,8 @@ public class InvoiceService : IInvoiceService
                 Notes = log.Notes,
                 CreatedAt = log.CreatedAt
             };
-
-            // Try to get performer name if available
-            if (log.PerformedBy.HasValue)
-            {
-                var user = _context.Users.FirstOrDefault(u => u.Id == log.PerformedBy.Value);
-                if (user != null)
-                {
-                    dto.PerformedByName = $"{user.FirstName} {user.LastName}";
-                }
-            }
-
+            if (log.PerformedBy.HasValue && users.TryGetValue(log.PerformedBy.Value, out var name))
+                dto.PerformedByName = name;
             return dto;
         }).ToList();
     }
@@ -547,19 +622,33 @@ public class InvoiceService : IInvoiceService
 
     // Private helper methods
 
+    private async Task BatchUpdateOverdueInvoicesAsync(List<Invoice> invoices)
+    {
+        var toUpdate = invoices
+            .Where(i => i.Status != InvoiceStatus.Paid
+                && i.DueDate.HasValue
+                && i.DueDate.Value < DateTime.UtcNow
+                && i.Status != InvoiceStatus.Overdue)
+            .ToList();
+        if (toUpdate.Count == 0) return;
+
+        foreach (var invoice in toUpdate)
+        {
+            invoice.Status = InvoiceStatus.Overdue;
+            invoice.UpdatedAt = DateTime.UtcNow;
+            await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Overdue, null, "Invoice automatically marked as overdue");
+        }
+        await _context.SaveChangesAsync();
+    }
+
     private async Task UpdateInvoiceStatusIfNeededAsync(Invoice invoice)
     {
         if (invoice.Status == InvoiceStatus.Paid)
-        {
-            return; // Don't update paid invoices
-        }
-
+            return;
         if (invoice.DueDate.HasValue && invoice.DueDate.Value < DateTime.UtcNow && invoice.Status != InvoiceStatus.Overdue)
         {
             invoice.Status = InvoiceStatus.Overdue;
             invoice.UpdatedAt = DateTime.UtcNow;
-            
-            // Create audit log (system action)
             await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Overdue, null, "Invoice automatically marked as overdue");
             await _context.SaveChangesAsync();
         }
@@ -619,6 +708,11 @@ public class InvoiceService : IInvoiceService
             Amount = io.Amount
         }).ToList();
 
+        if (invoice.Client == null)
+            throw new InvalidOperationException("Invoice has no associated client.");
+        if (invoice.Client.User == null)
+            throw new InvalidOperationException("Client has no associated user.");
+
         return new InvoiceResponseDto
         {
             Id = invoice.Id,
@@ -638,6 +732,7 @@ public class InvoiceService : IInvoiceService
             Status = status,
             PaymentMethod = invoice.PaymentMethod,
             Notes = invoice.Notes,
+            BillingPeriod = invoice.BillingPeriod,
             Items = items,
             CreatedAt = invoice.CreatedAt,
             IsLocked = invoice.Status == InvoiceStatus.Paid
@@ -663,11 +758,7 @@ public class InvoiceService : IInvoiceService
 
         var invoices = await query.ToListAsync();
 
-        // Update status for overdue invoices
-        foreach (var invoice in invoices)
-        {
-            await UpdateInvoiceStatusIfNeededAsync(invoice);
-        }
+        await BatchUpdateOverdueInvoicesAsync(invoices);
 
         // Re-query to get updated statuses
         invoices = await query.ToListAsync();

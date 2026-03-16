@@ -1,0 +1,60 @@
+.revenue-analytics {
+  .revenue-growth-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--surface-card);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid var(--surface-border);
+
+    .growth-label { font-size: 0.9rem; color: var(--text-color-secondary); }
+    .growth-value { font-weight: 700; font-size: 1.1rem; }
+    .growth-value.positive { color: var(--green-600); }
+    .growth-value.negative { color: var(--red-600); }
+  }
+
+  .empty-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2rem;
+    background: var(--surface-ground);
+    border-radius: 12px;
+    border: 1px dashed var(--surface-border);
+    color: var(--text-color-secondary);
+    i { font-size: 2rem; }
+    p { margin: 0; }
+  }
+
+  .charts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+
+    @media (max-width: 992px) { grid-template-columns: 1fr; }
+  }
+
+  .chart-card {
+    background: var(--surface-card);
+    border-radius: 12px;
+    border: 1px solid var(--surface-border);
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+    &.chart-card-full { grid-column: 1 / -1; }
+
+    .chart-title {
+      margin: 0 0 1rem 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-color);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      i { color: var(--primary-color); }
+    }
+  }
+}

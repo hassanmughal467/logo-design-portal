@@ -11,11 +11,11 @@ public static class OrderLockingHelper
     /// <summary>
     /// Terminal statuses that make an order immutable.
     /// No modifications (files, comments, messages, revisions) are allowed.
+    /// ClientApproved is NOT terminal - Admin can still change to Completed.
     /// </summary>
     private static readonly HashSet<OrderStatus> TerminalStatuses =
     [
         OrderStatus.Completed,
-        OrderStatus.FinalApproved,
         OrderStatus.Cancelled,
         OrderStatus.CancelledByUser,
         OrderStatus.CancelledByAdmin,

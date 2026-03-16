@@ -68,6 +68,9 @@ public class PaymentService : IPaymentService
         string paymentLink = string.Empty;
         string? transactionId = null;
 
+        if (string.IsNullOrWhiteSpace(request.PaymentMethod))
+            throw new InvalidOperationException("Payment method is required.");
+
         try
         {
             switch (request.PaymentMethod.ToLower())

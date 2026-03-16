@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { HasPermissionDirective } from './directives/has-permission.directive';
 import { RoleNamePipe } from './pipes/role-name.pipe';
 import { RelativeTimePipe } from './pipes/relative-time.pipe';
+import { UiComponentsModule } from './ui-components/ui-components.module';
 
 @NgModule({
   declarations: [
@@ -11,12 +12,14 @@ import { RelativeTimePipe } from './pipes/relative-time.pipe';
     RelativeTimePipe
   ],
   imports: [
-    CommonModule
+    CommonModule,
+    UiComponentsModule
   ],
   exports: [
     HasPermissionDirective,
     RoleNamePipe,
-    RelativeTimePipe
+    RelativeTimePipe,
+    UiComponentsModule
   ]
 })
 export class SharedModule { }

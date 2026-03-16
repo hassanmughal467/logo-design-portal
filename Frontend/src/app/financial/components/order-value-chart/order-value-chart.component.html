@@ -1,0 +1,20 @@
+<div class="chart-card">
+  <h3 class="chart-title"><i class="pi pi-percentage"></i> Average Order Value Trend</h3>
+  <div *ngIf="loading" class="chart-skeleton"></div>
+  <div *ngIf="!loading && chartOptions" class="chart-container">
+    <apx-chart
+      [series]="chartOptions.series"
+      [chart]="chartOptions.chart"
+      [xaxis]="chartOptions.xaxis"
+      [yaxis]="chartOptions.yaxis"
+      [stroke]="chartOptions.stroke"
+      [colors]="chartOptions.colors"
+      [dataLabels]="chartOptions.dataLabels"
+      [tooltip]="chartOptions.tooltip">
+    </apx-chart>
+  </div>
+  <div *ngIf="!loading && (!items || items.length === 0)" class="chart-empty">
+    <i class="pi pi-percentage"></i>
+    <p>No order value data</p>
+  </div>
+</div>

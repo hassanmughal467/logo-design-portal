@@ -1,0 +1,93 @@
+.kpi-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.kpi-card {
+  background: var(--surface-card);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid var(--surface-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .kpi-icon {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    i {
+      font-size: 1.25rem;
+      color: #fff;
+    }
+  }
+
+  .kpi-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
+  .kpi-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-color);
+    line-height: 1.2;
+  }
+
+  .kpi-label {
+    font-size: 0.75rem;
+    color: var(--text-color-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+}
+
+.kpi-revenue .kpi-icon { background: linear-gradient(135deg, #10b981, #059669); }
+.kpi-month .kpi-icon { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+.kpi-week .kpi-icon { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+.kpi-aov .kpi-icon { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.kpi-orders .kpi-icon { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+.kpi-growth .kpi-icon { background: linear-gradient(135deg, #14b8a6, #0d9488); }
+.kpi-growth.positive .kpi-value { color: #10b981; }
+.kpi-growth.negative .kpi-value { color: #ef4444; }
+.kpi-paid .kpi-icon { background: linear-gradient(135deg, #22c55e, #16a34a); }
+.kpi-pending .kpi-icon { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.kpi-overdue .kpi-icon { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.kpi-outstanding .kpi-icon { background: linear-gradient(135deg, #64748b, #475569); }
+.kpi-collected .kpi-icon { background: linear-gradient(135deg, #10b981, #059669); }
+.kpi-refunded .kpi-icon { background: linear-gradient(135deg, #f97316, #ea580c); }
+
+.kpi-skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.skeleton-card {
+  height: 100px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--surface-200) 25%, var(--surface-100) 50%, var(--surface-200) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

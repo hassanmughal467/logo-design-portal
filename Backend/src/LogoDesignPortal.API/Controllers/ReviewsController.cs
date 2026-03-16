@@ -1,8 +1,8 @@
+using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.DTOs.Reviews;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace LogoDesignPortal.API.Controllers;
 
@@ -28,7 +28,7 @@ public class ReviewsController : ControllerBase
     {
         try
         {
-            var clientId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var clientId = User.GetUserIdOrThrow();
             var review = await _reviewService.CreateReviewAsync(request, clientId);
             return CreatedAtAction(nameof(GetReviewById), new { id = review.Id }, review);
         }

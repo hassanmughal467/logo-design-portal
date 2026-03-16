@@ -1,0 +1,11 @@
+<div class="client-lifetime-value-chart">
+  <apx-chart *ngIf="chartOptions" [series]="chartOptions.series"
+    [chart]="chartOptions.chart" [labels]="chartOptions.labels" [colors]="chartOptions.colors"
+    [legend]="chartOptions.legend" [dataLabels]="chartOptions.dataLabels"
+    [tooltip]="chartOptions.tooltip">
+  </apx-chart>
+  <div *ngIf="!items?.length" class="empty-state">
+    <i class="pi pi-wallet"></i>
+    <p>No lifetime value data available</p>
+  </div>
+</div>

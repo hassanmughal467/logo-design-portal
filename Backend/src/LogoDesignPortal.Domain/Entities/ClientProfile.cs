@@ -1,8 +1,11 @@
+using LogoDesignPortal.Domain.Enums;
+
 namespace LogoDesignPortal.Domain.Entities;
 
 public class ClientProfile : BaseEntity
 {
     public Guid UserId { get; set; }
+    public BillingType BillingType { get; set; } = BillingType.PerLogo;
     public string CompanyName { get; set; } = string.Empty;
     public string? ContactName { get; set; }
     public string? PhoneNumber { get; set; }
@@ -16,6 +19,7 @@ public class ClientProfile : BaseEntity
     public string? Website { get; set; }
     public string? Reference { get; set; }
     public string? Notes { get; set; } // Internal admin notes
+    public CustomerType? CustomerType { get; set; }
 
     // Navigation properties
     public User User { get; set; } = null!;

@@ -1,0 +1,31 @@
+<div class="client-activity-table">
+  <p-table [value]="items" [paginator]="true" [rows]="10" [rowsPerPageOptions]="[5, 10, 25]"
+    styleClass="p-datatable-sm p-datatable-striped" [tableStyle]="{ 'min-width': '50rem' }">
+    <ng-template pTemplate="header">
+      <tr>
+        <th pSortableColumn="clientName">Client Name <p-sortIcon field="clientName"></p-sortIcon></th>
+        <th pSortableColumn="activityStatus">Status <p-sortIcon field="activityStatus"></p-sortIcon></th>
+        <th pSortableColumn="lastOrderDate">Last Order <p-sortIcon field="lastOrderDate"></p-sortIcon></th>
+        <th pSortableColumn="daysSinceLastOrder">Days Since Order <p-sortIcon field="daysSinceLastOrder"></p-sortIcon></th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-item>
+      <tr>
+        <td>{{ item.clientName || 'Unknown' }}</td>
+        <td>
+          <p-tag [value]="getStatusLabel(item.activityStatus)" [severity]="getStatusSeverity(item.activityStatus)" [rounded]="true"></p-tag>
+        </td>
+        <td>{{ formatDate(item.lastOrderDate) }}</td>
+        <td>{{ item.daysSinceLastOrder }} days</td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="4" class="empty-message">
+          <i class="pi pi-inbox"></i>
+          <p>No client activity data available</p>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>

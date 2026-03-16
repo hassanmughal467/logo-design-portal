@@ -125,4 +125,40 @@ public class AuditLogService : IAuditLogService
             return dto;
         }).ToList();
     }
+
+    public async Task<List<AuditLogResponseDto>> GetEntityAuditLogsForEntitiesAsync(string entityType, List<Guid> entityIds)
+    {
+        if (entityIds == null || entityIds.Count == 0)
+            return new List<AuditLogResponseDto>();
+
+        var logs = await _context.AuditLogs
+            .Where(a => !a.IsDeleted && a.EntityType == entityType && entityIds.Contains(a.EntityId))
+            .OrderByDescending(a => a.Timestamp)
+            .ToListAsync();
+
+        var userIds = logs.Where(l => l.PerformedByUserId.HasValue).Select(l => l.PerformedByUserId!.Value).Distinct().ToList();
+        var users = userIds.Count > 0
+            ? await _context.Users.Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim())
+            : new Dictionary<Guid, string>();
+
+        return logs.Select(log =>
+        {
+            var dto = new AuditLogResponseDto
+            {
+                Id = log.Id,
+                EntityType = log.EntityType,
+                EntityId = log.EntityId,
+                Action = log.Action,
+                PreviousValue = log.PreviousValue,
+                NewValue = log.NewValue,
+                PerformedByUserId = log.PerformedByUserId,
+                PerformedByRole = log.PerformedByRole,
+                Timestamp = log.Timestamp,
+                Notes = log.Notes
+            };
+            if (log.PerformedByUserId.HasValue && users.TryGetValue(log.PerformedByUserId.Value, out var name))
+                dto.PerformedByName = name;
+            return dto;
+        }).ToList();
+    }
 }

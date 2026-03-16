@@ -1,0 +1,17 @@
+.client-growth-chart {
+  min-height: 260px;
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: #6b7280;
+
+    i {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+  }
+}

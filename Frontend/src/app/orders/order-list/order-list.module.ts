@@ -5,6 +5,7 @@ import { OrderListComponent } from './order-list.component';
 import { OrderListRoutingModule } from './order-list-routing.module';
 import { OrderDetailModule } from '../order-detail/order-detail.module';
 import { OrderCreateModule } from '../order-create/order-create.module';
+import { SharedModule } from '@shared/shared.module';
 
 // PrimeNG
 import { TableModule } from 'primeng/table';
@@ -23,6 +24,7 @@ import { MessageService } from 'primeng/api';
   imports: [
     CommonModule,
     FormsModule,
+    SharedModule,
     OrderListRoutingModule,
     OrderDetailModule,
     OrderCreateModule,

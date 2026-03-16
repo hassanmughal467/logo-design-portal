@@ -1,0 +1,27 @@
+<div class="forecast-analytics">
+  <div class="empty-section" *ngIf="!data && !loading">
+    <i class="pi pi-chart-line"></i>
+    <p>No forecast data available.</p>
+  </div>
+  <div class="charts-grid" *ngIf="data">
+    <div class="chart-card" *ngIf="orderForecastChart">
+      <h3 class="chart-title"><i class="pi pi-chart-line"></i> Order Growth Prediction</h3>
+      <p class="chart-subtitle">Moving average (2-month) prediction</p>
+      <apx-chart [series]="orderForecastChart.series" [chart]="orderForecastChart.chart"
+        [xaxis]="orderForecastChart.xaxis" [stroke]="orderForecastChart.stroke"
+        [colors]="orderForecastChart.colors" [yaxis]="orderForecastChart.yaxis"
+        [legend]="orderForecastChart.legend" [dataLabels]="orderForecastChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="revenueForecastChart">
+      <h3 class="chart-title"><i class="pi pi-dollar"></i> Revenue Forecast</h3>
+      <p class="chart-subtitle">Moving average (2-month) prediction</p>
+      <apx-chart [series]="revenueForecastChart.series" [chart]="revenueForecastChart.chart"
+        [xaxis]="revenueForecastChart.xaxis" [stroke]="revenueForecastChart.stroke"
+        [fill]="revenueForecastChart.fill" [colors]="revenueForecastChart.colors"
+        [yaxis]="revenueForecastChart.yaxis" [legend]="revenueForecastChart.legend"
+        [dataLabels]="revenueForecastChart.dataLabels">
+      </apx-chart>
+    </div>
+  </div>
+</div>

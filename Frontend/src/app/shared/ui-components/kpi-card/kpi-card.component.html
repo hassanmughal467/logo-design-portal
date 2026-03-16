@@ -1,0 +1,9 @@
+<div class="kpi-card" [class.kpi-card--clickable]="clickable" [class]="'kpi-card--' + variant" (click)="clickable && cardClick.emit()">
+  <div class="kpi-card-icon" [class]="'kpi-card-icon--' + variant">
+    <i [class]="icon"></i>
+  </div>
+  <div class="kpi-card-content">
+    <span class="kpi-card-value">{{ value }}</span>
+    <span class="kpi-card-label">{{ label }}</span>
+  </div>
+</div>

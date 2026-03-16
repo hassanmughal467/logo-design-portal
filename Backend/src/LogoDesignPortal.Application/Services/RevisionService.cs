@@ -1,4 +1,5 @@
 using AutoMapper;
+using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Revisions;
 using LogoDesignPortal.Application.Exceptions;
@@ -21,12 +22,14 @@ public class RevisionService : IRevisionService
     private readonly ILogger<RevisionService> _logger;
     private readonly INotificationService _notificationService;
     private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
+    private readonly IInvoiceService _invoiceService;
     private readonly string _fileStoragePath;
     private readonly string _temporaryStoragePath;
     private readonly string _permanentStoragePath;
 
     private static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
     private static readonly string[] VectorExtensions = { ".svg", ".pdf", ".ai", ".eps", ".psd" };
+    private static readonly string[] EmbroiderExtensions = { ".pes", ".dst", ".jef", ".exp", ".vp3", ".xxx", ".hus", ".art", ".vip", ".vip3", ".shv", ".pec", ".jpm", ".sew", ".emb", ".csd", ".pcs", ".phb", ".phc", ".stx", ".s10", ".dsb", ".zsk" };
     private const long ImageMaxBytes = 10 * 1024 * 1024; // 10MB
     private const long VectorMaxBytes = 25 * 1024 * 1024; // 25MB
 
@@ -36,13 +39,15 @@ public class RevisionService : IRevisionService
         IConfiguration configuration,
         ILogger<RevisionService> logger,
         INotificationService notificationService,
-        IRealtimeEntityUpdateSender entityUpdateSender)
+        IRealtimeEntityUpdateSender entityUpdateSender,
+        IInvoiceService invoiceService)
     {
         _context = context;
         _mapper = mapper;
         _logger = logger;
         _notificationService = notificationService;
         _entityUpdateSender = entityUpdateSender;
+        _invoiceService = invoiceService;
         _fileStoragePath = configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
         _temporaryStoragePath = Path.Combine(_fileStoragePath, "Temporary");
         _permanentStoragePath = Path.Combine(_fileStoragePath, "Permanent");
@@ -72,13 +77,14 @@ public class RevisionService : IRevisionService
         var ext = extension.ToLowerInvariant();
         if (ImageExtensions.Contains(ext)) return ImageMaxBytes;
         if (VectorExtensions.Contains(ext)) return VectorMaxBytes;
+        if (EmbroiderExtensions.Contains(ext)) return VectorMaxBytes;
         return ImageMaxBytes;
     }
 
     private static void ValidateRevisionFile(IFormFile file)
     {
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-        var allowed = ImageExtensions.Concat(VectorExtensions).Distinct().ToArray();
+        var allowed = ImageExtensions.Concat(VectorExtensions).Concat(EmbroiderExtensions).Distinct().ToArray();
         if (!allowed.Contains(ext))
             throw new InvalidOperationException($"File type '{ext}' is not allowed for file '{file.FileName}'.");
         var maxSize = GetMaxSizeForExtension(ext);
@@ -99,7 +105,15 @@ public class RevisionService : IRevisionService
             return false;
 
         // Allow revision only when status is PreviewDelivered
-        return order.Status == OrderStatus.PreviewDelivered;
+        if (order.Status != OrderStatus.PreviewDelivered)
+            return false;
+
+        // Check revision limit (unless admin approved extra revisions)
+        var limit = order.RevisionLimit ?? RevisionLimitHelper.GetRevisionLimitFromPrice(order.Price);
+        if (!RevisionLimitHelper.CanRequestRevision(order.RevisionCount, limit, order.AllowExtraRevisions))
+            return false;
+
+        return true;
     }
 
     public async Task<bool> CanApproveLogoAsync(Guid orderId, Guid userId, string userRole)
@@ -146,13 +160,23 @@ public class RevisionService : IRevisionService
             throw new ForbiddenAccessException("You don't have permission to request revision for this order.");
 
         if (!await CanRequestRevisionAsync(orderId, requestedBy, "Client"))
+        {
+            var limit = order.RevisionLimit ?? RevisionLimitHelper.GetRevisionLimitFromPrice(order.Price);
+            if (limit != null && order.RevisionCount >= limit.Value && !order.AllowExtraRevisions)
+                throw new InvalidOperationException($"Revision limit ({limit}) exceeded for this order. Please contact support if you need additional revisions.");
             throw new InvalidOperationException("Revision can only be requested when order status is PreviewDelivered.");
+        }
 
-        // Permanently delete all previous preview files
-        await DeletePreviewFilesAsync(orderId);
+        // Increment revision count
+        order.RevisionCount++;
+        order.UpdatedAt = DateTime.UtcNow;
+        order.UpdatedBy = requestedBy;
 
-        // Permanently delete all previous revision files
-        await DeleteRevisionFilesAsync(orderId);
+        // Versioning: soft-delete previous preview files (preserve for audit/debugging). Never physically delete.
+        await ArchivePreviewFilesAsync(orderId, requestedBy);
+
+        // Versioning: soft-delete previous revision reference files (preserve for audit/debugging). Never physically delete.
+        await ArchiveRevisionFilesAsync(orderId, requestedBy);
 
         // Archive previous revision instructions (soft delete, keep text)
         var previousRevisions = await _context.OrderRevisions
@@ -365,43 +389,45 @@ public class RevisionService : IRevisionService
         if (!await CanApproveLogoAsync(orderId, approvedBy, userRole))
             throw new InvalidOperationException("Logo can only be approved when order status is PreviewDelivered.");
 
-        // Get all preview files (these will become final approved files)
-        var previewFiles = await _context.LogoFiles
-            .Where(f => f.OrderId == orderId && f.FileType == FileType.Preview && !f.IsDeleted)
-            .ToListAsync();
-
-        // Get all revision files
-        var revisionFiles = await _context.RevisionFiles
-            .Include(rf => rf.Revision)
-            .Where(rf => rf.Revision.OrderId == orderId && !rf.IsDeleted)
-            .ToListAsync();
-
-        // Permanently delete all revision files first
-        foreach (var revisionFile in revisionFiles)
+        // When Preview files are converted to Final: if pricing exists but not yet approved, trigger admin approval flow.
+        // Do NOT block approval or completion; payout eligibility waits until price approval.
+        if (order.ProposedPrice.HasValue && !order.PriceApproved)
         {
-            if (System.IO.File.Exists(revisionFile.FilePath))
+            order.PriceApprovalStatus = PriceApprovalStatus.PendingApproval;
+            order.RequiresPriceApproval = true;
+            try
             {
-                System.IO.File.Delete(revisionFile.FilePath);
+                var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+                var title = "Designer Price Approval Needed";
+                var message = $"Preview converted to Final for order (#{orderNumber}). Designer proposed PKR {order.ProposedPrice:N0}. Approve to add to designer invoice.";
+                await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.Info, NotificationReferenceType.Order, orderId, approvedBy);
+                await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, message, NotificationType.Info, NotificationReferenceType.Order, orderId, approvedBy);
             }
-            revisionFile.IsDeleted = true;
-            revisionFile.DeletedAt = DateTime.UtcNow;
-            revisionFile.DeletedBy = approvedBy;
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send Designer Price Approval Needed notification for order {OrderId}.", orderId);
+            }
         }
 
-        // Convert preview files to final files and move to permanent storage
-        foreach (var file in previewFiles)
+        // Step 1 — Approved files = FileType==Preview AND IsVisibleToClient==true AND IsAdminApproved==true (delivered to client)
+
+        // Step 2 — Convert ONLY approved preview files (IsVisibleToClient==true) to Final
+        var filesToConvert = await _context.LogoFiles
+            .Where(f => f.OrderId == orderId && f.FileType == FileType.Preview && f.IsVisibleToClient && !f.IsDeleted)
+            .ToListAsync();
+
+        foreach (var file in filesToConvert)
         {
-            // Move to permanent storage
+            // Move from Temporary/ to Permanent/
             var permanentPath = Path.Combine(_permanentStoragePath, file.FileName);
             if (System.IO.File.Exists(file.FilePath))
             {
-                // Ensure target directory exists
                 var targetDir = Path.GetDirectoryName(permanentPath);
                 if (!Directory.Exists(targetDir))
                 {
                     Directory.CreateDirectory(targetDir!);
                 }
-                
+
                 System.IO.File.Move(file.FilePath, permanentPath, overwrite: true);
                 file.FilePath = permanentPath;
             }
@@ -426,7 +452,7 @@ public class RevisionService : IRevisionService
                 FileName = file.FileName,
                 OriginalFileName = file.OriginalFileName,
                 FilePath = permanentPath,
-                PreviewImagePath = permanentPath, // For now, use same path
+                PreviewImagePath = permanentPath,
                 ContentType = file.ContentType,
                 Format = Path.GetExtension(file.OriginalFileName).TrimStart('.'),
                 ApprovedAt = DateTime.UtcNow,
@@ -437,50 +463,75 @@ public class RevisionService : IRevisionService
             _context.ClientGalleries.Add(galleryItem);
         }
 
-        // Update order status and disable uploads for completed orders
-        order.Status = OrderStatus.Completed;
-        order.AllowUploads = false; // Disable uploads when logo is final approved
+        // When CLIENT approves: set ClientApproved so Admin can mark Completed. Admin/SuperAdmin get notification only (not client portal).
+        // When ADMIN/SuperAdmin approves: set Completed directly, notify Client and Designer.
+        if (order.Client == null)
+            throw new InvalidOperationException("Order has no associated client.");
+        var isClientApproval = userRole == "Client" && order.Client.UserId == approvedBy;
+        order.Status = isClientApproval ? OrderStatus.ClientApproved : OrderStatus.Completed;
+        order.AllowUploads = false;
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = approvedBy;
 
+        if (!isClientApproval)
+        {
+            order.BillingEligible = true;
+            order.IsInvoiced = false;
+            order.CompletedDate = DateTime.UtcNow;
+        }
+
         // Create audit log
-        await CreateAuditLogAsync("ApproveLogo", "Order", orderId, approvedBy, 
+        await CreateAuditLogAsync("ApproveLogo", "Order", orderId, approvedBy,
             $"Logo approved. Notes: {request.Notes ?? "None"}");
 
         await _context.SaveChangesAsync();
 
-        // Notify client: Order completed
-        try
+        // Step 3 & 4 — Safe file cleanup: only after conversion succeeded and status is ClientApproved/Completed
+        var finalStatus = isClientApproval ? OrderStatus.ClientApproved : OrderStatus.Completed;
+        if (finalStatus == OrderStatus.ClientApproved || finalStatus == OrderStatus.Completed)
         {
-            var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
-            await _notificationService.CreateNotificationAsync(
-                order.Client.UserId,
-                "Order Completed",
-                $"Your order (#{orderNumber}) has been completed",
-                NotificationType.OrderStatusChange,
-                orderId,
-                NotificationReferenceType.Order,
-                orderId,
-                approvedBy
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to notify client of order completion {OrderId}.", orderId);
+            await CleanupAfterApprovalAsync(orderId, approvedBy);
         }
 
-        // When client approves logo, notify Admin and Designer (PreviewApproved)
-        if (userRole == "Client" && order.Client.UserId == approvedBy)
+        if (isClientApproval)
         {
+            // Client approved: notify Admin and SuperAdmin ONLY (so they can mark it completed). No notification to client's own portal.
             var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
             if (string.IsNullOrEmpty(clientName)) clientName = "Client";
             var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
-            var approveTitle = "Preview Approved";
-            var approveMessage = $"{clientName} approved the preview for order (#{orderNumber})";
+            var approveTitle = "Client Approved Logo";
+            var approveMessage = $"{clientName} approved the logo for order (#{orderNumber}). Please mark as completed.";
             try
             {
                 await _notificationService.CreateNotificationForRoleAsync("Admin", approveTitle, approveMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, approvedBy);
                 await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", approveTitle, approveMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, approvedBy);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create client-approved notifications for order {OrderId}.", orderId);
+            }
+
+            // Real-time: notify Admin/SuperAdmin only (not client, not designer)
+            var adminUserIds = await GetAdminAndSuperAdminUserIdsAsync();
+            await _entityUpdateSender.SendPreviewApprovedAsync(orderId, clientName, OrderStatus.ClientApproved.ToString(), adminUserIds);
+            await _entityUpdateSender.SendOrderStatusChangedAsync(orderId, OrderStatus.ClientApproved.ToString(), approvedBy, adminUserIds);
+        }
+        else
+        {
+            // Admin/SuperAdmin approved (marked completed): notify Client and Designer
+            var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+            try
+            {
+                await _notificationService.CreateNotificationAsync(
+                    order.Client.UserId,
+                    "Order Completed",
+                    $"Your order (#{orderNumber}) has been completed",
+                    NotificationType.OrderStatusChange,
+                    orderId,
+                    NotificationReferenceType.Order,
+                    orderId,
+                    approvedBy
+                );
                 if (order.DesignerId.HasValue)
                 {
                     var designerUserId = await _context.DesignerProfiles
@@ -489,50 +540,44 @@ public class RevisionService : IRevisionService
                         .FirstOrDefaultAsync();
                     if (designerUserId != Guid.Empty)
                     {
-                        await _notificationService.CreateNotificationAsync(designerUserId, approveTitle, approveMessage, NotificationType.OrderStatusChange, orderId, NotificationReferenceType.Order, orderId, approvedBy);
+                        await _notificationService.CreateNotificationAsync(designerUserId, "Order Completed", $"Order (#{orderNumber}) has been completed", NotificationType.OrderStatusChange, orderId, NotificationReferenceType.Order, orderId, approvedBy);
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to create preview approved notifications for order {OrderId}.", orderId);
+                _logger.LogError(ex, "Failed to notify client/designer of order completion {OrderId}.", orderId);
             }
-        }
 
-        // Real-time entity update: OrderStatusChanged (Completed) - notify client and admins
-        var recipientIds = new List<Guid> { order.Client.UserId };
-        var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
-        var superAdminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
-        if (adminRole != null || superAdminRole != null)
-        {
-            var roleIds = new List<Guid>();
-            if (adminRole != null) roleIds.Add(adminRole.Id);
-            if (superAdminRole != null) roleIds.Add(superAdminRole.Id);
-            var adminIds = await _context.Users
-                .Where(u => !u.IsDeleted && roleIds.Contains(u.RoleId))
-                .Select(u => u.Id)
-                .ToListAsync();
-            recipientIds.AddRange(adminIds);
-        }
-        if (order.DesignerId.HasValue)
-        {
-            var designerUserId = await _context.DesignerProfiles
-                .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
-                .Select(d => d.UserId)
-                .FirstOrDefaultAsync();
-            if (designerUserId != Guid.Empty) recipientIds.Add(designerUserId);
-        }
-        await _entityUpdateSender.SendOrderStatusChangedAsync(orderId, OrderStatus.Completed.ToString(), approvedBy, recipientIds.Distinct());
-
-        // When client approves logo, send PreviewApproved entity update to Admin/Designer
-        if (userRole == "Client" && order.Client.UserId == approvedBy)
-        {
-            var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
-            if (string.IsNullOrEmpty(clientName)) clientName = "Client";
-            var adminIds = recipientIds.Where(id => id != approvedBy).ToList();
-            if (adminIds.Any())
+            var recipientIds = new List<Guid> { order.Client.UserId };
+            recipientIds.AddRange(await GetAdminAndSuperAdminUserIdsAsync());
+            if (order.DesignerId.HasValue)
             {
-                await _entityUpdateSender.SendPreviewApprovedAsync(orderId, clientName, OrderStatus.Completed.ToString(), adminIds);
+                var designerUserId = await _context.DesignerProfiles
+                    .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
+                    .Select(d => d.UserId)
+                    .FirstOrDefaultAsync();
+                if (designerUserId != Guid.Empty) recipientIds.Add(designerUserId);
+            }
+            await _entityUpdateSender.SendOrderStatusChangedAsync(orderId, OrderStatus.Completed.ToString(), approvedBy, recipientIds.Distinct());
+
+            // Auto-generate invoice only for PerLogo clients when Admin approves (marks Completed)
+            if (order.Client != null && order.Client.BillingType == Domain.Enums.BillingType.PerLogo)
+            {
+                try
+                {
+                    if (!order.IsInvoiced)
+                    {
+                        await _invoiceService.CreateInvoiceAsync(
+                            new CreateInvoiceRequestDto { OrderIds = new List<Guid> { orderId }, BillingType = Domain.Enums.BillingType.PerLogo },
+                            approvedBy);
+                        _logger.LogInformation("Auto-generated invoice for PerLogo client, completed order {OrderId}.", orderId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to auto-generate invoice for completed order {OrderId}. Invoice can be created manually.", orderId);
+                }
             }
         }
 
@@ -549,19 +594,80 @@ public class RevisionService : IRevisionService
     }
 
     /// <summary>
-    /// Deletes only designer-uploaded preview files. Never deletes Reference or Final files.
-    /// Rule: FileType = Preview AND UploadedBy = Designer (for this order).
+    /// Safe file cleanup after approval: deletes non-approved preview files and all revision files.
+    /// Only runs when order status is ClientApproved or Completed. Deletes physical files and soft-deletes DB rows.
     /// </summary>
-    private async Task DeletePreviewFilesAsync(Guid orderId)
+    private async Task CleanupAfterApprovalAsync(Guid orderId, Guid approvedBy)
+    {
+        // Delete preview files where FileType==Preview AND IsVisibleToClient==false (not delivered to client)
+        var nonApprovedPreviews = await _context.LogoFiles
+            .Where(f => f.OrderId == orderId && f.FileType == FileType.Preview && !f.IsVisibleToClient && !f.IsDeleted)
+            .ToListAsync();
+
+        foreach (var file in nonApprovedPreviews)
+        {
+            if (System.IO.File.Exists(file.FilePath))
+            {
+                try
+                {
+                    System.IO.File.Delete(file.FilePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete non-approved preview file {FilePath} for order {OrderId}.", file.FilePath, orderId);
+                }
+            }
+            file.IsDeleted = true;
+            file.DeletedAt = DateTime.UtcNow;
+            file.DeletedBy = approvedBy;
+        }
+
+        // Delete all RevisionFiles for the order (physical + soft-delete)
+        var revisionFiles = await _context.RevisionFiles
+            .Include(rf => rf.Revision)
+            .Where(rf => rf.Revision.OrderId == orderId && !rf.IsDeleted)
+            .ToListAsync();
+
+        foreach (var revisionFile in revisionFiles)
+        {
+            if (System.IO.File.Exists(revisionFile.FilePath))
+            {
+                try
+                {
+                    System.IO.File.Delete(revisionFile.FilePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete revision file {FilePath} for order {OrderId}.", revisionFile.FilePath, orderId);
+                }
+            }
+            revisionFile.IsDeleted = true;
+            revisionFile.DeletedAt = DateTime.UtcNow;
+            revisionFile.DeletedBy = approvedBy;
+        }
+
+        if (nonApprovedPreviews.Count > 0 || revisionFiles.Count > 0)
+        {
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("CleanupAfterApproval. OrderId={OrderId}, DeletedPreviews={PreviewCount}, DeletedRevisionFiles={RevisionCount}",
+                orderId, nonApprovedPreviews.Count, revisionFiles.Count);
+        }
+    }
+
+    /// <summary>
+    /// Archives (soft-deletes) previous preview files. Never physically deletes or moves files.
+    /// Preserves file history for audit and debugging. Archived previews remain IsVisibleToClient = false.
+    /// </summary>
+    private async Task ArchivePreviewFilesAsync(Guid orderId, Guid requestedBy)
     {
         var order = await _context.LogoOrders
             .Include(o => o.Designer)
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
-        List<LogoFile> previewFilesToDelete;
+        List<LogoFile> previewFilesToArchive;
         if (order?.DesignerId == null)
         {
-            previewFilesToDelete = await _context.LogoFiles
+            previewFilesToArchive = await _context.LogoFiles
                 .Where(f => f.OrderId == orderId && f.FileType == FileType.Preview && !f.IsDeleted)
                 .ToListAsync();
         }
@@ -572,7 +678,7 @@ public class RevisionService : IRevisionService
                 .Select(d => d.UserId)
                 .FirstOrDefaultAsync();
 
-            previewFilesToDelete = await _context.LogoFiles
+            previewFilesToArchive = await _context.LogoFiles
                 .Where(f => f.OrderId == orderId
                     && f.FileType == FileType.Preview
                     && f.UploadedBy == designerUserId
@@ -580,17 +686,20 @@ public class RevisionService : IRevisionService
                 .ToListAsync();
         }
 
-        foreach (var file in previewFilesToDelete)
+        foreach (var file in previewFilesToArchive)
         {
-            if (System.IO.File.Exists(file.FilePath))
-            {
-                System.IO.File.Delete(file.FilePath);
-            }
+            file.IsDeleted = true;
+            file.DeletedAt = DateTime.UtcNow;
+            file.DeletedBy = requestedBy;
+            file.IsVisibleToClient = false; // Keep archived previews hidden from client
         }
-        _context.LogoFiles.RemoveRange(previewFilesToDelete);
     }
 
-    private async Task DeleteRevisionFilesAsync(Guid orderId)
+    /// <summary>
+    /// Archives (soft-deletes) previous revision reference files. Never physically deletes or moves files.
+    /// Preserves file history for audit and debugging.
+    /// </summary>
+    private async Task ArchiveRevisionFilesAsync(Guid orderId, Guid requestedBy)
     {
         var revisions = await _context.OrderRevisions
             .Include(r => r.Files)
@@ -599,14 +708,12 @@ public class RevisionService : IRevisionService
 
         foreach (var revision in revisions)
         {
-            foreach (var file in revision.Files)
+            foreach (var file in revision.Files.Where(f => !f.IsDeleted))
             {
-                if (System.IO.File.Exists(file.FilePath))
-                {
-                    System.IO.File.Delete(file.FilePath);
-                }
+                file.IsDeleted = true;
+                file.DeletedAt = DateTime.UtcNow;
+                file.DeletedBy = requestedBy;
             }
-            _context.RevisionFiles.RemoveRange(revision.Files);
         }
     }
 

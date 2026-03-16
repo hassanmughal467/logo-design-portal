@@ -1,0 +1,27 @@
+<div class="order-progress-timeline" *ngIf="order && steps.length > 0">
+  <h3 class="timeline-title">Order Progress</h3>
+  <div class="timeline-track">
+    <div
+      *ngFor="let step of steps; let i = index; let last = last"
+      class="timeline-step"
+      [class.timeline-step--completed]="step.state === 'completed'"
+      [class.timeline-step--current]="step.state === 'current'"
+      [class.timeline-step--revision]="step.state === 'revision'"
+      [class.timeline-step--upcoming]="step.state === 'upcoming'">
+      <div class="step-node">
+        <span class="step-node-circle" [attr.data-state]="step.state">
+          <i *ngIf="step.state === 'completed'" class="pi pi-check"></i>
+        </span>
+        <div class="step-content">
+          <span class="step-label">{{ step.label }}</span>
+          <span class="step-timestamp" *ngIf="step.timestamp">
+            {{ step.timestamp | date:'short' }}
+          </span>
+        </div>
+      </div>
+      <div class="step-connector" *ngIf="!last">
+        <span class="connector-line" [class.connector-line--filled]="step.state === 'completed'"></span>
+      </div>
+    </div>
+  </div>
+</div>

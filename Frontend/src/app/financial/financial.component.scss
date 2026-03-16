@@ -1,5 +1,5 @@
 .financial-page {
-  padding: 2rem;
+  /* Padding handled by page-container */
 
   .page-header {
     margin-bottom: 2rem;
@@ -18,6 +18,61 @@
         margin: 0;
         color: var(--text-color-secondary);
         font-size: 1rem;
+      }
+    }
+  }
+
+  // Date Range Filter Card
+  .filter-card {
+    margin-bottom: 1rem;
+
+    ::ng-deep .p-card-body {
+      padding: 1rem 1.5rem;
+    }
+  }
+
+  .date-range-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+
+    .filter-label {
+      font-weight: 600;
+      color: var(--text-color);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      i {
+        color: var(--primary-color);
+      }
+    }
+
+    .filter-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .date-range-dropdown {
+      min-width: 180px;
+    }
+
+    .custom-range-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+
+      .custom-date-input {
+        min-width: 140px;
+      }
+
+      .range-separator {
+        color: var(--text-color-secondary);
+        font-size: 0.875rem;
       }
     }
   }
@@ -42,37 +97,70 @@
     gap: 1.5rem;
   }
 
+  // Financial Card (Client snapshot wrapper)
+  ::ng-deep .financial-card .p-card-body {
+    padding: 1.5rem 1.75rem;
+  }
+
+  .kpi-section-title {
+    margin: 0 0 1rem 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i {
+      color: var(--primary-color);
+    }
+  }
+
+  .chart-subtitle {
+    margin: -0.5rem 0 1rem 0;
+    font-size: 0.875rem;
+    color: var(--text-color-secondary);
+  }
+
   // Financial Snapshot Grid
   .financial-snapshot-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 1rem;
+    gap: 1rem;
+    margin-bottom: 0;
+
+    &.financial-snapshot-focus {
+      grid-template-columns: repeat(2, 1fr);
+      @media (max-width: 600px) {
+        grid-template-columns: 1fr;
+      }
+    }
 
     .snapshot-card {
       display: flex;
       align-items: center;
       gap: 1rem;
-      padding: 1.5rem;
+      padding: 1.25rem 1.5rem;
       background: var(--surface-card);
       border-radius: 12px;
       border: 1px solid var(--surface-border);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
       transition: all 0.3s ease;
 
       &:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
       }
 
       .snapshot-icon {
-        width: 56px;
-        height: 56px;
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
         border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.75rem;
+        font-size: 1.35rem;
         color: white;
         flex-shrink: 0;
       }
@@ -80,22 +168,22 @@
       .snapshot-info {
         display: flex;
         flex-direction: column;
+        gap: 0.25rem;
         min-width: 0;
         flex: 1;
 
         .snapshot-value {
-          font-size: 1.5rem;
+          font-size: 1.35rem;
           font-weight: 700;
           color: var(--text-color);
           line-height: 1.2;
-          margin-bottom: 0.25rem;
         }
 
         .snapshot-label {
-          font-size: 0.875rem;
+          font-size: 0.75rem;
           color: var(--text-color-secondary);
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+          letter-spacing: 0.4px;
         }
       }
 
@@ -118,10 +206,141 @@
       &.snapshot-danger .snapshot-icon {
         background: linear-gradient(135deg, #ef4444, #dc2626);
       }
+
+      &.snapshot-secondary .snapshot-icon {
+        background: linear-gradient(135deg, #64748b, #94a3b8);
+      }
     }
 
     @media (max-width: 768px) {
       grid-template-columns: 1fr;
+    }
+  }
+
+  // Spending Insights Card
+  .insights-card {
+    ::ng-deep .p-card-body {
+      padding: 1.5rem;
+    }
+
+    .insights-header {
+      padding: 1rem 1.5rem 0;
+
+      .insights-title {
+        margin: 0 0 0.25rem 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-color);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+
+        i {
+          color: var(--primary-color);
+        }
+      }
+
+      .insights-subtitle {
+        margin: 0;
+        font-size: 0.875rem;
+        color: var(--text-color-secondary);
+      }
+    }
+
+    .insights-loading {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1.5rem;
+      color: var(--text-color-secondary);
+    }
+
+    .insights-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 2rem;
+      color: var(--text-color-secondary);
+      text-align: center;
+
+      i {
+        font-size: 2rem;
+        opacity: 0.6;
+      }
+    }
+
+    .insights-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .insight-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      border-radius: 10px;
+      border-left: 4px solid;
+
+      .insight-icon {
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+      }
+
+      .insight-message {
+        flex: 1;
+        font-size: 0.9375rem;
+        line-height: 1.5;
+        color: var(--text-color);
+      }
+
+      &.insight-info {
+        background: rgba(59, 130, 246, 0.08);
+        border-left-color: #3b82f6;
+
+        .insight-icon {
+          background: rgba(59, 130, 246, 0.2);
+          color: #3b82f6;
+        }
+      }
+
+      &.insight-success {
+        background: rgba(16, 185, 129, 0.08);
+        border-left-color: #10b981;
+
+        .insight-icon {
+          background: rgba(16, 185, 129, 0.2);
+          color: #10b981;
+        }
+      }
+
+      &.insight-warning {
+        background: rgba(245, 158, 11, 0.08);
+        border-left-color: #f59e0b;
+
+        .insight-icon {
+          background: rgba(245, 158, 11, 0.2);
+          color: #f59e0b;
+        }
+      }
+
+      &.insight-danger {
+        background: rgba(239, 68, 68, 0.08);
+        border-left-color: #ef4444;
+
+        .insight-icon {
+          background: rgba(239, 68, 68, 0.2);
+          color: #ef4444;
+        }
+      }
     }
   }
 
@@ -187,6 +406,13 @@
     }
   }
 
+  // Financial Charts Row
+  .financial-charts-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+  }
+
   // Chart Card
   .chart-card {
     ::ng-deep .p-card-body {
@@ -210,6 +436,16 @@
     .chart-container {
       height: 300px;
       position: relative;
+
+      .chart-empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        min-height: 200px;
+        color: var(--text-color-secondary);
+        font-size: 0.875rem;
+      }
     }
   }
 

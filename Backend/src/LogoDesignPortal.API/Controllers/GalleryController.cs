@@ -1,8 +1,8 @@
+using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.DTOs.Gallery;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace LogoDesignPortal.API.Controllers;
 
@@ -29,7 +29,7 @@ public class GalleryController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var galleryItems = await _galleryService.GetClientGalleryAsync(userId);
             return Ok(galleryItems);
         }
@@ -47,7 +47,7 @@ public class GalleryController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var galleryItem = await _galleryService.GetGalleryItemByIdAsync(id, userId);
             
             if (galleryItem == null)

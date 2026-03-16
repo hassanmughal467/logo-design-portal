@@ -1,0 +1,54 @@
+<div class="revenue-analytics">
+  <div class="empty-section" *ngIf="!data && !loading">
+    <i class="pi pi-dollar"></i>
+    <p>No revenue analytics data available.</p>
+  </div>
+  <div class="revenue-growth-banner" *ngIf="data && data.revenueGrowthRate != null">
+    <span class="growth-label">Revenue Growth (MoM)</span>
+    <span class="growth-value" [class.positive]="data.revenueGrowthRate >= 0" [class.negative]="data.revenueGrowthRate < 0">
+      {{ data.revenueGrowthRate >= 0 ? '+' : '' }}{{ data.revenueGrowthRate }}%
+    </span>
+  </div>
+  <div class="charts-grid" *ngIf="data">
+    <div class="chart-card" *ngIf="revenueTrendChart">
+      <h3 class="chart-title"><i class="pi pi-chart-line"></i> Revenue Trend (Monthly)</h3>
+      <apx-chart [series]="revenueTrendChart.series" [chart]="revenueTrendChart.chart"
+        [xaxis]="revenueTrendChart.xaxis" [stroke]="revenueTrendChart.stroke"
+        [fill]="revenueTrendChart.fill" [colors]="revenueTrendChart.colors"
+        [yaxis]="revenueTrendChart.yaxis" [dataLabels]="revenueTrendChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="revenueTrendDailyChart">
+      <h3 class="chart-title"><i class="pi pi-chart-area"></i> Revenue Trend (Daily)</h3>
+      <apx-chart [series]="revenueTrendDailyChart.series" [chart]="revenueTrendDailyChart.chart"
+        [xaxis]="revenueTrendDailyChart.xaxis" [stroke]="revenueTrendDailyChart.stroke"
+        [fill]="revenueTrendDailyChart.fill" [colors]="revenueTrendDailyChart.colors"
+        [yaxis]="revenueTrendDailyChart.yaxis" [dataLabels]="revenueTrendDailyChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="aovTrendChart">
+      <h3 class="chart-title"><i class="pi pi-dollar"></i> Average Order Value Trend</h3>
+      <apx-chart [series]="aovTrendChart.series" [chart]="aovTrendChart.chart"
+        [xaxis]="aovTrendChart.xaxis" [stroke]="aovTrendChart.stroke"
+        [colors]="aovTrendChart.colors" [yaxis]="aovTrendChart.yaxis"
+        [dataLabels]="aovTrendChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="revenueByPackageChart">
+      <h3 class="chart-title"><i class="pi pi-chart-bar"></i> Revenue by Package</h3>
+      <apx-chart [series]="revenueByPackageChart.series" [chart]="revenueByPackageChart.chart"
+        [xaxis]="revenueByPackageChart.xaxis" [plotOptions]="revenueByPackageChart.plotOptions"
+        [colors]="revenueByPackageChart.colors" [yaxis]="revenueByPackageChart.yaxis"
+        [dataLabels]="revenueByPackageChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card chart-card-full" *ngIf="topClientsChart">
+      <h3 class="chart-title"><i class="pi pi-users"></i> Top Clients by Revenue</h3>
+      <apx-chart [series]="topClientsChart.series" [chart]="topClientsChart.chart"
+        [xaxis]="topClientsChart.xaxis" [yaxis]="topClientsChart.yaxis"
+        [plotOptions]="topClientsChart.plotOptions" [colors]="topClientsChart.colors"
+        [dataLabels]="topClientsChart.dataLabels">
+      </apx-chart>
+    </div>
+  </div>
+</div>

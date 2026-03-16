@@ -3,6 +3,7 @@ namespace LogoDesignPortal.Application.DTOs.Gallery;
 public class GalleryItemResponseDto
 {
     public Guid Id { get; set; }
+    public Guid FileId { get; set; }
     public Guid OrderId { get; set; }
     public string OrderTitle { get; set; } = string.Empty;
     public string PreviewImagePath { get; set; } = string.Empty;

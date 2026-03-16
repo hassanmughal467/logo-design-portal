@@ -18,10 +18,8 @@ export class OrderEditComponent implements OnInit, OnChanges {
   loading = false;
   minDate: Date = new Date();
   priorityOptions = [
-    { label: 'Low', value: OrderPriority.Low },
-    { label: 'Normal (Medium)', value: OrderPriority.Medium },
-    { label: 'High', value: OrderPriority.High },
-    { label: 'Urgent', value: OrderPriority.Urgent }
+    { label: 'Normal', value: OrderPriority.Medium },
+    { label: 'Rush', value: OrderPriority.Urgent }
   ];
 
   constructor(
@@ -31,7 +29,7 @@ export class OrderEditComponent implements OnInit, OnChanges {
   ) {
     this.orderForm = this.fb.group({
       title: ['', [Validators.required, Validators.minLength(3)]],
-      description: ['', [Validators.required, Validators.minLength(10)]],
+      description: ['', Validators.required],
       price: [0, [Validators.required, Validators.min(0.01)]],
       priority: [OrderPriority.Medium],
       deadline: [null],
@@ -63,10 +61,11 @@ export class OrderEditComponent implements OnInit, OnChanges {
       deadlineDate = new Date(deadlineValue);
     }
 
-    // Map priority string to enum
+    // Map priority: only Normal and Rush supported; map Low/High to Normal
     let priority: OrderPriority = OrderPriority.Medium;
     if (this.order.priority) {
-      priority = this.order.priority as OrderPriority;
+      const p = this.order.priority as OrderPriority;
+      priority = (p === OrderPriority.Urgent) ? OrderPriority.Urgent : OrderPriority.Medium;
     }
 
     this.orderForm.patchValue({

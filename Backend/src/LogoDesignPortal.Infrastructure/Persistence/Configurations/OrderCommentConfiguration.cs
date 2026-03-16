@@ -1,4 +1,5 @@
 using LogoDesignPortal.Domain.Entities;
+using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -13,6 +14,22 @@ public class OrderCommentConfiguration : IEntityTypeConfiguration<OrderComment>
         builder.Property(e => e.Content)
             .IsRequired()
             .HasMaxLength(2000);
+
+        builder.Property(e => e.CommentType)
+            .HasConversion<int>()
+            .HasDefaultValue(CommentType.General);
+
+        builder.Property(e => e.VisibleToClient)
+            .HasDefaultValue(false);
+
+        builder.Property(e => e.IsReadByClient)
+            .HasDefaultValue(false);
+
+        builder.Property(e => e.IsReadByDesigner)
+            .HasDefaultValue(false);
+
+        builder.Property(e => e.IsReadByAdmin)
+            .HasDefaultValue(false);
 
         builder.HasOne(e => e.Order)
             .WithMany(o => o.Comments)

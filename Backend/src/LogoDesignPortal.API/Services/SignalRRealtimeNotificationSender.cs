@@ -7,10 +7,12 @@ namespace LogoDesignPortal.API.Services;
 public class SignalRRealtimeNotificationSender : IRealtimeNotificationSender
 {
     private readonly IHubContext<Hubs.NotificationHub> _hubContext;
+    private readonly ILogger<SignalRRealtimeNotificationSender> _logger;
 
-    public SignalRRealtimeNotificationSender(IHubContext<Hubs.NotificationHub> hubContext)
+    public SignalRRealtimeNotificationSender(IHubContext<Hubs.NotificationHub> hubContext, ILogger<SignalRRealtimeNotificationSender> logger)
     {
         _hubContext = hubContext;
+        _logger = logger;
     }
 
     public async Task SendNotificationAsync(string userId, string title, string message, string notificationType, Guid? orderId = null)
@@ -30,10 +32,9 @@ public class SignalRRealtimeNotificationSender : IRealtimeNotificationSender
                     referenceId = orderId
                 });
         }
-        catch
+        catch (Exception ex)
         {
-            // Real-time push failure must never affect notification persistence
-            // Clients will receive via polling fallback
+            _logger.LogWarning(ex, "SignalR SendNotification failed: UserId={UserId}, OrderId={OrderId}. Operation continues.", userId, orderId);
         }
     }
 
@@ -59,9 +60,9 @@ public class SignalRRealtimeNotificationSender : IRealtimeNotificationSender
                     lastOccurrenceAt = notification.LastOccurrenceAt
                 });
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical
+            _logger.LogWarning(ex, "SignalR SendNotificationToUser failed: UserId={UserId}. Operation continues.", userId);
         }
     }
 
@@ -92,9 +93,9 @@ public class SignalRRealtimeNotificationSender : IRealtimeNotificationSender
                     .SendAsync("ReceiveNotification", payload);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical
+            _logger.LogWarning(ex, "SignalR SendNotificationToUsers failed. Operation continues.");
         }
     }
 }

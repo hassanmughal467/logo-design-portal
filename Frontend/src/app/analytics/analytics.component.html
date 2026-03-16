@@ -2,80 +2,218 @@
   <div class="page-header">
     <div class="header-content">
       <h1 class="page-title">Detail Analytics</h1>
-      <p class="page-subtitle">Comprehensive analytics and insights</p>
+      <p class="page-subtitle">{{ isClient ? 'Insights about your orders and service usage' : 'Comprehensive analytics and insights for Super Admin' }}</p>
     </div>
   </div>
 
   <div *ngIf="loading" class="loading-container">
-    <p-progressSpinner></p-progressSpinner>
+    <p-progressSpinner strokeWidth="4" [style]="{width: '50px', height: '50px'}"></p-progressSpinner>
     <p>Loading analytics data...</p>
   </div>
 
-  <div *ngIf="!loading" class="analytics-content">
-    <!-- Order Analytics -->
-    <p-card styleClass="analytics-card">
-      <h3 class="card-title"><i class="pi pi-chart-bar"></i> Order Analytics</h3>
-      <div class="stats-grid">
-        <div class="stat-card" *ngFor="let stat of clientOrderAnalytics" [class]="'stat-' + stat.color">
-          <div class="stat-icon-wrapper">
-            <div class="stat-icon" [class]="'bg-' + stat.color">
-              <i [class]="stat.icon"></i>
-            </div>
+  <!-- Client: Usage Insights (Usage Overview, Order Trends, Service Usage, Performance Metrics) -->
+  <div *ngIf="!loading && isClient" class="analytics-content client-analytics-view">
+    <!-- Section 1: Usage Overview -->
+    <section class="analytics-section">
+      <h2 class="section-header"><i class="pi pi-chart-bar"></i> Usage Overview</h2>
+      <div class="client-kpi-row usage-overview-cards">
+        <div class="stat-card">
+          <div class="stat-icon-wrapper"><div class="stat-icon bg-primary"><i class="pi pi-list"></i></div></div>
+          <div class="stat-content">
+            <span class="stat-value">{{ totalOrders }}</span>
+            <span class="stat-label">Total Orders</span>
           </div>
-          <div class="stat-content" [class.clickable]="stat.route" (click)="stat.route && navigateToRoute(stat.route)">
-            <h3 class="stat-value">{{ stat.value | number }}</h3>
-            <p class="stat-label">{{ stat.label }}</p>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon-wrapper"><div class="stat-icon bg-success"><i class="pi pi-check-circle"></i></div></div>
+          <div class="stat-content">
+            <span class="stat-value">{{ completedOrders }}</span>
+            <span class="stat-label">Completed Orders</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon-wrapper"><div class="stat-icon bg-warning"><i class="pi pi-refresh"></i></div></div>
+          <div class="stat-content">
+            <span class="stat-value">{{ revisionRequests }}</span>
+            <span class="stat-label">Revision Requests</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon-wrapper"><div class="stat-icon bg-info"><i class="pi pi-clock"></i></div></div>
+          <div class="stat-content">
+            <span class="stat-value">{{ averageDeliveryTimeHours }} hrs</span>
+            <span class="stat-label">Avg Delivery Time</span>
           </div>
         </div>
       </div>
-    </p-card>
+    </section>
 
-    <!-- Productivity & Spend -->
-    <p-card styleClass="analytics-card">
-      <h3 class="card-title"><i class="pi pi-dollar"></i> Productivity & Spend</h3>
-      <div class="stats-grid">
-        <div class="stat-card" *ngFor="let stat of clientProductivityMetrics" [class]="'stat-' + stat.color">
-          <div class="stat-icon-wrapper">
-            <div class="stat-icon" [class]="'bg-' + stat.color">
-              <i [class]="stat.icon"></i>
-            </div>
+    <!-- Section 2: Order Trends -->
+    <section class="analytics-section">
+      <h2 class="section-header"><i class="pi pi-chart-line"></i> Order Trends</h2>
+      <p-card styleClass="chart-card">
+        <h3 class="card-title">Monthly Logos</h3>
+        <div class="chart-container">
+          <p-chart *ngIf="ordersTrendChartData" type="line" [data]="ordersTrendChartData" [options]="lineChartOptions" [style]="{'height': '280px'}"></p-chart>
+          <div *ngIf="!ordersTrendChartData" class="chart-empty"><p>No order data</p></div>
+        </div>
+      </p-card>
+    </section>
+
+    <!-- Section 3: Service Usage -->
+    <section class="analytics-section">
+      <h2 class="section-header"><i class="pi pi-box"></i> Service Usage</h2>
+      <p-card styleClass="chart-card">
+        <h3 class="card-title">Package Usage</h3>
+        <p class="section-description">Breakdown of orders by package type</p>
+        <div class="chart-container">
+          <p-chart *ngIf="packageUsageChartData" type="bar" [data]="packageUsageChartData" [options]="chartOptions" [style]="{'height': '280px'}"></p-chart>
+          <div *ngIf="!packageUsageChartData" class="chart-empty"><p>No package data</p></div>
+        </div>
+      </p-card>
+    </section>
+
+    <!-- Section 4: Performance Metrics -->
+    <section class="analytics-section">
+      <h2 class="section-header"><i class="pi pi-bolt"></i> Performance Metrics</h2>
+      <div class="performance-metrics-grid">
+        <p-card styleClass="chart-card">
+          <h3 class="card-title">Average Delivery Time Trend</h3>
+          <p class="section-description">Service performance over time</p>
+          <div class="chart-container">
+            <p-chart *ngIf="deliveryTimeTrendChartData" type="line" [data]="deliveryTimeTrendChartData" [options]="deliveryChartOptions" [style]="{'height': '280px'}"></p-chart>
+            <div *ngIf="!deliveryTimeTrendChartData" class="chart-empty"><p>No delivery data</p></div>
           </div>
-          <div class="stat-content" [class.clickable]="stat.route" (click)="stat.route && navigateToRoute(stat.route)">
-            <h3 class="stat-value">
-              <span *ngIf="stat.isCurrency">$</span>{{ stat.isCurrency ? (stat.value | number:'1.2-2') : (stat.value | number) }}
-            </h3>
-            <p class="stat-label">{{ stat.label }}</p>
+        </p-card>
+        <p-card styleClass="chart-card">
+          <h3 class="card-title">Revision Statistics</h3>
+          <p class="section-description">Workflow smoothness and design approval efficiency</p>
+          <div class="chart-container">
+            <p-chart *ngIf="revisionStatsChartData" type="doughnut" [data]="revisionStatsChartData" [options]="revisionChartOptions" [style]="{'height': '280px'}"></p-chart>
+            <div *ngIf="!revisionStatsChartData" class="chart-empty"><p>No revision data</p></div>
           </div>
+        </p-card>
+      </div>
+    </section>
+  </div>
+
+  <div *ngIf="!loading && !isAdmin && !isClient" class="empty-state">
+    <i class="pi pi-lock empty-icon"></i>
+    <p class="empty-text">Access Restricted</p>
+    <p class="empty-subtext">Analytics are available only for Super Admin, Admin, and Client roles.</p>
+  </div>
+
+  <div *ngIf="apiError && isAdmin" class="api-error-banner">
+    <i class="pi pi-exclamation-triangle"></i>
+    <div>
+      <strong>Analytics API unavailable.</strong> Ensure the backend is running and points to the correct API URL.
+      <a (click)="loadAnalyticsData()" class="retry-link">Retry</a>
+    </div>
+  </div>
+
+  <div *ngIf="!loading && isAdmin" class="analytics-content">
+    <!-- Row 1: KPI Cards + Insights -->
+    <app-dashboard-analytics [overview]="overview" [recentOrders]="recentOrders" [apiError]="apiError"
+      [insights]="insightsAnalytics?.insights ?? []"></app-dashboard-analytics>
+
+    <!-- Row 2: Orders Trend | Revenue Trend -->
+    <div class="section-block">
+      <h2 class="block-title block-title-toggle" (click)="orderChartsCollapsed = !orderChartsCollapsed"
+        [attr.aria-expanded]="!orderChartsCollapsed" role="button" tabindex="0"
+        (keydown.enter)="orderChartsCollapsed = !orderChartsCollapsed"
+        (keydown.space)="orderChartsCollapsed = !orderChartsCollapsed; $event.preventDefault()">
+        <i class="pi pi-chevron-right block-chevron" [class.collapsed]="orderChartsCollapsed"></i>
+        <i class="pi pi-chart-line"></i> Order Charts
+      </h2>
+      <div class="section-block-body" [class.collapsed]="orderChartsCollapsed">
+        <div class="charts-row">
+          <app-order-analytics [data]="orderAnalytics"></app-order-analytics>
         </div>
       </div>
-    </p-card>
+    </div>
 
-    <!-- Quick Status -->
-    <p-card styleClass="analytics-card">
-      <h3 class="card-title"><i class="pi pi-info-circle"></i> Quick Status</h3>
-      <div class="stats-grid stats-grid-5">
-        <div class="stat-card" *ngFor="let stat of clientFinancialCards" [class]="'stat-' + stat.color">
-          <div class="stat-icon-wrapper">
-            <div class="stat-icon" [class]="'bg-' + stat.color">
-              <i [class]="stat.icon"></i>
-            </div>
-          </div>
-          <div class="stat-content" [class.clickable]="stat.route" (click)="stat.route && navigateToRoute(stat.route)">
-            <h3 class="stat-value">
-              <span *ngIf="stat.isCurrency">$</span>{{ stat.isCurrency ? (stat.value | number:'1.2-2') : (stat.value | number) }}
-            </h3>
-            <p class="stat-label">{{ stat.label }}</p>
-          </div>
-        </div>
-      </div>
-    </p-card>
+    <!-- Row 3: Orders by Status | Orders by Package (in order-analytics) -->
 
-    <!-- Status Chart -->
-    <p-card *ngIf="statusChartData" styleClass="chart-card">
-      <h3 class="card-title"><i class="pi pi-chart-pie"></i> Orders by Status</h3>
-      <div class="chart-container">
-        <p-chart type="doughnut" [data]="statusChartData" [options]="statusChartOptions" [style]="{'height': '300px'}"></p-chart>
+    <!-- Row 4: Order Funnel | Revision Analytics -->
+    <div class="section-block">
+      <h2 class="block-title block-title-toggle" (click)="workflowCollapsed = !workflowCollapsed"
+        [attr.aria-expanded]="!workflowCollapsed" role="button" tabindex="0"
+        (keydown.enter)="workflowCollapsed = !workflowCollapsed"
+        (keydown.space)="workflowCollapsed = !workflowCollapsed; $event.preventDefault()">
+        <i class="pi pi-chevron-right block-chevron" [class.collapsed]="workflowCollapsed"></i>
+        <i class="pi pi-sitemap"></i> Order Workflow Analytics
+      </h2>
+      <div class="section-block-body" [class.collapsed]="workflowCollapsed">
+        <app-workflow-analytics [data]="workflowAnalytics"></app-workflow-analytics>
       </div>
-    </p-card>
+    </div>
+
+    <!-- Row 5: Designer Performance | Client Analytics -->
+    <div class="section-block">
+      <h2 class="block-title block-title-toggle" (click)="designerCollapsed = !designerCollapsed"
+        [attr.aria-expanded]="!designerCollapsed" role="button" tabindex="0"
+        (keydown.enter)="designerCollapsed = !designerCollapsed"
+        (keydown.space)="designerCollapsed = !designerCollapsed; $event.preventDefault()">
+        <i class="pi pi-chevron-right block-chevron" [class.collapsed]="designerCollapsed"></i>
+        <i class="pi pi-users"></i> Designer Performance
+      </h2>
+      <div class="section-block-body" [class.collapsed]="designerCollapsed">
+        <app-designer-analytics [data]="designerAnalytics"></app-designer-analytics>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <h2 class="block-title block-title-toggle" (click)="clientCollapsed = !clientCollapsed"
+        [attr.aria-expanded]="!clientCollapsed" role="button" tabindex="0"
+        (keydown.enter)="clientCollapsed = !clientCollapsed"
+        (keydown.space)="clientCollapsed = !clientCollapsed; $event.preventDefault()">
+        <i class="pi pi-chevron-right block-chevron" [class.collapsed]="clientCollapsed"></i>
+        <i class="pi pi-user"></i> Client Analytics
+      </h2>
+      <div class="section-block-body" [class.collapsed]="clientCollapsed">
+        <app-client-analytics [data]="clientAnalytics"></app-client-analytics>
+      </div>
+    </div>
+
+    <!-- Row 6: Revenue Analytics -->
+    <div class="section-block">
+      <h2 class="block-title block-title-toggle" (click)="revenueCollapsed = !revenueCollapsed"
+        [attr.aria-expanded]="!revenueCollapsed" role="button" tabindex="0"
+        (keydown.enter)="revenueCollapsed = !revenueCollapsed"
+        (keydown.space)="revenueCollapsed = !revenueCollapsed; $event.preventDefault()">
+        <i class="pi pi-chevron-right block-chevron" [class.collapsed]="revenueCollapsed"></i>
+        <i class="pi pi-dollar"></i> Revenue Analytics
+      </h2>
+      <div class="section-block-body" [class.collapsed]="revenueCollapsed">
+        <app-revenue-analytics [data]="revenueAnalytics"></app-revenue-analytics>
+      </div>
+    </div>
+
+    <!-- Row 7: System Activity | Forecast Charts -->
+    <div class="section-block">
+      <h2 class="block-title block-title-toggle" (click)="systemCollapsed = !systemCollapsed"
+        [attr.aria-expanded]="!systemCollapsed" role="button" tabindex="0"
+        (keydown.enter)="systemCollapsed = !systemCollapsed"
+        (keydown.space)="systemCollapsed = !systemCollapsed; $event.preventDefault()">
+        <i class="pi pi-chevron-right block-chevron" [class.collapsed]="systemCollapsed"></i>
+        <i class="pi pi-cog"></i> System Activity Analytics
+      </h2>
+      <div class="section-block-body" [class.collapsed]="systemCollapsed">
+        <app-system-analytics [data]="systemAnalytics"></app-system-analytics>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <h2 class="block-title block-title-toggle" (click)="forecastCollapsed = !forecastCollapsed"
+        [attr.aria-expanded]="!forecastCollapsed" role="button" tabindex="0"
+        (keydown.enter)="forecastCollapsed = !forecastCollapsed"
+        (keydown.space)="forecastCollapsed = !forecastCollapsed; $event.preventDefault()">
+        <i class="pi pi-chevron-right block-chevron" [class.collapsed]="forecastCollapsed"></i>
+        <i class="pi pi-chart-line"></i> Forecasting
+      </h2>
+      <div class="section-block-body" [class.collapsed]="forecastCollapsed">
+        <app-forecast-analytics [data]="forecastAnalytics"></app-forecast-analytics>
+      </div>
+    </div>
   </div>
 </div>

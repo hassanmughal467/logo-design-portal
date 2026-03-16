@@ -18,12 +18,61 @@
   }
 }
 
+.loading-state,
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  min-height: 200px;
+
+  p {
+    margin-top: 1rem;
+    color: var(--text-color-secondary);
+  }
+}
+
+.error-state {
+  h3 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-color);
+  }
+}
+
 /* Order detail uses full-width content (padding:0) with internal scrolling */
 ::ng-deep .order-detail-dialog {
   .p-dialog-content {
     padding: 0 !important;
     overflow-y: auto;
     max-height: calc(90vh - 100px);
+  }
+}
+
+.revision-limit-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: #fff8e1;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  color: #856404;
+
+  i {
+    flex-shrink: 0;
+  }
+}
+
+.revision-info {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: var(--text-color-secondary);
+
+  .revision-count {
+    font-weight: 500;
   }
 }
 
@@ -158,7 +207,22 @@
     gap: 1.5rem;
     margin-bottom: 2rem;
 
-    .info-card {
+    .pricing-section {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--surface-border);
+  &:last-of-type {
+    border-bottom: none;
+  }
+  .pricing-section-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+    color: var(--text-color-secondary);
+  }
+}
+
+.info-card {
       background: #f8f9fa;
       padding: 1.5rem;
       border-radius: 8px;
@@ -250,6 +314,12 @@
           margin-left: 0.5rem;
           font-style: italic;
         }
+
+        .comment-header-tags {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
       }
 
       .revision-content, .comment-content {
@@ -264,6 +334,21 @@
       color: #666;
     }
   }
+}
+
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 10px;
 }
 
 .loading-state {

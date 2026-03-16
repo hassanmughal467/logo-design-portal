@@ -1,0 +1,164 @@
+:host {
+  display: block;
+}
+
+::ng-deep .pricing-card {
+  margin-bottom: 1.5rem;
+
+  .p-card-body {
+    padding: 1.5rem;
+  }
+
+  .p-card-header {
+    padding: 1.5rem 1.5rem 0;
+  }
+}
+
+.card-header {
+  .card-title {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .card-subtitle {
+    margin: 0;
+    color: var(--text-color-secondary);
+    font-size: 0.9rem;
+  }
+}
+
+::ng-deep .pricing-toolbar {
+  border: none;
+  background: transparent;
+  padding: 0;
+  gap: 1rem;
+
+  .p-toolbar-group-start,
+  .p-toolbar-group-center,
+  .p-toolbar-group-end {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .p-toolbar-group-start {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .client-dropdown {
+    width: 300px;
+    max-width: 100%;
+  }
+
+  .no-clients-hint {
+    display: block;
+    width: 100%;
+    margin-top: 0.5rem;
+    color: var(--text-color-secondary);
+    font-size: 0.875rem;
+  }
+}
+
+.add-pricing-btn {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.pricings-section {
+  margin-top: 0;
+
+  .loading-state {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2rem;
+    color: var(--text-color-secondary);
+  }
+}
+
+::ng-deep .pricing-table {
+  .p-datatable-thead > tr > th {
+    font-weight: 600;
+  }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--text-color-secondary);
+
+  .empty-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-title {
+    margin: 0 0 0.25rem 0;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-color);
+  }
+
+  .empty-subtext {
+    margin: 0;
+    font-size: 0.875rem;
+    opacity: 0.85;
+  }
+}
+
+.hint-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  color: var(--text-color-secondary);
+}
+
+.form-field {
+  margin-bottom: 1rem;
+
+  label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-weight: 500;
+  }
+
+  p-dropdown,
+  p-inputNumber {
+    display: block;
+    width: 100%;
+  }
+
+  p-checkbox {
+    margin-right: 0.5rem;
+  }
+}
+
+// Responsive: Tablet/Mobile
+@media (max-width: 768px) {
+  ::ng-deep .pricing-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+
+    .p-toolbar-group-start,
+    .p-toolbar-group-end {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .client-dropdown {
+      width: 100% !important;
+    }
+
+    .add-pricing-btn {
+      width: 100%;
+    }
+  }
+}

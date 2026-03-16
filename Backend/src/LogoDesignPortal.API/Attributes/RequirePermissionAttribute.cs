@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+using LogoDesignPortal.API.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using System.Security.Claims;
@@ -6,7 +6,7 @@ using System.Security.Claims;
 namespace LogoDesignPortal.API.Attributes;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
-public class RequirePermissionAttribute : Attribute, IAuthorizationFilter
+public class RequirePermissionAttribute : Attribute, IAsyncAuthorizationFilter
 {
     private readonly string _permissionName;
 
@@ -15,7 +15,7 @@ public class RequirePermissionAttribute : Attribute, IAuthorizationFilter
         _permissionName = permissionName;
     }
 
-    public void OnAuthorization(AuthorizationFilterContext context)
+    public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
         var user = context.HttpContext.User;
 
@@ -43,15 +43,14 @@ public class RequirePermissionAttribute : Attribute, IAuthorizationFilter
             return;
         }
 
-        var userIdClaim = user.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+        var userId = user.GetUserId();
+        if (userId == null)
         {
             context.Result = new UnauthorizedResult();
             return;
         }
 
-        // Check permission asynchronously
-        var hasPermission = permissionService.UserHasPermissionAsync(userId, _permissionName).GetAwaiter().GetResult();
+        var hasPermission = await permissionService.UserHasPermissionAsync(userId.Value, _permissionName);
 
         if (!hasPermission)
         {

@@ -40,6 +40,8 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
   designerId: string | null = null;
   designer: DesignerDetail | null = null;
   loading = false;
+  loadFailed = false;
+  errorMessage = '';
   activeTab: number = 0;
 
   // Tab data
@@ -70,6 +72,8 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
 
   loadDesigner(): void {
     this.loading = true;
+    this.loadFailed = false;
+    this.errorMessage = '';
     this.apiService.get<DesignerDetail>(`users/designers/${this.designerId}/detail`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -78,16 +82,19 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
           this.orders = designerDetail.assignedOrders || [];
           this.loading = false;
           this.ordersLoading = false;
+          this.loadFailed = false;
           this.cdr.markForCheck();
         },
-        error: () => {
+        error: (err) => {
+          this.loading = false;
+          this.ordersLoading = false;
+          this.loadFailed = true;
+          this.errorMessage = err.error?.error || 'Failed to load designer details';
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to load designer details'
+            detail: this.errorMessage
           });
-          this.loading = false;
-          this.ordersLoading = false;
           this.cdr.markForCheck();
         }
       });
@@ -118,6 +125,11 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
     return `${days.toFixed(1)} days`;
   }
 
+  formatStatus(status: string): string {
+    if (status === 'ClientApproved') return 'Approved';
+    return status.replace(/([A-Z])/g, ' $1').trim();
+  }
+
   getStatusSeverity(status: string): string {
     const severityMap: { [key: string]: string } = {
       'Pending': 'warning',
@@ -127,7 +139,7 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
       'Assigned': 'info',
       'PreviewUploaded': 'info',
       'Approved': 'success',
-      'FinalApproved': 'success',
+      'ClientApproved': 'success',
       'Completed': 'success',
       'Cancelled': 'danger',
       'RevisionRequested': 'warn'

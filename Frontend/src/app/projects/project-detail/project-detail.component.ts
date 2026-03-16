@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { MessageService } from 'primeng/api';
-import { Subject } from 'rxjs';
+import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
 export interface Project {
@@ -203,7 +203,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       const formData = new FormData();
       formData.append('file', file);
       
-      return this.apiService.post(`files/upload/${this.projectId}`, formData).toPromise();
+      return firstValueFrom(this.apiService.post(`files/upload/${this.projectId}`, formData));
     });
 
     Promise.all(uploadPromises)
@@ -312,8 +312,22 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       });
   }
 
-  downloadFile(fileId: string): void {
-    window.open(`http://localhost:5000/api/files/${fileId}/download`, '_blank');
+  downloadFile(file: { id: string; originalFileName?: string; fileName?: string }): void {
+    const fileName = file.originalFileName || file.fileName || `file-${file.id}`;
+    this.apiService.getBlob(`files/${file.id}/download`).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
+        this.messageService.add({ severity: 'success', summary: 'Download', detail: 'File downloaded successfully' });
+      },
+      error: (err) => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to download file' });
+      }
+    });
   }
 
   formatDate(date: Date | string | undefined): string {

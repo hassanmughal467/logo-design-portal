@@ -1,0 +1,53 @@
+.workflow-analytics {
+  .empty-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2rem;
+    background: var(--surface-ground);
+    border-radius: 12px;
+    border: 1px dashed var(--surface-border);
+    color: var(--text-color-secondary);
+    i { font-size: 2rem; }
+    p { margin: 0; }
+  }
+
+  .workflow-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    @media (max-width: 992px) { grid-template-columns: 1fr; }
+  }
+
+  .chart-card, .metrics-card {
+    background: var(--surface-card);
+    border-radius: 12px;
+    border: 1px solid var(--surface-border);
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  .chart-title {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    i { color: var(--primary-color); }
+  }
+
+  .metrics-card .metric-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--surface-border);
+
+    &:last-child { border-bottom: none; }
+
+    .metric-label { color: var(--text-color-secondary); }
+    .metric-value { font-weight: 600; color: var(--text-color); }
+  }
+}

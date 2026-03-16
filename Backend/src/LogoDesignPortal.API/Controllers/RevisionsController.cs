@@ -1,3 +1,4 @@
+using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Revisions;
 using LogoDesignPortal.Application.Exceptions;
@@ -32,7 +33,7 @@ public class RevisionsController : ControllerBase
     {
         try
         {
-            var requestedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var requestedBy = User.GetUserIdOrThrow();
             var result = await _revisionService.RequestRevisionAsync(orderId, request, requestedBy);
             return Ok(result);
         }
@@ -54,7 +55,7 @@ public class RevisionsController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var result = await _revisionService.GetLatestRevisionAsync(orderId, userId, userRole);
             
@@ -78,7 +79,7 @@ public class RevisionsController : ControllerBase
     {
         try
         {
-            var approvedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var approvedBy = User.GetUserIdOrThrow();
             var result = await _revisionService.ApproveLogoAsync(orderId, request, approvedBy);
             return Ok(result);
         }
@@ -99,7 +100,7 @@ public class RevisionsController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var canRequest = await _revisionService.CanRequestRevisionAsync(orderId, userId, "Client");
             return Ok(new { canRequest });
         }
@@ -116,7 +117,7 @@ public class RevisionsController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var canApprove = await _revisionService.CanApproveLogoAsync(orderId, userId, userRole ?? string.Empty);
             return Ok(new { canApprove });

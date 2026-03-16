@@ -21,14 +21,6 @@
     <p>Loading users...</p>
   </div>
 
-  <!-- Debug info (remove in production) -->
-  <div *ngIf="users.length === 0 && !loading" style="padding: 1rem; background: #f0f0f0; margin: 1rem; border-radius: 4px;">
-    <p><strong>Debug Info:</strong></p>
-    <p>Users array length: {{ users.length }}</p>
-    <p>Loading: {{ loading }}</p>
-    <p>Check browser console for API response details</p>
-  </div>
-
   <p-card styleClass="users-card">
     <p-table 
       #dt
@@ -37,6 +29,7 @@
       [paginator]="true"
       [rows]="rows"
       [first]="first"
+      [totalRecords]="totalUsers"
       (onPage)="onPageChange($event)"
       [globalFilterFields]="['firstName', 'lastName', 'email', 'roleName']"
       [rowsPerPageOptions]="[10, 25, 50]"
@@ -370,6 +363,39 @@
                 <i class="pi pi-exclamation-circle"></i>
                 Company name is required
               </small>
+            </div>
+
+            <div class="form-field">
+              <label for="billingType">
+                <i class="pi pi-credit-card"></i>
+                Billing Type
+              </label>
+              <p-dropdown 
+                id="billingType"
+                formControlName="billingType"
+                [options]="billingTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Select billing type"
+                styleClass="w-full">
+              </p-dropdown>
+            </div>
+
+            <div class="form-field">
+              <label for="customerType">
+                <i class="pi pi-users"></i>
+                Customer Type
+              </label>
+              <p-dropdown 
+                id="customerType"
+                formControlName="customerType"
+                [options]="customerTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Select customer type"
+                [showClear]="true"
+                styleClass="w-full">
+              </p-dropdown>
             </div>
 
             <div class="form-field">
@@ -923,6 +949,16 @@
             </div>
           </div>
 
+          <div class="detail-item">
+            <div class="detail-icon">
+              <i class="pi pi-credit-card"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Billing Type</div>
+              <div class="detail-value">{{ getBillingTypeLabel(getClientProfile()?.billingType) }}</div>
+            </div>
+          </div>
+
           <div class="detail-item" *ngIf="getClientProfile()?.contactName">
             <div class="detail-icon">
               <i class="pi pi-user"></i>
@@ -1034,6 +1070,16 @@
             <div class="detail-content">
               <div class="detail-label">Reference</div>
               <div class="detail-value">{{ getClientProfile()?.reference }}</div>
+            </div>
+          </div>
+
+          <div class="detail-item" *ngIf="getClientProfile()?.customerType">
+            <div class="detail-icon">
+              <i class="pi pi-users"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Customer Type</div>
+              <div class="detail-value">{{ getClientProfile()?.customerType }}</div>
             </div>
           </div>
         </ng-container>
@@ -1328,6 +1374,40 @@
               <small class="p-error" *ngIf="editUserForm.get('companyName')?.invalid && editUserForm.get('companyName')?.touched">
                 Company name is required for Client role
               </small>
+            </div>
+
+            <div class="form-field">
+              <label for="editBillingType">
+                <i class="pi pi-credit-card"></i>
+                Billing Type
+              </label>
+              <p-dropdown 
+                id="editBillingType"
+                formControlName="billingType"
+                [options]="billingTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Select billing type"
+                styleClass="w-full">
+              </p-dropdown>
+              <small class="form-hint">Per Logo: invoice per order. Weekly/Monthly: orders grouped into billing queue.</small>
+            </div>
+
+            <div class="form-field">
+              <label for="editCustomerType">
+                <i class="pi pi-users"></i>
+                Customer Type
+              </label>
+              <p-dropdown 
+                id="editCustomerType"
+                formControlName="customerType"
+                [options]="customerTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Select customer type"
+                [showClear]="true"
+                styleClass="w-full">
+              </p-dropdown>
             </div>
 
             <div class="form-field">

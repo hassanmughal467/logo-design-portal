@@ -16,6 +16,8 @@ public class Invoice : BaseEntity
     public DateTime? PaidDate { get; set; }
     public string? PaymentMethod { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Billing period for display (e.g. "March 2026", "Week of 2026-03-09").</summary>
+    public string? BillingPeriod { get; set; }
 
     // Navigation properties
     public ClientProfile Client { get; set; } = null!;

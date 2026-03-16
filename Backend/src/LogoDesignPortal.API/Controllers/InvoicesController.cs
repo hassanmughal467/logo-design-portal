@@ -1,3 +1,4 @@
+using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -31,7 +32,7 @@ public class InvoicesController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var invoice = await _invoiceService.CreateInvoiceAsync(request, userId);
             return CreatedAtAction(nameof(GetInvoiceById), new { id = invoice.Id }, invoice);
         }
@@ -47,7 +48,7 @@ public class InvoicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetInvoiceById(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         var invoice = await _invoiceService.GetInvoiceByIdWithAccessAsync(id, userId, userRole);
         if (invoice == null)
@@ -61,7 +62,7 @@ public class InvoicesController : ControllerBase
     [ProducesResponseType(typeof(List<InvoiceResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetInvoices()
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         var invoices = await _invoiceService.GetInvoicesAsync(userId, userRole);
         return Ok(invoices);
@@ -75,7 +76,7 @@ public class InvoicesController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var invoice = await _invoiceService.UpdateInvoiceAsync(id, request, userId);
             return Ok(invoice);
         }
@@ -93,7 +94,7 @@ public class InvoicesController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var invoice = await _invoiceService.MarkInvoiceAsPaidAsync(id, request.PaymentMethod, userId);
             return Ok(invoice);
         }
@@ -111,7 +112,7 @@ public class InvoicesController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var result = await _invoiceService.SendInvoiceAsync(id, userId);
             if (result)
             {
@@ -131,7 +132,7 @@ public class InvoicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetInvoiceLogs(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         var logs = await _invoiceService.GetInvoiceLogsWithAccessAsync(id, userId, userRole);
         if (logs == null)
@@ -145,7 +146,7 @@ public class InvoicesController : ControllerBase
     [ProducesResponseType(typeof(InvoiceStatisticsDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetStatistics()
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         var statistics = await _invoiceService.GetInvoiceStatisticsAsync(userId, userRole);
         return Ok(statistics);
@@ -157,7 +158,7 @@ public class InvoicesController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var invoices = await _invoiceService.GetInvoicesAsync(userId, userRole);
 
@@ -188,7 +189,7 @@ public class InvoicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DownloadInvoice(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         var invoice = await _invoiceService.GetInvoiceByIdWithAccessAsync(id, userId, userRole);
         if (invoice == null)

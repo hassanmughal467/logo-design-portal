@@ -1,4 +1,5 @@
 using BCrypt.Net;
+using LogoDesignPortal.Application.DTOs.Common;
 using LogoDesignPortal.Application.DTOs.Users;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Invoices;
@@ -80,6 +81,7 @@ public class UserService : IUserService
             {
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
+                BillingType = request.BillingType ?? Domain.Enums.BillingType.PerLogo,
                 CompanyName = request.CompanyName,
                 ContactName = request.ContactName,
                 PhoneNumber = request.PhoneNumber,
@@ -127,6 +129,7 @@ public class UserService : IUserService
                 {
                     Id = clientProfile.Id,
                     UserId = clientProfile.UserId,
+                    BillingType = clientProfile.BillingType,
                     CompanyName = clientProfile.CompanyName,
                     ContactName = clientProfile.ContactName,
                     PhoneNumber = clientProfile.PhoneNumber,
@@ -139,7 +142,8 @@ public class UserService : IUserService
                     PostalCode = clientProfile.PostalCode,
                     Website = clientProfile.Website,
                     Reference = clientProfile.Reference,
-                    Notes = clientProfile.Notes
+                    Notes = clientProfile.Notes,
+                    CustomerType = clientProfile.CustomerType
                 };
             }
         }
@@ -200,6 +204,7 @@ public class UserService : IUserService
             {
                 Id = user.ClientProfile.Id,
                 UserId = user.ClientProfile.UserId,
+                BillingType = user.ClientProfile.BillingType,
                 CompanyName = user.ClientProfile.CompanyName,
                 ContactName = user.ClientProfile.ContactName,
                 PhoneNumber = user.ClientProfile.PhoneNumber,
@@ -212,7 +217,8 @@ public class UserService : IUserService
                 PostalCode = user.ClientProfile.PostalCode,
                 Website = user.ClientProfile.Website,
                 Reference = user.ClientProfile.Reference,
-                Notes = user.ClientProfile.Notes
+                Notes = user.ClientProfile.Notes,
+                CustomerType = user.ClientProfile.CustomerType
             };
         }
 
@@ -266,6 +272,7 @@ public class UserService : IUserService
                 {
                     Id = user.ClientProfile.Id,
                     UserId = user.ClientProfile.UserId,
+                    BillingType = user.ClientProfile.BillingType,
                     CompanyName = user.ClientProfile.CompanyName ?? string.Empty,
                     ContactName = user.ClientProfile.ContactName,
                     PhoneNumber = user.ClientProfile.PhoneNumber,
@@ -278,7 +285,8 @@ public class UserService : IUserService
                     PostalCode = user.ClientProfile.PostalCode,
                     Website = user.ClientProfile.Website,
                     Reference = user.ClientProfile.Reference,
-                    Notes = user.ClientProfile.Notes
+                    Notes = user.ClientProfile.Notes,
+                    CustomerType = user.ClientProfile.CustomerType
                 };
             }
 
@@ -311,6 +319,92 @@ public class UserService : IUserService
                 DesignerProfile = designerProfileDto
             };
         }).ToList();
+    }
+
+    public async Task<PagedResultDto<UserResponseDto>> GetUsersPagedAsync(int page, int pageSize)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = _context.Users
+            .Include(u => u.Role)
+            .Include(u => u.ClientProfile)
+            .Include(u => u.DesignerProfile)
+            .Where(u => !u.IsDeleted);
+
+        var total = await query.CountAsync();
+        var users = await query
+            .OrderBy(u => u.Email)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var items = users.Select(user =>
+        {
+            ClientProfileDto? clientProfileDto = null;
+            DesignerProfileDto? designerProfileDto = null;
+
+            if (user.ClientProfile != null && !user.ClientProfile.IsDeleted)
+            {
+                clientProfileDto = new ClientProfileDto
+                {
+                    Id = user.ClientProfile.Id,
+                    UserId = user.ClientProfile.UserId,
+                    BillingType = user.ClientProfile.BillingType,
+                    CompanyName = user.ClientProfile.CompanyName ?? string.Empty,
+                    ContactName = user.ClientProfile.ContactName,
+                    PhoneNumber = user.ClientProfile.PhoneNumber,
+                    Cell = user.ClientProfile.Cell,
+                    Fax = user.ClientProfile.Fax,
+                    Address = user.ClientProfile.Address,
+                    City = user.ClientProfile.City,
+                    State = user.ClientProfile.State,
+                    Country = user.ClientProfile.Country,
+                    PostalCode = user.ClientProfile.PostalCode,
+                    Website = user.ClientProfile.Website,
+                    Reference = user.ClientProfile.Reference,
+                    Notes = user.ClientProfile.Notes,
+                    CustomerType = user.ClientProfile.CustomerType
+                };
+            }
+
+            if (user.DesignerProfile != null && !user.DesignerProfile.IsDeleted)
+            {
+                designerProfileDto = new DesignerProfileDto
+                {
+                    Id = user.DesignerProfile.Id,
+                    UserId = user.DesignerProfile.UserId,
+                    Specialization = user.DesignerProfile.Specialization,
+                    Bio = user.DesignerProfile.Bio,
+                    HourlyRate = user.DesignerProfile.HourlyRate,
+                    IsAvailable = user.DesignerProfile.IsAvailable
+                };
+            }
+
+            return new UserResponseDto
+            {
+                Id = user.Id,
+                Email = user.Email,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                RoleName = user.Role?.Name ?? string.Empty,
+                IsActive = user.IsActive,
+                IsRootAdmin = user.IsRootAdmin,
+                CreatedAt = user.CreatedAt,
+                SecondaryEmail = user.SecondaryEmail,
+                InvoiceEmail = user.InvoiceEmail,
+                ClientProfile = clientProfileDto,
+                DesignerProfile = designerProfileDto
+            };
+        }).ToList();
+
+        return new PagedResultDto<UserResponseDto>
+        {
+            Items = items,
+            Total = total,
+            Page = page,
+            PageSize = pageSize
+        };
     }
 
     public async Task<UserResponseDto> UpdateUserAsync(Guid id, UpdateUserRequestDto request, Guid? performedBy = null)
@@ -392,6 +486,7 @@ public class UserService : IUserService
                 {
                     Id = Guid.NewGuid(),
                     UserId = user.Id,
+                    BillingType = request.BillingType ?? Domain.Enums.BillingType.PerLogo,
                     CompanyName = request.CompanyName!,
                     ContactName = request.ContactName,
                     PhoneNumber = request.PhoneNumber,
@@ -404,6 +499,7 @@ public class UserService : IUserService
                     PostalCode = request.PostalCode,
                     Website = request.Website,
                     Reference = request.Reference,
+                    CustomerType = request.CustomerType,
                     CreatedAt = DateTime.UtcNow
                 };
                 _context.ClientProfiles.Add(clientProfile);
@@ -411,6 +507,10 @@ public class UserService : IUserService
             else
             {
                 // Update existing profile
+                if (request.BillingType.HasValue)
+                {
+                    clientProfile.BillingType = request.BillingType.Value;
+                }
                 clientProfile.CompanyName = request.CompanyName!;
                 clientProfile.ContactName = request.ContactName;
                 clientProfile.PhoneNumber = request.PhoneNumber;
@@ -423,6 +523,10 @@ public class UserService : IUserService
                 clientProfile.PostalCode = request.PostalCode;
                 clientProfile.Website = request.Website;
                 clientProfile.Reference = request.Reference;
+                if (request.CustomerType.HasValue)
+                {
+                    clientProfile.CustomerType = request.CustomerType.Value;
+                }
                 clientProfile.UpdatedAt = DateTime.UtcNow;
             }
         }
@@ -476,6 +580,7 @@ public class UserService : IUserService
                 {
                     Id = clientProfile.Id,
                     UserId = clientProfile.UserId,
+                    BillingType = clientProfile.BillingType,
                     CompanyName = clientProfile.CompanyName,
                     ContactName = clientProfile.ContactName,
                     PhoneNumber = clientProfile.PhoneNumber,
@@ -488,7 +593,8 @@ public class UserService : IUserService
                     PostalCode = clientProfile.PostalCode,
                     Website = clientProfile.Website,
                     Reference = clientProfile.Reference,
-                    Notes = clientProfile.Notes
+                    Notes = clientProfile.Notes,
+                    CustomerType = clientProfile.CustomerType
                 };
             }
         }
@@ -564,6 +670,7 @@ public class UserService : IUserService
             {
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
+                BillingType = request.BillingType ?? Domain.Enums.BillingType.PerLogo,
                 CompanyName = request.CompanyName ?? string.Empty,
                 ContactName = request.ContactName,
                 PhoneNumber = request.PhoneNumber,
@@ -576,6 +683,7 @@ public class UserService : IUserService
                 PostalCode = request.PostalCode,
                 Website = request.Website,
                 Reference = request.Reference,
+                CustomerType = request.CustomerType,
                 CreatedAt = DateTime.UtcNow
             };
             _context.ClientProfiles.Add(clientProfile);
@@ -631,6 +739,14 @@ public class UserService : IUserService
             {
                 clientProfile.Reference = request.Reference;
             }
+            if (request.BillingType.HasValue)
+            {
+                clientProfile.BillingType = request.BillingType.Value;
+            }
+            if (request.CustomerType.HasValue)
+            {
+                clientProfile.CustomerType = request.CustomerType.Value;
+            }
             clientProfile.UpdatedAt = DateTime.UtcNow;
         }
 
@@ -647,6 +763,7 @@ public class UserService : IUserService
             {
                 Id = updatedClientProfile.Id,
                 UserId = updatedClientProfile.UserId,
+                BillingType = updatedClientProfile.BillingType,
                 CompanyName = updatedClientProfile.CompanyName,
                 ContactName = updatedClientProfile.ContactName,
                 PhoneNumber = updatedClientProfile.PhoneNumber,
@@ -658,7 +775,8 @@ public class UserService : IUserService
                 Country = updatedClientProfile.Country,
                 PostalCode = updatedClientProfile.PostalCode,
                 Website = updatedClientProfile.Website,
-                Reference = updatedClientProfile.Reference
+                Reference = updatedClientProfile.Reference,
+                CustomerType = updatedClientProfile.CustomerType
             };
         }
 
@@ -937,41 +1055,28 @@ public class UserService : IUserService
         // Get invoices
         var invoices = await _invoiceService.GetInvoicesByClientAsync(clientId);
 
-        // Get files (all files from client's orders)
-        var allFiles = new List<FileResponseDto>();
-        foreach (var order in orders)
-        {
-            try
-            {
-                var orderFiles = await _fileService.GetOrderFilesAsync(order.Id, clientId, "Client");
-                allFiles.AddRange(orderFiles);
-            }
-            catch
-            {
-                // Skip if access denied
-            }
-        }
+        // Get files (all files from client's orders) - batch load to avoid N+1
+        var orderIds = orders.Select(o => o.Id).ToList();
+        var allFiles = orderIds.Count > 0
+            ? await _fileService.GetOrderFilesForOrdersAsync(orderIds, clientId, "Client")
+            : new List<FileResponseDto>();
 
-        // Get activity timeline from audit logs
+        // Get activity timeline from audit logs - batch load to avoid N+1
         var clientProfile = await _context.ClientProfiles
             .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
         
         var activityTimeline = new List<AuditLogResponseDto>();
         if (clientProfile != null)
         {
-            activityTimeline = await _auditLogService.GetEntityAuditLogsAsync("ClientProfile", clientProfile.Id);
-            
-            // Also get user-related audit logs
+            var profileLogs = await _auditLogService.GetEntityAuditLogsAsync("ClientProfile", clientProfile.Id);
             var userLogs = await _auditLogService.GetEntityAuditLogsAsync("User", clientId);
+            var orderLogs = orderIds.Count > 0
+                ? await _auditLogService.GetEntityAuditLogsForEntitiesAsync("Order", orderIds)
+                : new List<AuditLogResponseDto>();
+            
+            activityTimeline.AddRange(profileLogs);
             activityTimeline.AddRange(userLogs);
-            
-            // Get order-related audit logs
-            foreach (var order in orders)
-            {
-                var orderLogs = await _auditLogService.GetEntityAuditLogsAsync("Order", order.Id);
-                activityTimeline.AddRange(orderLogs);
-            }
-            
+            activityTimeline.AddRange(orderLogs);
             activityTimeline = activityTimeline.OrderByDescending(a => a.Timestamp).ToList();
         }
 

@@ -18,12 +18,12 @@
         <strong>This order is completed and is now read-only.</strong>
         <p style="margin: 0.5rem 0 0 0;">File uploads are not allowed for completed orders.</p>
       </div>
-      <div *ngIf="order && !isOrderLocked(order.status) && ((order.status === 'Completed' || order.status === 'FinalApproved') && (userRole !== 'Admin' && userRole !== 'SuperAdmin' && order.allowUploads !== true) || (order.status !== 'Completed' && order.status !== 'FinalApproved' && order.allowUploads === false))" 
+      <div *ngIf="order && !isOrderLocked(order.status) && ((order.status === 'Completed' || order.status === 'ClientApproved') && (userRole !== 'Admin' && userRole !== 'SuperAdmin' && order.allowUploads !== true) || (order.status !== 'Completed' && order.status !== 'ClientApproved' && order.allowUploads === false))" 
            class="upload-disabled-message" 
            style="padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin-bottom: 1rem;">
         <i class="pi pi-exclamation-triangle" style="margin-right: 0.5rem;"></i>
         <strong>File uploads are disabled for this order.</strong>
-        <p style="margin: 0.5rem 0 0 0;">{{ (order.status === 'Completed' || order.status === 'FinalApproved') ? 'This order has been completed. Please contact an administrator if you need to upload files.' : 'Please contact an administrator to enable uploads.' }}</p>
+        <p style="margin: 0.5rem 0 0 0;">{{ (order.status === 'Completed' || order.status === 'ClientApproved') ? 'This order has been completed. Please contact an administrator if you need to upload files.' : 'Please contact an administrator to enable uploads.' }}</p>
       </div>
       <form [formGroup]="uploadForm" (ngSubmit)="onSubmit($event)" (submit)="$event.preventDefault()">
         <div class="form-group">
@@ -41,13 +41,91 @@
             styleClass="w-full"
             [disabled]="uploadForm.get('fileType')?.disabled || false"
             appendTo="body"
+            (onChange)="onFileTypeChange()"
           ></p-dropdown>
           <small class="p-help">
             <i class="pi pi-info-circle"></i>
             <strong>Reference:</strong> Client reference files (auto-visible)<br>
-            <strong>Preview:</strong> Designer preview files (requires admin approval)<br>
-            <strong>Final:</strong> Final approved files (requires admin approval)
+            <strong>Preview:</strong> Designer preview files (first batch requires proposed price; category/type from order when client selected)<br>
+            <strong>Final:</strong> Final approved files (requires proposed price; category/type from order when client selected)
           </small>
+        </div>
+
+        <!-- Designer: hint when Preview selected and order already has pricing - select Final to enter pricing for final files -->
+        <div class="form-group design-pricing-hint" *ngIf="isDesigner && !isDesignerPricingRequired" 
+             style="padding: 0.75rem; background: #e3f2fd; border: 1px solid #2196f3; border-radius: 4px;">
+          <i class="pi pi-info-circle" style="margin-right: 0.5rem; color: #1976d2;"></i>
+          <strong>Uploading final logo files?</strong> Select <strong>Final</strong> as file type above to enter proposed price for your payout.
+        </div>
+        <!-- Designer: hint when first Preview batch - pricing required -->
+        <div class="form-group design-pricing-hint" *ngIf="isDesignerPreviewNeedsPricing && !orderHasDesignFromClient" 
+             style="padding: 0.75rem; background: #fff3e0; border: 1px solid #ff9800; border-radius: 4px;">
+          <i class="pi pi-info-circle" style="margin-right: 0.5rem; color: #e65100;"></i>
+          <strong>First preview batch:</strong> Enter design category, type, and proposed price below for your payout.
+        </div>
+        <div class="form-group design-pricing-hint" *ngIf="isDesignerPreviewNeedsPricing && orderHasDesignFromClient" 
+             style="padding: 0.75rem; background: #e8f5e9; border: 1px solid #4caf50; border-radius: 4px;">
+          <i class="pi pi-info-circle" style="margin-right: 0.5rem; color: #2e7d32;"></i>
+          <strong>First preview batch:</strong> Proposed price defaults to standard rate. Edit if you need to request more.
+        </div>
+        <!-- When order has design from client: show read-only, no category/type selection -->
+        <div class="form-group design-pricing-group" *ngIf="isDesignerPricingRequired && orderHasDesignFromClient">
+          <label><i class="pi pi-briefcase"></i> Design (from order)</label>
+          <p class="default-price-display">{{ (order?.designCategory || order?.DesignCategory) }} - {{ (order?.designType || order?.DesignType) }}</p>
+          <small class="p-help">Client selected this at order creation. Proposed price defaults to standard rate; you can request more if needed.</small>
+        </div>
+        <!-- Designer must select category/type only when order does NOT have them -->
+        <div class="form-group design-pricing-group" *ngIf="isDesignerPricingRequired && !orderHasDesignFromClient">
+          <label><i class="pi pi-briefcase"></i> Design Category <span class="required">*</span></label>
+          <p-dropdown 
+            formControlName="designCategory"
+            [options]="[
+              { label: 'Embroidery Digitizing', value: 1 },
+              { label: 'Vector / Screen Print', value: 2 }
+            ]"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Select category"
+            styleClass="w-full"
+            appendTo="body"
+            (onChange)="onDesignCategoryChange()"
+          ></p-dropdown>
+        </div>
+        <div class="form-group design-pricing-group" *ngIf="isDesignerPricingRequired && !orderHasDesignFromClient && uploadForm.get('designCategory')?.value">
+          <label><i class="pi pi-sitemap"></i> Design Type <span class="required">*</span></label>
+          <p-dropdown 
+            formControlName="designType"
+            [options]="filteredDesignTypes"
+            optionLabel="label"
+            optionValue="designType"
+            placeholder="Select design type"
+            styleClass="w-full"
+            appendTo="body"
+            (onChange)="onDesignTypeChange()"
+          ></p-dropdown>
+        </div>
+        <div class="form-group design-pricing-group" *ngIf="isDesignerPricingRequired && uploadForm.get('designType')?.value">
+          <label><i class="pi pi-money-bill"></i> Default Price</label>
+          <p class="default-price-display">{{ defaultPriceLabel }}</p>
+        </div>
+        <div class="form-group design-pricing-group" *ngIf="isDesignerPricingRequired">
+          <label><i class="pi pi-money-bill"></i> Proposed Price <span class="required">*</span></label>
+          <p-inputNumber 
+            formControlName="proposedPrice"
+            [min]="1"
+            [maxFractionDigits]="0"
+            [placeholder]="selectedDesignTypeDefaultPrice != null ? 'Enter or use default' : 'Enter price (required for Complex Vector)'"
+            styleClass="w-full"
+          ></p-inputNumber>
+          <div class="approval-warning" *ngIf="requiresAdminApproval" style="margin-top: 0.5rem; padding: 0.5rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+            <i class="pi pi-exclamation-triangle" style="margin-right: 0.5rem;"></i>
+            This price requires admin approval.
+          </div>
+        </div>
+        <div class="form-group design-pricing-group" *ngIf="isDesignerPricingRequired">
+          <label><i class="pi pi-comment"></i> Reason (optional)</label>
+          <input pInputText formControlName="reason" placeholder="e.g. Custom complexity, rush job" styleClass="w-full" style="width: 100%;" />
+          <small class="p-help">Provide a reason if your proposed price differs from the default (for admin review).</small>
         </div>
 
         <div class="form-group">
@@ -61,19 +139,19 @@
             mode="basic"
             [multiple]="true"
             [auto]="false"
-            accept="image/*,.pdf,.ai,.eps,.psd,.svg"
-            [maxFileSize]="10000000"
+            accept="image/*,.pdf,.ai,.eps,.psd,.svg,.pes,.dst,.jef,.exp,.vp3,.xxx,.hus,.art,.vip,.vip3,.shv,.pec,.jpm,.sew,.emb,.csd,.pcs,.phb,.phc,.stx,.s10,.dsb,.zsk"
+            [maxFileSize]="26214400"
             (onSelect)="onFileSelect($event)"
             chooseLabel="Choose Files"
             [showUploadButton]="false"
             [showCancelButton]="false"
             styleClass="w-full upload-button"
-            [disabled]="uploadForm.disabled || (order && (isOrderLocked(order.status) || (((order.status === 'Completed' || order.status === 'FinalApproved') && (userRole !== 'Admin' && userRole !== 'SuperAdmin' && order.allowUploads !== true)) || (order.status !== 'Completed' && order.status !== 'FinalApproved' && order.allowUploads === false))))"
+            [disabled]="uploadForm.disabled || (order && (isOrderLocked(order.status) || (((order.status === 'Completed' || order.status === 'ClientApproved') && (userRole !== 'Admin' && userRole !== 'SuperAdmin' && order.allowUploads !== true)) || (order.status !== 'Completed' && order.status !== 'ClientApproved' && order.allowUploads === false))))"
           ></p-fileUpload>
           <small class="p-help">
             <i class="pi pi-info-circle"></i>
-            Maximum file size: 10MB per file<br>
-            Supported formats: JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD<br>
+            Maximum file size: 10MB (images), 25MB (vector/embroidery)<br>
+            Supported formats: JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD, embroidery (PES, DST, JEF, EXP, VP3, XXX, HUS, ART, VIP, etc.)<br>
             You can select multiple files at once
           </small>
           

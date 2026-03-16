@@ -1,0 +1,46 @@
+<div class="system-analytics">
+  <div class="empty-section" *ngIf="!data && !loading">
+    <i class="pi pi-cog"></i>
+    <p>No system analytics data available.</p>
+  </div>
+  <div class="charts-grid" *ngIf="data">
+    <div class="chart-card chart-card-full" *ngIf="dailyActivityChart">
+      <h3 class="chart-title"><i class="pi pi-activity"></i> Daily Activity Timeline</h3>
+      <apx-chart [series]="dailyActivityChart.series" [chart]="dailyActivityChart.chart"
+        [xaxis]="dailyActivityChart.xaxis" [stroke]="dailyActivityChart.stroke"
+        [colors]="dailyActivityChart.colors" [yaxis]="dailyActivityChart.yaxis"
+        [legend]="dailyActivityChart.legend" [dataLabels]="dailyActivityChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="notificationActivityChart">
+      <h3 class="chart-title"><i class="pi pi-bell"></i> Notification Activity</h3>
+      <apx-chart [series]="notificationActivityChart.series" [chart]="notificationActivityChart.chart"
+        [labels]="notificationActivityChart.labels" [colors]="notificationActivityChart.colors"
+        [legend]="notificationActivityChart.legend" [dataLabels]="notificationActivityChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="fileUploadByDayChart">
+      <h3 class="chart-title"><i class="pi pi-cloud-upload"></i> File Uploads by Day</h3>
+      <apx-chart [series]="fileUploadByDayChart.series" [chart]="fileUploadByDayChart.chart"
+        [xaxis]="fileUploadByDayChart.xaxis" [stroke]="fileUploadByDayChart.stroke"
+        [fill]="fileUploadByDayChart.fill" [colors]="fileUploadByDayChart.colors"
+        [yaxis]="fileUploadByDayChart.yaxis" [dataLabels]="fileUploadByDayChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="fileUploadByTypeChart">
+      <h3 class="chart-title"><i class="pi pi-file"></i> File Uploads by Type</h3>
+      <apx-chart [series]="fileUploadByTypeChart.series" [chart]="fileUploadByTypeChart.chart"
+        [xaxis]="fileUploadByTypeChart.xaxis" [plotOptions]="fileUploadByTypeChart.plotOptions"
+        [colors]="fileUploadByTypeChart.colors" [yaxis]="fileUploadByTypeChart.yaxis"
+        [dataLabels]="fileUploadByTypeChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="metrics-card" *ngIf="fileUploadAnalytics">
+      <h3 class="chart-title"><i class="pi pi-info-circle"></i> File Upload Stats</h3>
+      <div class="metric-row">
+        <span class="metric-label">Total Uploads</span>
+        <span class="metric-value">{{ fileUploadAnalytics.totalUploads }}</span>
+      </div>
+    </div>
+  </div>
+</div>

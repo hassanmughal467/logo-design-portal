@@ -3,17 +3,18 @@ import { Router } from '@angular/router';
 import { AuthService } from '@core/services/auth.service';
 import { ApiService } from '@core/services/api.service';
 import { DashboardService, DashboardData } from '@core/services/dashboard.service';
+import { AdminAnalyticsService } from '@core/services/admin-analytics.service';
 import { NotificationService } from '@core/services/notification.service';
 import { RealtimeNotificationService } from '@core/services/realtime-notification.service';
 import { User } from '@shared/models/user.model';
 import { Order, OrderStatus } from '@shared/models/order.model';
 import { MessageService } from 'primeng/api';
-import { Observable, Subject, firstValueFrom } from 'rxjs';
+import { Observable, Subject, firstValueFrom, forkJoin } from 'rxjs';
 import { takeUntil, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 export interface ActionRequiredItem {
-  type: 'approval' | 'revision' | 'invoice' | 'price';
+  type: 'approval' | 'revision' | 'invoice' | 'price' | 'designerPrice';
   icon: string;
   severity: string;
   title: string;
@@ -63,6 +64,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Chart data
   statusChartData: any;
   statusChartOptions: any;
+  statusChartTotalOrders = 0;
   monthlyChartData: any;
   monthlyChartOptions: any;
   revenueChartData: any;
@@ -105,6 +107,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Action Required panel
   actionRequiredItems: ActionRequiredItem[] = [];
+  actionRequiredCollapsed = false;
+
+  // Notifications panel (collapsed by default)
+  notificationsPanelCollapsed = true;
+
+  // Recent Orders (Super Admin) - expand/collapse
+  recentOrdersCollapsed = false;
 
   // Order Activity Timeline
   showTimelineDialog = false;
@@ -159,6 +168,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   constructor(
     private authService: AuthService,
     private dashboardService: DashboardService,
+    private adminAnalytics: AdminAnalyticsService,
     private notificationService: NotificationService,
     private realtimeNotification: RealtimeNotificationService,
     private messageService: MessageService,
@@ -215,13 +225,67 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private loadDashboardData(): void {
     this.loading = true;
-    this.dashboardService.getDashboardData()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (data) => {
-          this.dashboardData = data;
-          this.updateStats(data);
-          this.setupCharts(data);
+    const isAdmin = this.authService.getCurrentUser()?.role === 'SuperAdmin' || this.authService.getCurrentUser()?.role === 'Admin';
+
+    if (isAdmin) {
+      forkJoin({
+        dashboard: this.dashboardService.getDashboardData(),
+        overview: this.adminAnalytics.getOverview().pipe(catchError(() => of(null))),
+        orderAnalytics: this.adminAnalytics.getOrderAnalytics().pipe(catchError(() => of(null))),
+        revenueAnalytics: this.adminAnalytics.getRevenueAnalytics().pipe(catchError(() => of(null)))
+      })
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: ({ dashboard: data, overview, orderAnalytics, revenueAnalytics }) => {
+            this.dashboardData = data;
+            if (overview) {
+              const completedFromStatus = orderAnalytics?.ordersByStatus?.find((s: any) => s.status === 'Completed')?.count ?? 0;
+              this.dashboardData.stats = {
+                ...this.dashboardData.stats,
+                totalOrders: overview.totalOrders,
+                pendingOrders: overview.pendingOrders,
+                inProgressOrders: overview.ordersInProgress,
+                completedOrders: completedFromStatus,
+                totalClients: overview.totalClients,
+                newClientsThisMonth: this.dashboardData.stats.newClientsThisMonth,
+                totalRevenue: overview.totalRevenue,
+                averageDeliveryTime: overview.averageDeliveryTimeDays
+              };
+            }
+            if (orderAnalytics) {
+              this.dashboardData.ordersByStatus = orderAnalytics.ordersByStatus || [];
+              this.dashboardData.ordersByMonth = (orderAnalytics.ordersTrend || []).map((t: any) => ({
+                month: t.monthKey,
+                count: t.count,
+                completedCount: t.completedCount ?? 0
+              }));
+            }
+            if (revenueAnalytics?.revenueByPackage?.length) {
+              this.dashboardData.revenueByPackage = revenueAnalytics.revenueByPackage.map((p: any) => ({
+                package: p.package,
+                revenue: p.revenue
+              }));
+            }
+            this.updateStats(this.dashboardData);
+            this.setupCharts(this.dashboardData);
+            this.notifications = data.notifications || [];
+            this.loading = false;
+          },
+          error: () => {
+            this.dashboardService.getDashboardData().pipe(takeUntil(this.destroy$)).subscribe({
+              next: (d) => { this.dashboardData = d; this.updateStats(d); this.setupCharts(d); this.notifications = d.notifications || []; this.loading = false; },
+              error: () => { this.loading = false; this.messageService.add({ severity: 'warn', summary: 'Warning', detail: 'Unable to load dashboard data.' }); }
+            });
+          }
+        });
+    } else {
+      this.dashboardService.getDashboardData()
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (data) => {
+            this.dashboardData = data;
+            this.updateStats(data);
+            this.setupCharts(data);
           // Load client-specific data
           // Notifications for both Client and Admin
           this.notifications = data.notifications || [];
@@ -272,6 +336,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           });
         }
       });
+    }
   }
 
   private updateStats(data: DashboardData): void {
@@ -309,7 +374,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // Compact summary bar (always visible at top)
       this.summaryMetrics = [
         { label: 'Total Orders', value: data.stats.totalOrders, icon: 'pi pi-list', color: 'primary', isCurrency: false, route: '/orders' },
-        { label: 'Active', value: data.stats.activeOrders || 0, icon: 'pi pi-sync', color: 'info', isCurrency: false, route: '/orders' },
+        { label: 'Active', value: data.stats.activeOrders || 0, icon: 'pi pi-shopping-cart', color: 'info', isCurrency: false, route: '/orders' },
         { label: 'Pending Invoices', value: data.stats.pendingInvoices || 0, icon: 'pi pi-file', color: 'warning', isCurrency: false, route: '#invoices-panel' },
         { label: 'Due Amount', value: data.stats.overdueAmount || 0, icon: 'pi pi-dollar', color: 'danger', isCurrency: true, route: '#invoices-panel' },
         { label: 'Lifetime Spend', value: data.stats.lifetimeSpend || 0, icon: 'pi pi-wallet', color: 'success', isCurrency: true, route: '#invoices-panel' }
@@ -407,11 +472,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private setupCharts(data: DashboardData): void {
-    // Status Chart (Pie Chart) - only if we have data
+    // Status Chart (Donut) - count, percentage, total in center, improved tooltip
     if (data.ordersByStatus && data.ordersByStatus.length > 0) {
       const statusLabels = data.ordersByStatus.map(s => this.formatStatus(s.status));
       const statusValues = data.ordersByStatus.map(s => s.count);
       const statusColors = this.getStatusColors(data.ordersByStatus.map(s => s.status));
+      const totalOrders = statusValues.reduce((a, b) => a + b, 0);
 
       this.statusChartData = {
         labels: statusLabels,
@@ -422,65 +488,86 @@ export class DashboardComponent implements OnInit, OnDestroy {
           borderColor: '#ffffff'
         }]
       };
+
+      this.statusChartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '65%',
+        layout: {
+          padding: { bottom: 10 }
+        },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              padding: 16,
+              usePointStyle: true,
+              pointStyleWidth: 10,
+              boxWidth: 8,
+              boxHeight: 8,
+              font: { size: 12 }
+            }
+          },
+          tooltip: {
+            backgroundColor: '#1e293b',
+            titleColor: '#f8fafc',
+            bodyColor: '#e2e8f0',
+            borderColor: '#334155',
+            borderWidth: 1,
+            padding: 12,
+            displayColors: true,
+            callbacks: {
+              label: (context: any) => {
+                const value = context.parsed || 0;
+                const percentage = totalOrders > 0 ? ((value / totalOrders) * 100).toFixed(1) : '0';
+                return ` ${context.label}: ${value} orders (${percentage}%)`;
+              },
+              afterBody: () => `\nTotal: ${totalOrders} orders`
+            }
+          },
+        }
+      };
+      this.statusChartTotalOrders = totalOrders;
     } else {
       this.statusChartData = null;
+      this.statusChartOptions = {};
+      this.statusChartTotalOrders = 0;
     }
 
-    this.statusChartOptions = {
-      responsive: true,
-      maintainAspectRatio: false,
-      layout: {
-        padding: {
-          bottom: 10
-        }
-      },
-      plugins: {
-        legend: {
-          position: 'bottom',
-          labels: {
-            padding: 16,
-            usePointStyle: true,
-            pointStyleWidth: 10,
-            boxWidth: 8,
-            boxHeight: 8,
-            font: {
-              size: 12
-            }
-          }
-        },
-        tooltip: {
-          callbacks: {
-            label: (context: any) => {
-              const label = context.label || '';
-              const value = context.parsed || 0;
-              const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-              const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-              return `${label}: ${value} (${percentage}%)`;
-            }
-          }
-        }
-      }
-    };
-
-    // Monthly Chart (Line Chart) - only if we have data
+    // Orders Trend (Line Chart) - last 6 months, monthly count + completed line
     if (data.ordersByMonth && data.ordersByMonth.length > 0) {
       const monthLabels = data.ordersByMonth.map(m => this.formatMonth(m.month));
       const monthValues = data.ordersByMonth.map(m => m.count);
+      const completedValues = data.ordersByMonth.map(m => m.completedCount ?? 0);
 
       this.monthlyChartData = {
         labels: monthLabels,
-        datasets: [{
-          label: 'Orders',
-          data: monthValues,
-          fill: true,
-          borderColor: '#0d47a1',
-          backgroundColor: 'rgba(13, 71, 161, 0.1)',
-          tension: 0.4,
-          pointBackgroundColor: '#0d47a1',
-          pointBorderColor: '#ffffff',
-          pointBorderWidth: 2,
-          pointRadius: 5
-        }]
+        datasets: [
+          {
+            label: 'Total Orders',
+            data: monthValues,
+            fill: true,
+            borderColor: '#0d47a1',
+            backgroundColor: 'rgba(13, 71, 161, 0.1)',
+            tension: 0.4,
+            pointBackgroundColor: '#0d47a1',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 5
+          },
+          {
+            label: 'Completed',
+            data: completedValues,
+            fill: false,
+            borderColor: '#10b981',
+            backgroundColor: 'transparent',
+            tension: 0.4,
+            pointBackgroundColor: '#10b981',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 5
+          }
+        ]
       };
     } else {
       this.monthlyChartData = null;
@@ -491,75 +578,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       maintainAspectRatio: false,
       plugins: {
         legend: {
-          display: false
-        },
-        tooltip: {
-          backgroundColor: '#ffffff',
-          titleColor: '#0f172a',
-          bodyColor: '#64748b',
-          borderColor: '#e2e8f0',
-          borderWidth: 1,
-          padding: 12
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            stepSize: 1
-          },
-          grid: {
-            color: '#e2e8f0'
-          }
-        },
-        x: {
-          grid: {
-            display: false
-          }
-        }
-      }
-    };
-
-    // Revenue by Package Chart (Bar Chart) - only if we have data
-    if (data.revenueByPackage && data.revenueByPackage.length > 0) {
-      const packageLabels = data.revenueByPackage.map(p => p.package);
-      const revenueValues = data.revenueByPackage.map(p => p.revenue);
-
-      this.revenueChartData = {
-        labels: packageLabels,
-        datasets: [{
-          label: 'Revenue',
-          data: revenueValues,
-          backgroundColor: [
-            '#0d47a1',
-            '#1976d2',
-            '#4caf50',
-            '#ff9800',
-            '#f44336',
-            '#2196f3'
-          ],
-          borderColor: [
-            '#0a3d91',
-            '#1565c0',
-            '#45a049',
-            '#f57c00',
-            '#d32f2f',
-            '#dc2626',
-            '#0891b2'
-          ],
-          borderWidth: 2
-        }]
-      };
-    } else {
-      this.revenueChartData = null;
-    }
-
-    this.revenueChartOptions = {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: false
+          position: 'top',
+          labels: { padding: 16, usePointStyle: true }
         },
         tooltip: {
           backgroundColor: '#ffffff',
@@ -569,28 +589,72 @@ export class DashboardComponent implements OnInit, OnDestroy {
           borderWidth: 1,
           padding: 12,
           callbacks: {
-            label: (context: any) => {
-              return `Revenue: $${context.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            }
+            label: (context: any) => `${context.dataset.label}: ${context.parsed.y} orders`
           }
         }
       },
       scales: {
         y: {
           beginAtZero: true,
-          ticks: {
-            callback: (value: any) => {
-              return '$' + value.toLocaleString('en-US');
-            }
-          },
-          grid: {
-            color: '#e2e8f0'
-          }
+          ticks: { stepSize: 1 },
+          grid: { color: '#e2e8f0' }
         },
         x: {
-          grid: {
-            display: false
+          grid: { display: false }
+        }
+      }
+    };
+
+    // Revenue by Package Chart (Horizontal Bar) - Basic, Standard, Premium, Custom
+    if (data.revenueByPackage && data.revenueByPackage.length > 0) {
+      const packageLabels = data.revenueByPackage.map(p => p.package);
+      const revenueValues = data.revenueByPackage.map(p => p.revenue);
+
+      this.revenueChartData = {
+        labels: packageLabels,
+        datasets: [{
+          label: 'Revenue',
+          data: revenueValues,
+          backgroundColor: ['#0d47a1', '#1976d2', '#4caf50', '#ff9800'],
+          borderColor: ['#0a3d91', '#1565c0', '#45a049', '#f57c00'],
+          borderWidth: 2
+        }]
+      };
+    } else {
+      this.revenueChartData = null;
+    }
+
+    this.revenueChartOptions = {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#ffffff',
+          titleColor: '#0f172a',
+          bodyColor: '#64748b',
+          borderColor: '#e2e8f0',
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: (context: any) => {
+              const val = context.parsed.x ?? context.parsed.y ?? 0;
+              return `Revenue: $${Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
           }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: {
+            callback: (value: any) => '$' + Number(value).toLocaleString('en-US')
+          },
+          grid: { color: '#e2e8f0' }
+        },
+        y: {
+          grid: { display: false }
         }
       }
     };
@@ -648,7 +712,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     };
   }
 
-  private formatStatus(status: string): string {
+  formatStatus(status: string): string {
+    if (status === 'ClientApproved') return 'Approved';
     return status.replace(/([A-Z])/g, ' $1').trim();
   }
 
@@ -661,10 +726,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private getStatusColors(statuses: string[]): string[] {
     const colorMap: { [key: string]: string } = {
       'Pending': '#f59e0b',
+      'WaitingForAdminApproval': '#f97316',
+      'PriceApprovalPending': '#eab308',
       'InProgress': '#0d47a1',
-      'Review': '#8b5cf6',
+      'PreviewDelivered': '#8b5cf6',
+      'RevisionRequested': '#6366f1',
+      'ClientApproved': '#14b8a6',
       'Completed': '#10b981',
-      'Cancelled': '#ef4444'
+      'Cancelled': '#ef4444',
+      'CancelledByUser': '#dc2626',
+      'CancelledByAdmin': '#b91c1c',
+      'Paid': '#059669',
+      'Processing': '#06b6d4',
+      'Refunded': '#6b7280',
+      'Failed': '#991b1b',
+      'Archived': '#9ca3af',
+      'Review': '#8b5cf6'
     };
     return statuses.map(s => colorMap[s] || '#64748b');
   }
@@ -674,10 +751,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
       'Pending': 'warning',
       'InProgress': 'info',
       'Review': 'secondary',
+      'PreviewDelivered': 'info',
+      'RevisionRequested': 'warning',
+      'ClientApproved': 'success',
       'Completed': 'success',
-      'Cancelled': 'danger'
+      'Cancelled': 'danger',
+      'CancelledByUser': 'danger',
+      'CancelledByAdmin': 'danger'
     };
     return severityMap[status] || 'secondary';
+  }
+
+  /** Count of orders in "other" statuses (not Pending, In Progress, or Completed) */
+  getOtherOrdersCount(): number {
+    const s = this.dashboardData.stats;
+    const other = (s.totalOrders || 0) - (s.pendingOrders || 0) - (s.activeOrders || 0) - (s.completedOrders || 0);
+    return Math.max(0, other);
   }
 
   formatDate(date: Date | string | undefined): string {
@@ -735,6 +824,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onOrderUpdated(): void {
     // Refresh dashboard data when order is updated
     this.loadDashboardData();
+  }
+
+  canGenerateInvoice(order: Order): boolean {
+    const isAdmin = this.user?.role === 'SuperAdmin' || this.user?.role === 'Admin';
+    return !!isAdmin
+      && (order.status === OrderStatus.Completed || order.status === OrderStatus.ClientApproved)
+      && !order.hasInvoice;
+  }
+
+  generateInvoice(order: Order): void {
+    this.apiService.post('invoices', { orderId: order.id })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoice generated successfully' });
+          this.loadDashboardData();
+        },
+        error: (error) => {
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to generate invoice' });
+        }
+      });
   }
 
   // Order Create Modal
@@ -795,7 +905,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   canRequestRevision(order: Order): boolean {
-    return order.status === OrderStatus.PreviewDelivered;
+    return order.status === OrderStatus.PreviewDelivered && !order.revisionLimitExceeded;
   }
 
   approveOrder(order: Order): void {
@@ -822,7 +932,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         });
     } else if (order.status === OrderStatus.PreviewDelivered) {
       // Approve final design
-      this.apiService.put(`orders/${order.id}/status`, { status: OrderStatus.FinalApproved })
+      this.apiService.put(`orders/${order.id}/status`, { status: OrderStatus.ClientApproved })
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: () => {
@@ -864,9 +974,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   downloadGalleryFile(item: any): void {
-    // Use the API service to get the download URL
-    const url = `gallery/${item.id}/download`;
-    window.open(url, '_blank');
+    const fileId = item.fileId || item.id;
+    const fileName = item.originalFileName || item.fileName || `file-${fileId}`;
+    this.apiService.getBlob(`files/${fileId}/download`).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
+        this.messageService.add({ severity: 'success', summary: 'Download', detail: 'File downloaded successfully' });
+      },
+      error: (err) => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to download file' });
+      }
+    });
   }
 
   getUnpaidInvoices(): any[] {
@@ -1108,7 +1231,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
     });
 
-    // Orders awaiting price approval
+    // Orders awaiting client price approval
     orders.filter(o => o.status === OrderStatus.PriceApprovalPending).forEach(order => {
       items.push({
         type: 'price',
@@ -1121,6 +1244,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
         data: order
       });
     });
+
+    // Designer price approval needed (Admin/SuperAdmin only) - orders with designer proposed price pending
+    const isAdmin = this.user?.role === 'SuperAdmin' || this.user?.role === 'Admin';
+    if (isAdmin) {
+      orders.filter(o =>
+        o.requiresPriceApproval &&
+        (o.priceApprovalStatus === 'PendingApproval' || o.priceApprovalStatus === 'Modified')
+      ).forEach(order => {
+        items.push({
+          type: 'designerPrice',
+          icon: 'pi pi-money-bill',
+          severity: 'warning',
+          title: `Designer price approval for "${order.title}"`,
+          subtitle: `Designer proposed PKR ${(order as any).proposedPrice || 0} — Approve to add to designer invoice`,
+          actionLabel: 'Approve Price',
+          actionIcon: 'pi pi-check',
+          data: order
+        });
+      });
+    }
 
     // Orders with revision requests pending
     orders.filter(o => o.status === OrderStatus.RevisionRequested).forEach(order => {
@@ -1176,6 +1319,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       case 'approval':
       case 'revision':
       case 'price':
+      case 'designerPrice':
         this.navigateToOrder(item.data.id);
         break;
       case 'invoice':
@@ -1337,15 +1481,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // ── Quick Reorder (form prefill) ───────────────────────────────────
 
   quickReorder(order: Order): void {
-    // Set prefill data and open the create order modal
+    const dc = (order as any).designCategory;
+    const dt = (order as any).designType;
+    let logoCategory: string | null = null;
+    let placement: number | null = null;
+    if (dc === 'EmbroideryDigitizing') logoCategory = dt === 'LeftChest' || dt === 'JacketBack' ? 'embroidery' : 'digitizing';
+    else if (dc === 'VectorScreenPrinting') logoCategory = 'vector';
+    else if (dc === 'CustomPatch') logoCategory = 'customPatch';
+    if (dt === 'LeftChest') placement = 1;
+    else if (dt === 'JacketBack') placement = 2;
+
     this.reorderData = {
       title: order.title + ' (Reorder)',
       description: order.description,
       price: order.price,
       priority: (order as any).priority || 2,
-      instructions: (order as any).instructions || '',
+      logoCategory: logoCategory || undefined,
+      placement: placement ?? undefined,
       requiredFormats: (order as any).requiredFormats || '',
-      requirements: (order as any).requirements || '',
       colorPreferences: (order as any).colorPreferences || '',
       stylePreferences: (order as any).stylePreferences || ''
     };

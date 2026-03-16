@@ -1,0 +1,146 @@
+<div class="client-intelligence-dashboard">
+  <!-- Row 1: Client KPI Cards -->
+  <div class="dashboard-row">
+    <div class="kpi-cards" *ngIf="overview">
+      <div class="kpi-card">
+        <div class="kpi-icon"><i class="pi pi-users"></i></div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ overview.totalClients | number }}</span>
+          <span class="kpi-label">Total Clients</span>
+        </div>
+      </div>
+      <div class="kpi-card kpi-active">
+        <div class="kpi-icon"><i class="pi pi-check-circle"></i></div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ overview.activeClients | number }}</span>
+          <span class="kpi-label">Active Clients</span>
+        </div>
+      </div>
+      <div class="kpi-card kpi-inactive">
+        <div class="kpi-icon"><i class="pi pi-exclamation-triangle"></i></div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ overview.inactiveClients | number }}</span>
+          <span class="kpi-label">Inactive Clients</span>
+        </div>
+      </div>
+      <div class="kpi-card kpi-revenue">
+        <div class="kpi-icon"><i class="pi pi-star"></i></div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ formatCurrency(overview.topClientRevenue) }}</span>
+          <span class="kpi-label">Top Client Revenue</span>
+        </div>
+      </div>
+    </div>
+    <div *ngIf="loading" class="kpi-skeleton">
+      <div class="skeleton-card" *ngFor="let i of [1,2,3,4]"></div>
+    </div>
+  </div>
+
+  <div *ngIf="apiError" class="api-error-banner">
+    <i class="pi pi-exclamation-triangle"></i>
+    <div>
+      <strong>Client Analytics API unavailable.</strong> Ensure the backend is running.
+      <a (click)="loadData()" class="retry-link">Retry</a>
+    </div>
+  </div>
+
+  <div *ngIf="!loading && !apiError" class="dashboard-charts">
+    <!-- Row 2: Top Clients Leaderboard -->
+    <div class="dashboard-row full-width">
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-trophy"></i> Top Clients Leaderboard</h3>
+          </div>
+        </ng-template>
+        <app-top-clients-chart [items]="topClients"></app-top-clients-chart>
+      </p-card>
+    </div>
+
+    <!-- Row 3: Client Revenue Trend -->
+    <div class="dashboard-row full-width">
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-chart-line"></i> Client Revenue Trend</h3>
+          </div>
+        </ng-template>
+        <app-client-revenue-trend-chart [items]="revenueTrendItems"></app-client-revenue-trend-chart>
+      </p-card>
+    </div>
+
+    <!-- Row 4: Client Monthly Revenue | Client Growth | Client Lifetime Value -->
+    <div class="dashboard-row three-col">
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-calendar"></i> Client Monthly Revenue</h3>
+            <p-dropdown
+              [options]="clientsDropdown"
+              [(ngModel)]="selectedClientId"
+              optionLabel="clientName"
+              optionValue="clientId"
+              placeholder="Select client"
+              (onChange)="onClientSelected()"
+              [disabled]="monthlyRevenueLoading"
+              styleClass="client-dropdown">
+            </p-dropdown>
+          </div>
+        </ng-template>
+        <app-client-monthly-revenue-chart [items]="monthlyRevenueItems" [loading]="monthlyRevenueLoading"></app-client-monthly-revenue-chart>
+      </p-card>
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-chart-bar"></i> Client Growth</h3>
+          </div>
+        </ng-template>
+        <app-client-growth-chart [items]="growthItems"></app-client-growth-chart>
+      </p-card>
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-wallet"></i> Client Lifetime Value</h3>
+          </div>
+        </ng-template>
+        <app-client-lifetime-value-chart [items]="lifetimeValueItems"></app-client-lifetime-value-chart>
+      </p-card>
+    </div>
+
+    <!-- Row 5: Inactive Clients Table -->
+    <div class="dashboard-row full-width">
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-user-minus"></i> Inactive Clients</h3>
+          </div>
+        </ng-template>
+        <app-inactive-clients-table [items]="inactiveClients"></app-inactive-clients-table>
+      </p-card>
+    </div>
+
+    <!-- Row 6: Client Activity Table -->
+    <div class="dashboard-row full-width">
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-list"></i> Client Activity Status</h3>
+          </div>
+        </ng-template>
+        <app-client-activity-table [items]="activityItems"></app-client-activity-table>
+      </p-card>
+    </div>
+
+    <!-- Row 7: Client Alerts Feed -->
+    <div class="dashboard-row full-width">
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-bell"></i> Client Alerts</h3>
+          </div>
+        </ng-template>
+        <app-client-alerts-panel [items]="alerts"></app-client-alerts-panel>
+      </p-card>
+    </div>
+  </div>
+</div>

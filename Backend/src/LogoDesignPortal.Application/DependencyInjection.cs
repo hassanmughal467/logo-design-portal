@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<IInvoiceService, InvoiceService>();
         services.AddScoped<IInvoicePdfService, InvoicePdfService>();
+        services.AddScoped<IBillingService, BillingService>();
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<IReviewService, ReviewService>();
         services.AddScoped<ISettingsService, SettingsService>();
@@ -29,6 +30,14 @@ public static class DependencyInjection
         services.AddScoped<IGalleryService, GalleryService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<IAnalyticsService, AnalyticsService>();
+        services.AddScoped<IFinancialAnalyticsService, FinancialAnalyticsService>();
+        services.AddScoped<IClientAnalyticsService, ClientAnalyticsService>();
+        services.AddScoped<IClientChurnAnalyticsService, ClientChurnAnalyticsService>();
+        services.AddScoped<IClientFinancialInsightsService, ClientFinancialInsightsService>();
+        services.AddScoped<IDesignerPayoutService, DesignerPayoutService>();
+        services.AddScoped<IClientLogoPricingService, ClientLogoPricingService>();
+        services.AddScoped<IDesignerLogoPricingService, DesignerLogoPricingService>();
         
         // Add HttpClient for PaymentService
         services.AddHttpClient();

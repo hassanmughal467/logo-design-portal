@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 import { OrderDetailComponent } from './order-detail.component';
+import { OrderProgressTimelineComponent } from '../order-progress-timeline/order-progress-timeline.component';
 import { OrderEditModule } from '../order-edit/order-edit.module';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
@@ -11,11 +12,13 @@ import { TableModule } from 'primeng/table';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextareaModule } from 'primeng/inputtextarea';
 import { InputNumberModule } from 'primeng/inputnumber';
+import { SelectButtonModule } from 'primeng/selectbutton';
 import { DropdownModule } from 'primeng/dropdown';
 import { CheckboxModule } from 'primeng/checkbox';
 import { FileUploadModule } from 'primeng/fileupload';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
+import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { ConfirmationService } from 'primeng/api';
 
 const routes: Routes = [
@@ -26,7 +29,7 @@ const routes: Routes = [
 ];
 
 @NgModule({
-  declarations: [OrderDetailComponent],
+  declarations: [OrderDetailComponent, OrderProgressTimelineComponent],
   imports: [
     CommonModule,
     FormsModule,
@@ -38,11 +41,13 @@ const routes: Routes = [
     DialogModule,
     InputTextareaModule,
     InputNumberModule,
+    SelectButtonModule,
     DropdownModule,
     CheckboxModule,
     FileUploadModule,
     ConfirmDialogModule,
     TooltipModule,
+    ProgressSpinnerModule,
     OrderEditModule
   ],
   providers: [ConfirmationService],

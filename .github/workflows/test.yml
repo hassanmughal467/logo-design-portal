@@ -1,0 +1,48 @@
+name: Test Suite
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Backend/LogoDesignPortal.sln
+
+      - name: Build
+        run: dotnet build Backend/LogoDesignPortal.sln --no-restore --configuration Release
+
+      - name: Run Unit Tests
+        run: dotnet test Backend/src/LogoDesignPortal.Application.Tests/LogoDesignPortal.Application.Tests.csproj --no-build --configuration Release --verbosity normal
+
+  integration-tests:
+    name: API Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Backend/LogoDesignPortal.sln
+
+      - name: Build
+        run: dotnet build Backend/LogoDesignPortal.sln --no-restore --configuration Release
+
+      - name: Run Integration Tests
+        run: dotnet test Backend/src/LogoDesignPortal.API.IntegrationTests/LogoDesignPortal.API.IntegrationTests.csproj --no-build --configuration Release --verbosity normal

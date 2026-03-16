@@ -178,18 +178,14 @@ export class PermissionListComponent implements OnInit, OnDestroy {
   }
 
   toggleMatrixView(): void {
-    console.log('Toggle matrix view clicked. Current state:', this.displayMatrix);
     this.displayMatrix = !this.displayMatrix;
-    console.log('New state:', this.displayMatrix);
     
     if (this.displayMatrix) {
       // If permissions are loaded but role permissions aren't, load them
       if (this.permissions.length > 0 && this.rolePermissions.size === 0) {
-        console.log('Loading role permissions...');
         this.loadRolePermissions();
       } else if (this.permissions.length === 0) {
         // If permissions aren't loaded yet, load them first
-        console.log('Permissions not loaded yet, loading permissions first...');
         this.loadPermissions();
       }
     }

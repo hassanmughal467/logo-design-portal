@@ -1,0 +1,101 @@
+<div class="invoice-detail-page">
+  <div *ngIf="loading" class="loading-state">
+    <p-progressSpinner strokeWidth="4" [style]="{ width: '40px', height: '40px' }"></p-progressSpinner>
+    <span>Loading invoice...</span>
+  </div>
+
+  <div *ngIf="!loading && invoice" class="invoice-content">
+    <app-page-header [title]="'Invoice ' + invoice.invoiceNumber" [subtitle]="invoice.designerName">
+      <span [class]="'status-badge ' + getStatusBadgeClass()" badge>{{ invoice.status }}</span>
+      <div actions>
+        <p-button icon="pi pi-arrow-left" label="Back to Designer Payout" styleClass="p-button-text" (onClick)="goBack()"></p-button>
+      </div>
+    </app-page-header>
+
+    <!-- InvoiceSummaryCard -->
+    <app-card-container>
+      <div class="invoice-summary-card">
+        <div class="invoice-meta">
+          <p><strong>Invoice Period:</strong> {{ invoice.billingPeriod }}</p>
+          <p *ngIf="invoice.paidDate"><strong>Paid Date:</strong> {{ invoice.paidDate | date:'mediumDate' }}</p>
+        </div>
+      </div>
+    </app-card-container>
+
+    <!-- OrdersTableCard -->
+    <app-card-container [title]="'Orders Included'" [icon]="'pi pi-list'">
+      <app-data-table-wrapper>
+        <p-table [value]="invoice.items" styleClass="p-datatable-sm p-datatable-striped">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Order #</th>
+              <th>Category</th>
+              <th>Type</th>
+              <th style="text-align: right">Approved Price</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-item>
+            <tr>
+              <td>
+                <a [routerLink]="['/orders', item.orderId]">{{ item.orderTitle }}</a>
+              </td>
+              <td>{{ item.designCategory || '—' }}</td>
+              <td>{{ item.designType || '—' }}</td>
+              <td style="text-align: right">{{ formatPayout(item.amount) }}</td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr>
+              <td colspan="4">No orders in this invoice.</td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </app-data-table-wrapper>
+    </app-card-container>
+
+    <!-- Adjustments (if any) -->
+    <app-card-container *ngIf="invoice.adjustments?.length" [title]="'Adjustments'" [icon]="'pi pi-calculator'">
+      <div *ngIf="bonusAdjustments.length" class="adjustment-group">
+        <h5>Bonus</h5>
+        <ul>
+          <li *ngFor="let adj of bonusAdjustments">{{ adj.description }}: {{ formatPayout(adj.amount) }}</li>
+        </ul>
+      </div>
+      <div *ngIf="deductionAdjustments.length" class="adjustment-group">
+        <h5>Deduction</h5>
+        <ul>
+          <li *ngFor="let adj of deductionAdjustments">{{ adj.description }}: {{ formatPayout(adj.amount) }}</li>
+        </ul>
+      </div>
+    </app-card-container>
+
+    <!-- TotalsCard -->
+    <app-card-container [title]="'Totals'" [icon]="'pi pi-dollar'">
+      <div class="totals-section">
+        <div class="total-row">
+          <span>Orders Total</span>
+          <span>{{ formatPayout(ordersTotal) }}</span>
+        </div>
+        <div *ngIf="adjustmentsTotal !== 0" class="total-row">
+          <span>Adjustments</span>
+          <span>{{ formatPayout(adjustmentsTotal) }}</span>
+        </div>
+        <div class="total-row final">
+          <span>Final Amount</span>
+          <span>{{ formatPayout(invoice.totalAmount) }}</span>
+        </div>
+      </div>
+
+      <!-- ActionButtons -->
+      <div *ngIf="invoice.status !== 'Paid' && isAdmin" class="actions-section">
+        <p-button
+          label="Mark As Paid"
+          icon="pi pi-check"
+          severity="success"
+          (onClick)="markAsPaid()"
+          pTooltip="Mark this invoice as paid"
+        ></p-button>
+      </div>
+    </app-card-container>
+  </div>
+</div>

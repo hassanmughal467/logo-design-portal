@@ -1,10 +1,9 @@
 /**
  * Terminal order statuses that make an order read-only.
- * When an order reaches any of these statuses, no modifications are allowed.
+ * ClientApproved is NOT locked - Admin can still change to Completed.
  */
 const TERMINAL_ORDER_STATUSES = [
   'Completed',
-  'FinalApproved',
   'Cancelled',
   'CancelledByUser',
   'CancelledByAdmin',

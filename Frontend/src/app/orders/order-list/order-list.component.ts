@@ -71,7 +71,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
         'Preview Delivered': 'Preview Delivered',
         'RevisionRequested': 'Revision Requested',
         'Revision Requested': 'Revision Requested',
-        'FinalApproved': 'Approved',
+        'ClientApproved': 'Approved',
         'Final Approved': 'Approved',
         'Completed': 'Completed',
         'Cancelled': 'Cancelled',
@@ -95,7 +95,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
     const priority: { [key: string]: number } = {
       'WaitingForAdminApproval': 1, 'PriceApprovalPending': 2, 'InProgress': 3,
-      'PreviewDelivered': 4, 'RevisionRequested': 5, 'FinalApproved': 6,
+      'PreviewDelivered': 4, 'RevisionRequested': 5, 'ClientApproved': 6,
       'Completed': 7, 'Pending': 8, 'Paid': 9, 'Processing': 10,
       'Cancelled': 11, 'CancelledByUser': 12, 'CancelledByAdmin': 13,
       'Refunded': 14, 'Failed': 15, 'Archived': 16
@@ -184,7 +184,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   get pageTitle(): string {
     if (this.isClient) return 'My Orders';
-    if (this.isDesigner) return 'Assigned Orders';
+    if (this.isDesigner) return 'Orders';
     return 'Orders Management';
   }
 
@@ -211,12 +211,17 @@ export class OrderListComponent implements OnInit, OnDestroy {
       endpoint = 'orders/my-orders';
     } else if (user.role === 'Designer') {
       endpoint = 'orders/assigned-orders';
+    } else {
+      endpoint = 'orders?page=1&pageSize=500';
     }
 
-    this.apiService.get<any[]>(endpoint)
+    this.apiService.get<any>(endpoint)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (orders) => {
+        next: (response) => {
+          const orders = endpoint.includes('?')
+            ? ApiService.extractItems<any>(response)
+            : (Array.isArray(response) ? response : []);
           if (!orders || !Array.isArray(orders)) {
             this.orders = [];
             this.filteredOrders = [];
@@ -231,7 +236,6 @@ export class OrderListComponent implements OnInit, OnDestroy {
           this.loading = false;
         },
         error: (error) => {
-          console.error('Error loading orders:', error);
           let errorMessage = 'Failed to load orders';
           if (error.status === 403) {
             errorMessage = 'You do not have permission to view orders';
@@ -256,16 +260,16 @@ export class OrderListComponent implements OnInit, OnDestroy {
     if (this.isClient) {
       this.summaryCards = [
         { label: 'Total Orders', value: this.orders.length, icon: 'pi pi-list', color: 'primary', filterStatus: null },
-        { label: 'Active Orders', value: counts.active, icon: 'pi pi-spin pi-spinner', color: 'info', filterStatus: OrderStatus.InProgress },
+        { label: 'Active Orders', value: counts.active, icon: 'pi pi-shopping-cart', color: 'info', filterStatus: OrderStatus.InProgress },
         { label: 'Awaiting Approval', value: counts.awaitingApproval, icon: 'pi pi-clock', color: 'warning', filterStatus: OrderStatus.PreviewDelivered },
         { label: 'Completed', value: counts.completed, icon: 'pi pi-check-circle', color: 'success', filterStatus: OrderStatus.Completed }
       ];
     } else if (this.isDesigner) {
       this.summaryCards = [
-        { label: 'Assigned Orders', value: this.orders.length, icon: 'pi pi-briefcase', color: 'primary', filterStatus: null },
+        { label: 'Total Orders', value: this.orders.length, icon: 'pi pi-briefcase', color: 'primary', filterStatus: null },
+        { label: 'In Progress', value: counts.inProgress, icon: 'pi pi-briefcase', color: 'info', filterStatus: OrderStatus.InProgress },
         { label: 'Due Today', value: counts.dueToday, icon: 'pi pi-calendar', color: 'warning', filterStatus: null },
-        { label: 'Overdue', value: counts.overdue, icon: 'pi pi-exclamation-triangle', color: 'danger', filterStatus: null },
-        { label: 'In Progress', value: counts.inProgress, icon: 'pi pi-spin pi-spinner', color: 'info', filterStatus: OrderStatus.InProgress }
+        { label: 'Completed', value: counts.completed, icon: 'pi pi-check-circle', color: 'success', filterStatus: OrderStatus.Completed }
       ];
     } else {
       // Admin / SuperAdmin
@@ -291,7 +295,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
         o.status === OrderStatus.PreviewDelivered || o.status === OrderStatus.PriceApprovalPending
       ).length,
       completed: this.orders.filter(o =>
-        o.status === OrderStatus.Completed || o.status === OrderStatus.FinalApproved
+        o.status === OrderStatus.Completed || o.status === OrderStatus.ClientApproved
       ).length,
       inProgress: this.orders.filter(o => o.status === OrderStatus.InProgress).length,
       dueToday: this.orders.filter(o => {
@@ -307,9 +311,9 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   isTerminalStatus(status: OrderStatus): boolean {
-    return [OrderStatus.Completed, OrderStatus.FinalApproved, OrderStatus.Cancelled,
+    return [OrderStatus.Completed, OrderStatus.Cancelled,
       OrderStatus.CancelledByUser, OrderStatus.CancelledByAdmin, OrderStatus.Refunded,
-      OrderStatus.Failed, OrderStatus.Archived].includes(status);
+      ].includes(status);
   }
 
   onSummaryCardClick(card: SummaryCard): void {
@@ -330,7 +334,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
       { status: OrderStatus.InProgress, label: 'In Progress', icon: 'pi pi-spin pi-spinner', roles: ['Client', 'Designer', 'Admin', 'SuperAdmin'] },
       { status: OrderStatus.PreviewDelivered, label: 'Preview Ready', icon: 'pi pi-eye', roles: ['Client', 'Admin', 'SuperAdmin'] },
       { status: OrderStatus.RevisionRequested, label: 'Revisions', icon: 'pi pi-refresh', roles: ['Designer', 'Admin', 'SuperAdmin'] },
-      { status: OrderStatus.FinalApproved, label: 'Approved', icon: 'pi pi-check', roles: ['Client', 'Designer', 'Admin', 'SuperAdmin'] },
+      { status: OrderStatus.ClientApproved, label: 'Approved', icon: 'pi pi-check', roles: ['Client', 'Admin', 'SuperAdmin'] },
       { status: OrderStatus.Completed, label: 'Completed', icon: 'pi pi-check-circle', roles: ['Client', 'Designer', 'Admin', 'SuperAdmin'] },
       { status: OrderStatus.Cancelled, label: 'Cancelled', icon: 'pi pi-times', roles: ['Client', 'Admin', 'SuperAdmin'] }
     ];
@@ -423,8 +427,12 @@ export class OrderListComponent implements OnInit, OnDestroy {
         ) : OrderPriority.Medium,
       price: backendOrder.price || backendOrder.Price || 0,
       proposedPrice: backendOrder.proposedPrice || backendOrder.ProposedPrice,
+      approvedPrice: backendOrder.approvedPrice || backendOrder.ApprovedPrice,
+      priceApprovalStatus: backendOrder.priceApprovalStatus || backendOrder.PriceApprovalStatus,
       requiresPriceApproval: backendOrder.requiresPriceApproval || backendOrder.RequiresPriceApproval || false,
       priceApproved: backendOrder.priceApproved || backendOrder.PriceApproved || false,
+      designCategory: backendOrder.designCategory || backendOrder.DesignCategory,
+      designType: backendOrder.designType || backendOrder.DesignType,
       instructions: backendOrder.instructions || backendOrder.Instructions,
       requiredFormats: backendOrder.requiredFormats || backendOrder.RequiredFormats,
       requirements: backendOrder.requirements || backendOrder.Requirements,
@@ -432,7 +440,9 @@ export class OrderListComponent implements OnInit, OnDestroy {
       stylePreferences: backendOrder.stylePreferences || backendOrder.StylePreferences,
       fileCount: backendOrder.fileCount || backendOrder.FileCount || 0,
       visibleFileCount: backendOrder.visibleFileCount || backendOrder.VisibleFileCount || 0,
-      revisionCount: backendOrder.revisionCount || backendOrder.RevisionCount || 0,
+      revisionCount: backendOrder.revisionCount ?? backendOrder.RevisionCount ?? 0,
+      revisionLimit: backendOrder.revisionLimit ?? backendOrder.RevisionLimit,
+      revisionLimitExceeded: backendOrder.revisionLimitExceeded ?? backendOrder.RevisionLimitExceeded ?? false,
       commentCount: backendOrder.commentCount || backendOrder.CommentCount || 0,
       createdAt: backendOrder.createdAt ? new Date(backendOrder.createdAt) : (backendOrder.CreatedAt ? new Date(backendOrder.CreatedAt) : new Date()),
       updatedAt: backendOrder.updatedAt ? new Date(backendOrder.updatedAt) : (backendOrder.UpdatedAt ? new Date(backendOrder.UpdatedAt) : undefined),
@@ -465,7 +475,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
       case 'InProgress': case 'In Progress': case '3': return OrderStatus.InProgress;
       case 'PreviewDelivered': case '4': return OrderStatus.PreviewDelivered;
       case 'RevisionRequested': case '5': return OrderStatus.RevisionRequested;
-      case 'FinalApproved': case '6': return OrderStatus.FinalApproved;
+      case 'FinalApproved': case 'ClientApproved': case '6': return OrderStatus.ClientApproved;
       case 'Completed': case '7': return OrderStatus.Completed;
       case 'Cancelled': case '8': return OrderStatus.Cancelled;
       default: return OrderStatus.WaitingForAdminApproval;
@@ -480,7 +490,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
       'InProgress': 'info',
       'PreviewDelivered': 'success',
       'RevisionRequested': 'warning',
-      'FinalApproved': 'success',
+      'ClientApproved': 'success',
       'Completed': 'success',
       'Cancelled': 'danger',
       'CancelledByUser': 'danger',
@@ -599,7 +609,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   canGenerateInvoice(order: Order): boolean {
     return (this.isAdmin || this.isSuperAdmin) 
-      && order.status === OrderStatus.Completed 
+      && (order.status === OrderStatus.Completed || order.status === OrderStatus.ClientApproved)
       && !order.hasInvoice;
   }
 
@@ -609,12 +619,15 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   canRequestRevision(order: Order): boolean {
-    return this.isClient && order.status === OrderStatus.PreviewDelivered;
+    return this.isClient
+      && order.status === OrderStatus.PreviewDelivered
+      && !order.revisionLimitExceeded;
   }
 
   // Designer-specific actions
   canSubmitPreview(order: Order): boolean {
-    return this.isDesigner && (order.status === OrderStatus.InProgress || order.status === OrderStatus.RevisionRequested);
+    // Designers cannot change status - only Admin can set PreviewDelivered via SendFilesToClient
+    return false;
   }
 
   // ═══ ACTION DIALOGS ═══
@@ -626,10 +639,11 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   loadDesigners(): void {
-    this.apiService.get<any[]>('users')
+    this.apiService.get<any>('users?page=1&pageSize=500')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (users) => {
+        next: (response) => {
+          const users = ApiService.extractItems<any>(response);
           this.availableDesigners = users
             .filter(u => u.role === 'Designer' || u.roleName === 'Designer')
             .map(u => {
@@ -672,31 +686,33 @@ export class OrderListComponent implements OnInit, OnDestroy {
     const user = this.authService.getCurrentUser();
     if (!user) return [];
 
-    const currentStatus = order.status;
+    const currentStatus = order.status as OrderStatus;
     const isOrderOwner = user.role === 'Client' && order.clientId && user.id === order.clientId;
     const allowedStatuses: OrderStatus[] = [];
 
     switch (user.role) {
       case 'Client':
         if (currentStatus === OrderStatus.PreviewDelivered) {
-          allowedStatuses.push(OrderStatus.RevisionRequested, OrderStatus.FinalApproved);
+          allowedStatuses.push(OrderStatus.RevisionRequested, OrderStatus.ClientApproved);
         }
         if (isOrderOwner && (
           currentStatus === OrderStatus.WaitingForAdminApproval ||
-          currentStatus === OrderStatus.PriceApprovalPending ||
-          currentStatus === OrderStatus.Pending
+          currentStatus === OrderStatus.PriceApprovalPending
         )) {
           allowedStatuses.push(OrderStatus.Cancelled);
         }
         break;
       case 'Designer':
-        if (currentStatus === OrderStatus.InProgress || currentStatus === OrderStatus.RevisionRequested) {
-          allowedStatuses.push(OrderStatus.PreviewDelivered);
-        }
+        // Designers cannot change order status - upload preview files only
         break;
       case 'Admin':
       case 'SuperAdmin':
-        allowedStatuses.push(...Object.values(OrderStatus));
+        // Revision workflow: from RevisionRequested, Admin can only set PreviewDelivered or CancelledByAdmin (not InProgress)
+        if (currentStatus === OrderStatus.RevisionRequested) {
+          allowedStatuses.push(OrderStatus.PreviewDelivered, OrderStatus.CancelledByAdmin);
+        } else {
+          allowedStatuses.push(OrderStatus.InProgress, OrderStatus.PreviewDelivered, OrderStatus.Completed, OrderStatus.CancelledByAdmin);
+        }
         break;
     }
 
@@ -726,7 +742,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   // Quick status update for client actions
   quickApprove(order: Order): void {
-    this.apiService.put(`orders/${order.id}/status`, { status: OrderStatus.FinalApproved })
+    this.apiService.put(`orders/${order.id}/status`, { status: OrderStatus.ClientApproved })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
@@ -783,13 +799,14 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
     const vectorExtensions = ['.svg', '.pdf', '.ai', '.eps', '.psd'];
+    const embroiderExtensions = ['.pes', '.dst', '.jef', '.exp', '.vp3', '.xxx', '.hus', '.art', '.vip', '.vip3', '.shv', '.pec', '.jpm', '.sew', '.emb', '.csd', '.pcs', '.phb', '.phc', '.stx', '.s10', '.dsb', '.zsk'];
     const imageMaxBytes = 10 * 1024 * 1024;  // 10MB
     const vectorMaxBytes = 25 * 1024 * 1024;  // 25MB
 
     const getMaxSize = (fileName: string): number => {
       const ext = '.' + (fileName.split('.').pop() || '').toLowerCase();
       if (imageExtensions.includes(ext)) return imageMaxBytes;
-      if (vectorExtensions.includes(ext)) return vectorMaxBytes;
+      if (vectorExtensions.includes(ext) || embroiderExtensions.includes(ext)) return vectorMaxBytes;
       return imageMaxBytes;
     };
 
@@ -857,6 +874,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
             this.selectedFiles = [];
             this.uploadingFiles = false;
             this.uploadSuccess = true;
+            this.closeUploadDialog();
           },
           error: (error) => {
             this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to upload file' });
@@ -878,6 +896,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
             this.selectedFiles = [];
             this.uploadingFiles = false;
             this.uploadSuccess = true;
+            this.closeUploadDialog();
           },
           error: (error) => {
             this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to upload files' });

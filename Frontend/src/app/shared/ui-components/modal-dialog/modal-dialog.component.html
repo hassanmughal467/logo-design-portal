@@ -1,0 +1,12 @@
+<p-dialog
+  [(visible)]="visible"
+  [header]="header"
+  [modal]="true"
+  [style]="{ width: width, maxWidth: maxWidth }"
+  [closable]="true"
+  [draggable]="false"
+  [resizable]="false"
+  styleClass="app-modal-dialog"
+  (onHide)="visibleChange.emit(false)">
+  <ng-content></ng-content>
+</p-dialog>

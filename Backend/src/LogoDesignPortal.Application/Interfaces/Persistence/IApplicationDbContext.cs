@@ -23,12 +23,18 @@ public interface IApplicationDbContext
     DbSet<ClientGallery> ClientGalleries { get; }
     DbSet<Invoice> Invoices { get; }
     DbSet<InvoiceOrder> InvoiceOrders { get; }
+    DbSet<DesignerInvoice> DesignerInvoices { get; }
+    DbSet<DesignerInvoiceItem> DesignerInvoiceItems { get; }
+    DbSet<DesignerInvoiceAdjustment> DesignerInvoiceAdjustments { get; }
     DbSet<InvoiceLog> InvoiceLogs { get; }
     DbSet<Payment> Payments { get; }
     DbSet<Message> Messages { get; }
     DbSet<Review> Reviews { get; }
     DbSet<Settings> Settings { get; }
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<DesignPricing> DesignPricings { get; }
+    DbSet<ClientLogoPricing> ClientLogoPricings { get; }
+    DbSet<DesignerLogoPricing> DesignerLogoPricings { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
 

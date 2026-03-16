@@ -1,0 +1,22 @@
+<div class="chart-card">
+  <h3 class="chart-title"><i class="pi pi-chart-bar"></i> Orders vs Revenue</h3>
+  <div *ngIf="loading" class="chart-skeleton"></div>
+  <div *ngIf="!loading && chartOptions" class="chart-container">
+    <apx-chart
+      [series]="chartOptions.series"
+      [chart]="chartOptions.chart"
+      [xaxis]="chartOptions.xaxis"
+      [yaxis]="chartOptions.yaxis"
+      [stroke]="chartOptions.stroke"
+      [plotOptions]="chartOptions.plotOptions"
+      [colors]="chartOptions.colors"
+      [legend]="chartOptions.legend"
+      [dataLabels]="chartOptions.dataLabels"
+      [tooltip]="chartOptions.tooltip">
+    </apx-chart>
+  </div>
+  <div *ngIf="!loading && (!items || items.length === 0)" class="chart-empty">
+    <i class="pi pi-chart-line"></i>
+    <p>No data available</p>
+  </div>
+</div>

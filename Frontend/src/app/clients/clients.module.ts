@@ -16,6 +16,7 @@ import { TagModule } from 'primeng/tag';
 import { TabViewModule } from 'primeng/tabview';
 import { TooltipModule } from 'primeng/tooltip';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
+import { ChartModule } from 'primeng/chart';
 
 @NgModule({
   declarations: [ClientDetailComponent],
@@ -32,7 +33,8 @@ import { ProgressSpinnerModule } from 'primeng/progressspinner';
     TagModule,
     TabViewModule,
     TooltipModule,
-    ProgressSpinnerModule
+    ProgressSpinnerModule,
+    ChartModule
   ]
 })
 export class ClientsModule { }

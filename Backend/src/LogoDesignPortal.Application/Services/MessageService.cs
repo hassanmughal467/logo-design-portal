@@ -1,5 +1,6 @@
 using AutoMapper;
 using LogoDesignPortal.Application.DTOs.Messages;
+using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
@@ -54,13 +55,31 @@ public class MessageService : IMessageService
         }
 
         // Block all roles from sending order-related messages for locked (terminal) orders
+        // Verify sender has access to the order when OrderId is provided
         if (request.OrderId.HasValue)
         {
             var order = await _context.LogoOrders
+                .Include(o => o.Client)
                 .FirstOrDefaultAsync(o => o.Id == request.OrderId.Value && !o.IsDeleted);
-            if (order != null && OrderLockingHelper.IsOrderLocked(order.Status))
+            if (order != null)
             {
-                throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
+                if (OrderLockingHelper.IsOrderLocked(order.Status))
+                {
+                    throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
+                }
+                // Verify order access: Client must own order; Designer must be assigned
+                if (senderRole == "Client")
+                {
+                    if (order.Client == null || order.Client.UserId != senderId)
+                        throw new ForbiddenAccessException("You don't have access to send messages for this order.");
+                }
+                else if (senderRole == "Designer")
+                {
+                    var designer = await _context.DesignerProfiles.FirstOrDefaultAsync(d => d.UserId == senderId && !d.IsDeleted);
+                    if (designer == null || order.DesignerId != designer.Id)
+                        throw new ForbiddenAccessException("You don't have access to send messages for this order.");
+                }
+                // Admin/SuperAdmin: allow
             }
         }
 

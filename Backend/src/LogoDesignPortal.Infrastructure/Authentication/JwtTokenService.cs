@@ -34,12 +34,18 @@ public class JwtTokenService : IJwtTokenService
             _configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured")));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var expiryHours = int.TryParse(_configuration["Jwt:AccessTokenExpiryHours"], out var h) ? h : 1;
+        var expiry = DateTime.UtcNow;
+        if (int.TryParse(_configuration["Jwt:AccessTokenExpiryMinutes"], out var minutes) && minutes > 0)
+            expiry = expiry.AddMinutes(minutes);
+        else if (int.TryParse(_configuration["Jwt:AccessTokenExpiryHours"], out var hours))
+            expiry = expiry.AddHours(hours);
+        else
+            expiry = expiry.AddMinutes(15);
         var token = new JwtSecurityToken(
             issuer: _configuration["Jwt:Issuer"],
             audience: _configuration["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(expiryHours),
+            expires: expiry,
             signingCredentials: creds);
 
         return Task.FromResult(new JwtSecurityTokenHandler().WriteToken(token));

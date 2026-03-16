@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { InvoiceListComponent } from './invoice-list.component';
+import { SharedModule } from '@shared/shared.module';
 
 // PrimeNG
 import { TableModule } from 'primeng/table';
@@ -25,6 +26,7 @@ import { PaymentsModule } from '../../payments/payments.module';
   imports: [
     CommonModule,
     FormsModule,
+    SharedModule,
     TableModule,
     ButtonModule,
     CardModule,

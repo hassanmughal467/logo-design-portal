@@ -10,11 +10,11 @@ public class CreateOrderRequestDto
     public string Title { get; set; } = string.Empty;
 
     [Required]
-    [MinLength(10)]
+    [MaxLength(1000, ErrorMessage = "Description cannot exceed 1000 characters.")]
     public string Description { get; set; } = string.Empty;
 
-    [Required]
-    [Range(0.01, double.MaxValue)]
+    /// <summary>Optional. Admin sets price when no client pricing exists. Max 100,000.</summary>
+    [Range(0, 100000, ErrorMessage = "Price must be between 0 and 100,000.")]
     public decimal Price { get; set; }
 
     public OrderPriority? Priority { get; set; } // Optional: Low, Medium, High, Urgent
@@ -24,4 +24,6 @@ public class CreateOrderRequestDto
     public string? Requirements { get; set; }
     public string? ColorPreferences { get; set; }
     public string? StylePreferences { get; set; }
+    public DesignCategory? DesignCategory { get; set; }
+    public DesignType? DesignType { get; set; }
 }

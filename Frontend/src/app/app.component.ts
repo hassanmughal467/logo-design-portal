@@ -1,12 +1,13 @@
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
+import { MessageService } from 'primeng/api';
 import { RealtimeNotificationService } from '@core/services/realtime-notification.service';
 
 @Component({
   selector: 'app-root',
   template: `
     <router-outlet></router-outlet>
-    <p-toast position="top-right">
+    <p-toast position="top-right" [showTransitionOptions]="'300ms'" [hideTransitionOptions]="'500ms'">
       <ng-template let-message pTemplate="message">
         <div
           class="toast-message-wrapper"
@@ -31,13 +32,15 @@ export class AppComponent {
 
   constructor(
     private realtimeNotificationService: RealtimeNotificationService,
-    private router: Router
+    private router: Router,
+    private messageService: MessageService
   ) {}
 
   onToastClick(message: { data?: { redirectUrl?: string } }): void {
     const url = message.data?.redirectUrl?.trim();
     if (url) {
       this.router.navigateByUrl(url.startsWith('/') ? url : `/${url}`);
+      this.messageService.clear();
     }
   }
 }

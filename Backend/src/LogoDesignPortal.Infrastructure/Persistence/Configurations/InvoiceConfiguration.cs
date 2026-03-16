@@ -45,6 +45,9 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.Property(e => e.Notes)
             .HasMaxLength(1000);
 
+        builder.Property(e => e.BillingPeriod)
+            .HasMaxLength(100);
+
         builder.HasOne(e => e.Client)
             .WithMany()
             .HasForeignKey(e => e.ClientId)
@@ -54,5 +57,10 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .WithOne(p => p.Invoice)
             .HasForeignKey(p => p.InvoiceId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Financial analytics indexes
+        builder.HasIndex(e => e.Status);
+        builder.HasIndex(e => e.PaidDate);
+        builder.HasIndex(e => new { e.ClientId, e.Status });
     }
 }

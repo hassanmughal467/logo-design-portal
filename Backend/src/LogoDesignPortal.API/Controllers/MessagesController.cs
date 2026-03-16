@@ -1,3 +1,4 @@
+using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.DTOs.Messages;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -27,7 +28,7 @@ public class MessagesController : ControllerBase
     {
         try
         {
-            var senderId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var senderId = User.GetUserIdOrThrow();
             var message = await _messageService.CreateMessageAsync(request, senderId);
             return CreatedAtAction(nameof(GetMessageById), new { id = message.Id }, message);
         }
@@ -42,7 +43,7 @@ public class MessagesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMessageById(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         var message = await _messageService.GetMessageByIdAsync(id, userId, userRole);
         if (message == null)
@@ -56,7 +57,7 @@ public class MessagesController : ControllerBase
     [ProducesResponseType(typeof(List<MessageResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMessages()
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         var messages = await _messageService.GetMessagesAsync(userId, userRole);
         return Ok(messages);
@@ -66,7 +67,7 @@ public class MessagesController : ControllerBase
     [ProducesResponseType(typeof(List<MessageResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMessagesByOrder(Guid orderId)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         var messages = await _messageService.GetMessagesByOrderAsync(orderId, userId, userRole);
         return Ok(messages);
@@ -79,7 +80,7 @@ public class MessagesController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var message = await _messageService.MarkAsReadAsync(id, userId, userRole);
             return Ok(message);
@@ -98,7 +99,7 @@ public class MessagesController : ControllerBase
     {
         try
         {
-            var adminUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var adminUserId = User.GetUserIdOrThrow();
             var message = await _messageService.ForwardMessageAsync(request, adminUserId);
             return Ok(message);
         }
@@ -116,7 +117,7 @@ public class MessagesController : ControllerBase
     {
         try
         {
-            var adminUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var adminUserId = User.GetUserIdOrThrow();
             var message = await _messageService.RejectMessageAsync(request, adminUserId);
             return Ok(message);
         }

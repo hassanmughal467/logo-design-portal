@@ -11,6 +11,9 @@
   
   <div class="order-create-container">
     <form [formGroup]="orderForm" (ngSubmit)="onSubmit()">
+      <div class="p-error form-error-banner" *ngIf="submitError">
+        <i class="pi pi-exclamation-triangle"></i> {{ submitError }}
+      </div>
       <div class="form-grid">
         <!-- Title -->
         <div class="form-group full-width">
@@ -40,24 +43,8 @@
             placeholder="Describe your logo requirements..."
           ></textarea>
           <small class="p-error" *ngIf="f['description'].invalid && f['description'].touched">
-            {{ f['description'].errors?.['minlength'] ? 'Description must be at least 10 characters' : 'Description is required' }}
-          </small>
-        </div>
-
-        <!-- Price -->
-        <div class="form-group">
-          <label for="price">Price (USD) <span class="required">*</span></label>
-          <p-inputNumber 
-            id="price"
-            formControlName="price"
-            mode="decimal"
-            [min]="0.01"
-            [maxFractionDigits]="2"
-            [class.ng-invalid]="f['price'].invalid && f['price'].touched"
-            styleClass="w-full"
-          ></p-inputNumber>
-          <small class="p-error" *ngIf="f['price'].invalid && f['price'].touched">
-            Valid price is required
+            <span *ngIf="f['description'].errors?.['required']">Description is required</span>
+            <span *ngIf="f['description'].errors?.['maxlength']">Description must not exceed 1000 characters</span>
           </small>
         </div>
 
@@ -105,16 +92,35 @@
           </p-calendar>
         </div>
 
-        <!-- Instructions -->
-        <div class="form-group full-width">
-          <label for="instructions">Instructions</label>
-          <textarea 
-            id="instructions"
-            pInputTextarea 
-            formControlName="instructions"
-            rows="3"
-            placeholder="Any specific instructions for the designer..."
-          ></textarea>
+        <!-- Logo Category -->
+        <div class="form-group">
+          <label for="logoCategory">Logo Category</label>
+          <p-dropdown 
+            id="logoCategory"
+            formControlName="logoCategory"
+            [options]="logoCategoryOptions"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Select category"
+            styleClass="w-full"
+            appendTo="body"
+            (onChange)="onLogoCategoryChange()">
+          </p-dropdown>
+        </div>
+
+        <!-- Placement (Left Chest / Jacket Back) - shown only for Embroidery or Custom Patch -->
+        <div class="form-group" *ngIf="showPlacementDropdown">
+          <label for="placement">Placement</label>
+          <p-dropdown 
+            id="placement"
+            formControlName="placement"
+            [options]="placementOptions"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Select placement"
+            styleClass="w-full"
+            appendTo="body">
+          </p-dropdown>
         </div>
 
         <!-- Required Formats -->
@@ -130,18 +136,6 @@
           <small class="p-help">Comma-separated list (PNG, SVG, PDF, AI, etc.)</small>
         </div>
 
-        <!-- Requirements -->
-        <div class="form-group">
-          <label for="requirements">Additional Requirements</label>
-          <textarea 
-            id="requirements"
-            pInputTextarea 
-            formControlName="requirements"
-            rows="2"
-            placeholder="Any additional requirements..."
-          ></textarea>
-        </div>
-
         <!-- Color Preferences -->
         <div class="form-group">
           <label for="colorPreferences">Color Preferences</label>
@@ -154,16 +148,31 @@
           />
         </div>
 
-        <!-- Style Preferences -->
+        <!-- Style Preferences: Dropdown (mandatory) for Embroidery, Text field (optional) for Vector -->
         <div class="form-group">
-          <label for="stylePreferences">Style Preferences</label>
+          <label for="stylePreferences">Style Preferences <span class="required" *ngIf="showStylePreferencesDropdown">*</span></label>
+          <p-dropdown 
+            *ngIf="showStylePreferencesDropdown"
+            id="stylePreferences"
+            formControlName="stylePreferences"
+            [options]="stitchTypeOptions"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Select stitch type"
+            styleClass="w-full"
+            appendTo="body">
+          </p-dropdown>
           <input 
+            *ngIf="!showStylePreferencesDropdown"
             id="stylePreferences"
             type="text" 
             pInputText 
             formControlName="stylePreferences"
             placeholder="e.g., Modern, minimalist, professional"
           />
+          <small class="p-error" *ngIf="showStylePreferencesDropdown && f['stylePreferences'].invalid && f['stylePreferences'].touched">
+            Stitch type is required for embroidery
+          </small>
         </div>
 
         <!-- File Upload -->
@@ -174,13 +183,13 @@
               #fileInput 
               type="file" 
               multiple 
-              accept="image/*,.pdf,.ai,.eps,.psd,.svg"
+              accept="image/*,.pdf,.ai,.eps,.psd,.svg,.pes,.dst,.jef,.exp,.vp3,.xxx,.hus,.art,.vip,.vip3,.shv,.pec,.jpm,.sew,.emb,.csd,.pcs,.phb,.phc,.stx,.s10,.dsb,.zsk"
               (change)="onNativeFileSelect($event)"
               style="display: none"
             />
             <i class="pi pi-cloud-upload upload-icon"></i>
             <p class="upload-text">Drag & drop files here or <span class="browse-link">browse</span></p>
-            <small class="upload-hint">Max 10MB per file · JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD</small>
+            <small class="upload-hint">Max 10MB per file · JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD, embroidery (PES, DST, JEF, EXP, etc.)</small>
           </div>
           
           <!-- Selected Files List -->

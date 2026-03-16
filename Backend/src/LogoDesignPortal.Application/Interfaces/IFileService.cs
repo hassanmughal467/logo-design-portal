@@ -1,3 +1,4 @@
+using LogoDesignPortal.Application.DTOs.Common;
 using LogoDesignPortal.Application.DTOs.Files;
 using LogoDesignPortal.Domain.Entities;
 using Microsoft.AspNetCore.Http;
@@ -12,11 +13,13 @@ public interface IFileService
     /// </summary>
     Task<List<LogoFile>> PrepareReferenceFilesForOrderAsync(Guid orderId, IFormFile[] files, Guid uploadedBy, string? description = null);
 
-    Task<FileUploadResponseDto> UploadFileAsync(Guid orderId, IFormFile file, Guid uploadedBy, string fileType, string? description = null);
-    Task<List<FileUploadResponseDto>> UploadMultipleFilesAsync(Guid orderId, IFormFile[] files, Guid uploadedBy, string fileType, string? description = null);
+    Task<FileUploadResponseDto> UploadFileAsync(Guid orderId, IFormFile file, Guid uploadedBy, string fileType, string? description = null, int? designCategory = null, int? designType = null, decimal? proposedPrice = null);
+    Task<List<FileUploadResponseDto>> UploadMultipleFilesAsync(Guid orderId, IFormFile[] files, Guid uploadedBy, string fileType, string? description = null, int? designCategory = null, int? designType = null, decimal? proposedPrice = null);
     Task<(byte[] fileContent, string fileName, string contentType)> DownloadFileAsync(Guid fileId, Guid? userId, string? userRole);
     Task<List<FileResponseDto>> GetOrderFilesAsync(Guid orderId, Guid? userId, string? userRole);
+    Task<List<FileResponseDto>> GetOrderFilesForOrdersAsync(List<Guid> orderIds, Guid userId, string userRole);
     Task<List<FileResponseDto>> GetAllFilesAsync(Guid? userId, string? userRole);
+    Task<PagedResultDto<FileResponseDto>> GetAllFilesPagedAsync(Guid? userId, string? userRole, int page, int pageSize);
     Task<bool> DeleteFileAsync(Guid fileId, Guid userId, string userRole);
     Task<FileResponseDto> ApproveFileAsync(Guid fileId, ApproveFileDto request, Guid approvedBy);
     Task<List<FileResponseDto>> GetOrderFilesForAdminAsync(Guid orderId); // All files including unapproved

@@ -1,8 +1,8 @@
+using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.DTOs.Notifications;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace LogoDesignPortal.API.Controllers;
 
@@ -29,7 +29,7 @@ public class NotificationsController : ControllerBase
         [FromQuery] string? referenceType = null,
         [FromQuery] string? type = null)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
 
         // Use paginated endpoint when limit or offset is explicitly provided, or when filters/search are used
         var usePaginated = limit.HasValue || offset.HasValue || !string.IsNullOrWhiteSpace(search) ||
@@ -59,7 +59,7 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetUnreadCount()
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var count = await _notificationService.GetUnreadNotificationCountAsync(userId);
         return Ok(new { count });
     }
@@ -69,7 +69,7 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetNotificationById(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var notification = await _notificationService.GetNotificationByIdAsync(id, userId);
         
         if (notification == null)
@@ -85,7 +85,7 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> MarkAsRead(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var result = await _notificationService.MarkNotificationAsReadAsync(id, userId);
         
         if (!result)
@@ -100,7 +100,7 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> MarkAllAsRead()
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         await _notificationService.MarkAllNotificationsAsReadAsync(userId);
         return Ok(new { message = "All notifications marked as read." });
     }

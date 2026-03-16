@@ -1,0 +1,20 @@
+<div class="chart-card">
+  <h3 class="chart-title"><i class="pi pi-file-edit"></i> Invoice Status</h3>
+  <div *ngIf="loading" class="chart-skeleton"></div>
+  <div *ngIf="!loading && chartOptions" class="chart-container">
+    <apx-chart
+      [series]="chartOptions.series"
+      [chart]="chartOptions.chart"
+      [labels]="chartOptions.labels"
+      [colors]="chartOptions.colors"
+      [legend]="chartOptions.legend"
+      [dataLabels]="chartOptions.dataLabels"
+      [plotOptions]="chartOptions.plotOptions"
+      [tooltip]="chartOptions.tooltip">
+    </apx-chart>
+  </div>
+  <div *ngIf="!loading && (!items || items.length === 0)" class="chart-empty">
+    <i class="pi pi-file-edit"></i>
+    <p>No invoice data</p>
+  </div>
+</div>

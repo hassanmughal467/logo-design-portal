@@ -1,0 +1,44 @@
+<div class="client-risk-table">
+  <p-table [value]="items" [paginator]="true" [rows]="10" [rowsPerPageOptions]="[5, 10, 25, 50]"
+    styleClass="p-datatable-sm p-datatable-striped" [tableStyle]="{ 'min-width': '50rem' }">
+    <ng-template pTemplate="header">
+      <tr>
+        <th pSortableColumn="clientName">Client <p-sortIcon field="clientName"></p-sortIcon></th>
+        <th pSortableColumn="riskLevel">Risk Level <p-sortIcon field="riskLevel"></p-sortIcon></th>
+        <th pSortableColumn="riskScore">Score <p-sortIcon field="riskScore"></p-sortIcon></th>
+        <th pSortableColumn="daysSinceLastOrder">Days Since Last Order <p-sortIcon field="daysSinceLastOrder"></p-sortIcon></th>
+        <th pSortableColumn="orderCount">Orders <p-sortIcon field="orderCount"></p-sortIcon></th>
+        <th pSortableColumn="totalRevenue">Revenue <p-sortIcon field="totalRevenue"></p-sortIcon></th>
+        <th pSortableColumn="revenueContributionPercent">Revenue % <p-sortIcon field="revenueContributionPercent"></p-sortIcon></th>
+        <th pSortableColumn="lastOrderDate">Last Order <p-sortIcon field="lastOrderDate"></p-sortIcon></th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-item>
+      <tr>
+        <td>{{ item.clientName || 'Unknown' }}</td>
+        <td>
+          <p-tag [value]="getRiskLevelLabel(item.riskLevel)" [severity]="getRiskSeverity(item.riskLevel)"></p-tag>
+        </td>
+        <td>
+          <span class="score-badge" [class.high]="item.riskScore >= 76" [class.medium]="item.riskScore >= 51 && item.riskScore <= 75"
+            [class.low]="item.riskScore <= 25">
+            {{ item.riskScore }}
+          </span>
+        </td>
+        <td>{{ item.daysSinceLastOrder }} days</td>
+        <td>{{ item.orderCount }}</td>
+        <td>{{ formatCurrency(item.totalRevenue) }}</td>
+        <td>{{ item.revenueContributionPercent | number:'1.2-2' }}%</td>
+        <td>{{ formatDate(item.lastOrderDate) }}</td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="8" class="empty-message">
+          <i class="pi pi-info-circle"></i>
+          <p>No client order data available for churn risk analysis.</p>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>

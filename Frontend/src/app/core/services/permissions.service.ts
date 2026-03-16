@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, of } from 'rxjs';
-import { map, catchError } from 'rxjs/operators';
+import { map, catchError, take } from 'rxjs/operators';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import { Permission } from '@shared/models/permission.model';
@@ -12,18 +12,28 @@ export class PermissionsService {
   private permissionsCache = new BehaviorSubject<Permission[]>([]);
   public permissions$ = this.permissionsCache.asObservable();
 
+  /** Current user's permission names (from /api/users/me/permissions). Used for Admin and other roles. */
+  private userPermissionsCache = new BehaviorSubject<string[]>([]);
+
   constructor(
     private apiService: ApiService,
     private authService: AuthService
   ) {
-    // Load permissions when service initializes (only for SuperAdmin users)
-    // Other roles don't have access to the permissions endpoint
     if (this.authService.isAuthenticated()) {
       const user = this.authService.getCurrentUser();
       if (user && (user.role === 'SuperAdmin' || user.roleName === 'SuperAdmin')) {
         this.loadPermissions().subscribe();
       }
+      this.loadUserPermissions().subscribe();
     }
+    // Reload user permissions when auth state changes (e.g. on login); clear on logout
+    this.authService.currentUser$.subscribe(user => {
+      if (user) {
+        this.loadUserPermissions().pipe(take(1)).subscribe();
+      } else {
+        this.userPermissionsCache.next([]);
+      }
+    });
   }
 
   loadPermissions(): Observable<Permission[]> {
@@ -39,20 +49,30 @@ export class PermissionsService {
     );
   }
 
+  /** Load current user's permissions from /api/users/me/permissions */
+  loadUserPermissions(): Observable<string[]> {
+    return this.apiService.get<string[]>('users/me/permissions').pipe(
+      map(permissions => {
+        this.userPermissionsCache.next(permissions);
+        return permissions;
+      }),
+      catchError(() => of([]))
+    );
+  }
+
   hasPermission(permissionName: string): boolean {
     const user = this.authService.getCurrentUser();
     if (!user) return false;
 
-    // For now, return true if user is SuperAdmin (backend will validate)
-    // In a real implementation, you'd check against cached permissions
-    // This is just for UI visibility - backend is source of truth
-    if (user.role === 'SuperAdmin') {
+    // SuperAdmin has all permissions (backend is source of truth)
+    if (user.role === 'SuperAdmin' || user.roleName === 'SuperAdmin') {
       return true;
     }
 
-    // TODO: Implement proper permission checking against cached permissions
-    // This requires backend to return user's permissions in JWT or via separate endpoint
-    return false;
+    // Check against cached user permissions (Admin and other roles with granted permissions)
+    const userPerms = this.userPermissionsCache.value;
+    if (userPerms.includes('*')) return true; // SuperAdmin returns "*"
+    return userPerms.includes(permissionName);
   }
 
   hasAnyPermission(permissionNames: string[]): boolean {
@@ -61,5 +81,7 @@ export class PermissionsService {
 
   clearCache(): void {
     this.permissionsCache.next([]);
+    this.userPermissionsCache.next([]);
   }
 }
+

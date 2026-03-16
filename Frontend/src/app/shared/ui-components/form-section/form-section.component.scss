@@ -1,0 +1,48 @@
+.form-section {
+  margin-bottom: 1.5rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.form-section-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-color-secondary);
+  margin: 0 0 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.form-section-icon {
+  font-size: 0.9rem;
+  color: var(--primary-color);
+}
+
+.form-section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+
+  ::ng-deep .form-group,
+  ::ng-deep .form-field,
+  ::ng-deep .field {
+    margin-bottom: 1rem;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-color);
+    }
+  }
+}

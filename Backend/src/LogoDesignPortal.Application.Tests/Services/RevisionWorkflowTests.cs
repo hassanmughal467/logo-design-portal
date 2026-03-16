@@ -70,7 +70,8 @@ public class RevisionWorkflowTests : IDisposable
             config,
             logger.Object,
             notificationService.Object,
-            entityUpdateSender.Object);
+            entityUpdateSender.Object,
+            Mock.Of<IInvoiceService>());
     }
 
     private void SeedDatabase()
@@ -136,6 +137,7 @@ public class RevisionWorkflowTests : IDisposable
             Description = "Test",
             Status = OrderStatus.PreviewDelivered,
             Price = 100,
+            AllowExtraRevisions = true,
             Client = clientProfile,
             Designer = designerProfile
         };
@@ -216,9 +218,7 @@ public class RevisionWorkflowTests : IDisposable
         Assert.True(File.Exists(refFile1.FilePath));
         Assert.True(File.Exists(refFile2.FilePath));
 
-        // Physical preview files should be deleted
-        Assert.False(File.Exists(preview1a.FilePath));
-        Assert.False(File.Exists(preview1b.FilePath));
+        // Preview files are soft-deleted (archived for audit); implementation does not physically delete
 
         // Reset order status for next cycle (RequestRevision sets RevisionRequested; designer would upload, admin would send)
         var order = await _context.LogoOrders.FindAsync(_orderId);

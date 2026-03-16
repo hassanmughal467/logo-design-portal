@@ -1,0 +1,79 @@
+.designer-payout-overview {
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+
+    .header-left {
+      .card-title {
+        margin: 0 0 0.25rem 0;
+        font-size: 1.1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .card-subtitle {
+        margin: 0;
+        font-size: 0.875rem;
+        color: var(--text-color-secondary);
+      }
+    }
+
+    .payout-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.35rem 0.75rem;
+      background: var(--orange-500);
+      color: white;
+      border-radius: 1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+
+      &:hover {
+        background: var(--orange-600);
+      }
+
+      &:focus {
+        outline: 2px solid var(--orange-400);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  .loading-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-color-secondary);
+
+    i {
+      font-size: 2.5rem;
+      color: var(--green-500);
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+  }
+
+  .generate-dialog {
+    .form-field {
+      margin-bottom: 1rem;
+
+      label {
+        display: block;
+        margin-bottom: 0.25rem;
+        font-weight: 500;
+      }
+    }
+  }
+}

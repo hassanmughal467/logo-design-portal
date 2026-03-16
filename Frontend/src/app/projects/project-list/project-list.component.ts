@@ -56,10 +56,11 @@ export class ProjectListComponent implements OnInit, OnDestroy {
   loadProjects(): void {
     this.loading = true;
     // Transform orders to projects
-    this.apiService.get<Order[]>('orders')
+    this.apiService.get<any>('orders?page=1&pageSize=500')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (orders) => {
+        next: (response) => {
+          const orders = ApiService.extractItems<Order>(response);
           this.projects = orders.map(order => ({
             id: order.id,
             orderId: order.id,

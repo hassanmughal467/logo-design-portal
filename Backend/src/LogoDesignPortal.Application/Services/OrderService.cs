@@ -1,4 +1,5 @@
 using AutoMapper;
+using LogoDesignPortal.Application.DTOs.Common;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Users;
 using LogoDesignPortal.Application.Exceptions;
@@ -21,15 +22,17 @@ public class OrderService : IOrderService
     private readonly INotificationService _notificationService;
     private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
     private readonly IFileService _fileService;
+    private readonly IClientLogoPricingService _clientLogoPricingService;
     private readonly ILogger<OrderService> _logger;
 
-    public OrderService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender, IFileService fileService, ILogger<OrderService> logger)
+    public OrderService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender, IFileService fileService, IClientLogoPricingService clientLogoPricingService, ILogger<OrderService> logger)
     {
         _context = context;
         _mapper = mapper;
         _notificationService = notificationService;
         _entityUpdateSender = entityUpdateSender;
         _fileService = fileService;
+        _clientLogoPricingService = clientLogoPricingService;
         _logger = logger;
     }
 
@@ -43,6 +46,8 @@ public class OrderService : IOrderService
         order.CreatedAt = DateTime.UtcNow;
         order.CreatedBy = clientId;
         // Priority is already set by AutoMapper with default value
+
+        await ApplyClientPricingAsync(order, request.DesignCategory, request.DesignType);
 
         _context.LogoOrders.Add(order);
 
@@ -115,6 +120,8 @@ public class OrderService : IOrderService
                 order.ClientId = client.Id;
                 order.CreatedAt = DateTime.UtcNow;
                 order.CreatedBy = clientId;
+
+                await ApplyClientPricingAsync(order, request.DesignCategory, request.DesignType);
 
                 _context.LogoOrders.Add(order);
 
@@ -231,6 +238,36 @@ public class OrderService : IOrderService
         return client;
     }
 
+    /// <summary>
+    /// Applies client-specific pricing from ClientLogoPricing (set by SuperAdmin per client).
+    /// Sets ClientBasePrice, ClientChargePrice (= ClientBasePrice), Price, CurrencyCode.
+    /// When no ClientLogoPricing exists, defaults to 0 until SuperAdmin adds pricing.
+    /// Designer payout (DesignPricing) is unchanged.
+    /// </summary>
+    private async Task ApplyClientPricingAsync(LogoOrder order, DesignCategory? designCategory, DesignType? designType)
+    {
+        decimal basePrice = 0;
+        string currencyCode = "USD";
+
+        if (designCategory.HasValue && designType.HasValue)
+        {
+            var pricing = await _clientLogoPricingService.GetClientPricingForOrderAsync(order.ClientId, designCategory.Value, designType.Value);
+            if (pricing.HasValue)
+            {
+                basePrice = pricing.Value.Price;
+                currencyCode = pricing.Value.CurrencyCode;
+            }
+            order.DesignCategory = designCategory;
+            order.DesignType = designType;
+        }
+
+        order.ClientBasePrice = basePrice;
+        order.ClientChargePrice = basePrice;
+        order.ClientPrice = basePrice;
+        order.Price = basePrice;
+        order.CurrencyCode = currencyCode;
+    }
+
     public async Task<OrderResponseDto?> GetOrderByIdAsync(Guid orderId, Guid? userId, string? userRole)
     {
         var order = await _context.LogoOrders
@@ -329,7 +366,6 @@ public class OrderService : IOrderService
                 .ThenInclude(c => c.User)
             .Include(o => o.Designer)
                 .ThenInclude(d => d.User)
-            .Include(o => o.Files)
             .Where(o => o.ClientId == client.Id && !o.IsDeleted);
 
         // Filter out archived orders by default
@@ -340,6 +376,9 @@ public class OrderService : IOrderService
             .ToListAsync();
 
         var response = _mapper.Map<List<OrderResponseDto>>(orders);
+
+        // Batch-load file counts (avoids N+1 without loading full Files)
+        await ApplyFileCountsAsync(response, orders.Select(o => o.Id).ToList());
 
         // Check which orders already have invoices
         var clientOrderIds = orders.Select(o => o.Id).ToList();
@@ -379,11 +418,12 @@ public class OrderService : IOrderService
                 .ThenInclude(c => c.User)
             .Include(o => o.Designer)
                 .ThenInclude(d => d.User)
-            .Include(o => o.Files)
             .Where(o => o.DesignerId == designer.Id && !o.IsDeleted)
             .ToListAsync();
 
         var response = _mapper.Map<List<OrderResponseDto>>(orders);
+
+        await ApplyFileCountsAsync(response, orders.Select(o => o.Id).ToList());
         
         // Remove client info for designers
         foreach (var order in response)
@@ -394,6 +434,8 @@ public class OrderService : IOrderService
         return response;
     }
 
+    private const int GetAllOrdersMaxLimit = 500;
+
     public async Task<List<OrderResponseDto>> GetAllOrdersAsync(string? userRole)
     {
         var query = _context.LogoOrders
@@ -401,11 +443,14 @@ public class OrderService : IOrderService
                 .ThenInclude(c => c.User)
             .Include(o => o.Designer)
                 .ThenInclude(d => d.User)
-            .Include(o => o.Files)
             .Where(o => !o.IsDeleted);
 
         // Filter out archived orders by default
         query = query.Where(o => !o.IsArchived);
+
+        var count = await query.CountAsync();
+        if (count > GetAllOrdersMaxLimit)
+            throw new InvalidOperationException($"Order count ({count}) exceeds maximum allowed ({GetAllOrdersMaxLimit}). Use the paged endpoint (GetOrdersPagedAsync) for large datasets.");
 
         var orders = await query
             .OrderByDescending(o => o.CreatedAt)
@@ -413,8 +458,10 @@ public class OrderService : IOrderService
 
         var response = _mapper.Map<List<OrderResponseDto>>(orders);
 
-        // Check which orders already have invoices
         var orderIds = orders.Select(o => o.Id).ToList();
+        await ApplyFileCountsAsync(response, orderIds);
+
+        // Check which orders already have invoices
         var orderIdsWithInvoices = await _context.InvoiceOrders
             .Where(io => io.OrderId.HasValue && orderIds.Contains(io.OrderId.Value))
             .Select(io => io.OrderId!.Value)
@@ -434,7 +481,7 @@ public class OrderService : IOrderService
                 if (order.Client != null)
                 {
                     var originalOrder = orders.FirstOrDefault(o => o.Id == order.Id);
-                    if (originalOrder != null && originalOrder.Client != null)
+                    if (originalOrder?.Client != null && originalOrder.Client.User != null)
                     {
                         order.Client = new ClientInfoDto
                         {
@@ -458,6 +505,78 @@ public class OrderService : IOrderService
         }
 
         return response;
+    }
+
+    public async Task<PagedResultDto<OrderResponseDto>> GetOrdersPagedAsync(string? userRole, int page, int pageSize)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = _context.LogoOrders
+            .Include(o => o.Client)
+                .ThenInclude(c => c.User)
+            .Include(o => o.Designer)
+                .ThenInclude(d => d.User)
+            .Where(o => !o.IsDeleted && !o.IsArchived)
+            .OrderByDescending(o => o.CreatedAt);
+
+        var total = await query.CountAsync();
+        var orders = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var response = _mapper.Map<List<OrderResponseDto>>(orders);
+        var orderIds = orders.Select(o => o.Id).ToList();
+        await ApplyFileCountsAsync(response, orderIds);
+
+        var orderIdsWithInvoices = await _context.InvoiceOrders
+            .Where(io => io.OrderId.HasValue && orderIds.Contains(io.OrderId.Value))
+            .Select(io => io.OrderId!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var order in response)
+        {
+            order.HasInvoice = orderIdsWithInvoices.Contains(order.Id);
+        }
+
+        if (userRole == "Admin")
+        {
+            foreach (var order in response)
+            {
+                if (order.Client != null)
+                {
+                    var originalOrder = orders.FirstOrDefault(o => o.Id == order.Id);
+                    if (originalOrder?.Client != null && originalOrder.Client.User != null)
+                    {
+                        order.Client = new ClientInfoDto
+                        {
+                            Id = originalOrder.Client.Id,
+                            UserId = originalOrder.Client.UserId,
+                            CompanyName = originalOrder.Client.CompanyName,
+                            FirstName = originalOrder.Client.User.FirstName,
+                            LastName = originalOrder.Client.User.LastName,
+                        };
+                    }
+                }
+            }
+        }
+        else if (userRole == "Designer")
+        {
+            foreach (var order in response)
+            {
+                order.Client = null;
+            }
+        }
+
+        return new PagedResultDto<OrderResponseDto>
+        {
+            Items = response,
+            Total = total,
+            Page = page,
+            PageSize = pageSize
+        };
     }
 
     public async Task<OrderResponseDto> AssignOrderToDesignerAsync(Guid orderId, Guid designerId, Guid assignedBy)
@@ -569,10 +688,23 @@ public class OrderService : IOrderService
             }
         }
 
+        OrderStatusStateMachine.ValidateTransition(order.Status, newStatus);
         var previousStatus = order.Status;
         order.Status = newStatus;
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = userId;
+
+        // When status becomes Completed, set BillingEligible and CompletedDate (do not overwrite existing CompletedDate)
+        if (newStatus == OrderStatus.Completed)
+        {
+            _logger.LogInformation("OrderCompleted. OrderId={OrderId}, UserId={UserId}, Timestamp={Timestamp}",
+                orderId, userId, DateTime.UtcNow);
+            order.BillingEligible = true;
+            if (!order.CompletedDate.HasValue)
+            {
+                order.CompletedDate = DateTime.UtcNow;
+            }
+        }
 
         // Create status history
         var statusHistory = new OrderStatusHistory
@@ -589,7 +721,7 @@ public class OrderService : IOrderService
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
 
-        // Notify client when order status changes (if client exists)
+        // Notify client when order status changes (if client exists and changer is not client)
         if (order.Client != null && order.Client.UserId != userId)
         {
             var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
@@ -621,13 +753,43 @@ public class OrderService : IOrderService
             );
         }
 
-        if (newStatus == OrderStatus.FinalApproved)
+        // When Admin marks order Completed, also notify Designer
+        if (newStatus == OrderStatus.Completed && order.DesignerId.HasValue)
         {
-            _logger.LogInformation("FinalApproved. OrderId={OrderId}, UserId={UserId}", orderId, userId);
+            var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+            try
+            {
+                var designerUserId = await _context.DesignerProfiles
+                    .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
+                    .Select(d => d.UserId)
+                    .FirstOrDefaultAsync();
+                if (designerUserId != Guid.Empty)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        designerUserId,
+                        "Order Completed",
+                        $"Order (#{orderNumber}) has been completed",
+                        NotificationType.OrderStatusChange,
+                        orderId,
+                        NotificationReferenceType.Order,
+                        orderId,
+                        userId
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to notify designer of order completion {OrderId}.", orderId);
+            }
         }
 
-        // When client approves preview (FinalApproved), notify Admin and Designer
-        if (newStatus == OrderStatus.FinalApproved && order.Client != null && order.Client.UserId == userId)
+        if (newStatus == OrderStatus.ClientApproved)
+        {
+            _logger.LogInformation("ClientApproved. OrderId={OrderId}, UserId={UserId}", orderId, userId);
+        }
+
+        // When client approves preview (ClientApproved), notify Admin and Designer
+        if (newStatus == OrderStatus.ClientApproved && order.Client != null && order.Client.UserId == userId)
         {
             var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
             if (string.IsNullOrEmpty(clientName)) clientName = "Client";
@@ -700,8 +862,8 @@ public class OrderService : IOrderService
         var statusUpdateUserIds = await GetOrderUpdateRecipientIdsAsync(order);
         await _entityUpdateSender.SendOrderStatusChangedAsync(orderId, newStatus.ToString(), userId, statusUpdateUserIds);
 
-        // When client approves preview (FinalApproved), notify Admin so their grid updates
-        if (newStatus == OrderStatus.FinalApproved && order.Client != null && order.Client.UserId == userId)
+        // When client approves preview (ClientApproved), notify Admin so their grid updates
+        if (newStatus == OrderStatus.ClientApproved && order.Client != null && order.Client.UserId == userId)
         {
             var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
             if (string.IsNullOrEmpty(clientName)) clientName = "Client";
@@ -724,6 +886,7 @@ public class OrderService : IOrderService
             throw new InvalidOperationException("Order not found.");
         }
 
+        var previousStatus = order.Status;
         order.ProposedPrice = request.ProposedPrice;
         order.RequiresPriceApproval = true;
         order.PriceApproved = false;
@@ -736,7 +899,7 @@ public class OrderService : IOrderService
         {
             Id = Guid.NewGuid(),
             OrderId = order.Id,
-            PreviousStatus = order.Status,
+            PreviousStatus = previousStatus,
             NewStatus = OrderStatus.PriceApprovalPending,
             Notes = $"Price approval requested: ${request.ProposedPrice}. {request.Notes}",
             ChangedBy = requestedBy,
@@ -775,7 +938,7 @@ public class OrderService : IOrderService
         // Null check to prevent NullReferenceException
         if (order.Client == null || order.Client.UserId != approvedBy)
         {
-            throw new UnauthorizedAccessException("Only the client can approve the price.");
+            throw new ForbiddenAccessException("Only the client can approve the price.");
         }
 
         order.PriceApproved = request.Approved;
@@ -783,9 +946,16 @@ public class OrderService : IOrderService
 
         if (request.Approved)
         {
-            // Fixed: Use ProposedPrice when approved
-            order.Price = order.ProposedPrice ?? order.Price;
+            // Fixed: Update ClientChargePrice (used for invoicing), not just Price
+            var approvedAmount = order.ProposedPrice ?? order.Price;
+            order.ClientChargePrice = approvedAmount;
+            order.ClientPrice = approvedAmount;
+            order.Price = approvedAmount;
             order.Status = OrderStatus.WaitingForAdminApproval;
+            // Track who updated the price
+            order.PriceUpdatedByRole = "Client";
+            order.PriceUpdatedByUserId = approvedBy;
+            order.PriceUpdatedAt = DateTime.UtcNow;
         }
         else
         {
@@ -990,9 +1160,12 @@ public class OrderService : IOrderService
 
         _logger.LogInformation("PreviewForwarded. OrderId={OrderId}, UserId={UserId}, FileCount={FileCount}", order.Id, sentBy, files.Count);
 
+        if (order.Client == null)
+            throw new InvalidOperationException("Order has no associated client.");
+
         var orderNumber = NotificationFormatHelper.GetOrderNumber(order.Id);
         await _notificationService.CreateNotificationAsync(
-            order.Client!.UserId,
+            order.Client.UserId,
             "Preview Files Available",
             $"Preview files were uploaded for order (#{orderNumber})",
             NotificationType.FileUpload,
@@ -1041,10 +1214,10 @@ public class OrderService : IOrderService
             throw new InvalidOperationException("Order can only be updated before admin approval or while price approval is pending.");
         }
 
-        // Update order properties
+        // Update order properties - clients cannot change Price (set by pricing rules/admin)
         order.Title = request.Title;
         order.Description = request.Description;
-        order.Price = request.Price;
+        // order.Price is NOT updated from request - prevents client from overriding pricing
         order.Priority = request.Priority ?? order.Priority;
         order.Deadline = request.Deadline;
         order.Instructions = request.Instructions;
@@ -1114,17 +1287,15 @@ public class OrderService : IOrderService
                 throw new UnauthorizedAccessException("You can only cancel your own orders.");
             }
 
-            // Clients can only cancel if status is Pending or Paid (or WaitingForAdminApproval/PriceApprovalPending for backward compatibility)
-            if (order.Status != OrderStatus.Pending && 
-                order.Status != OrderStatus.Paid &&
-                order.Status != OrderStatus.WaitingForAdminApproval &&
+            // Clients can only cancel if status is WaitingForAdminApproval or PriceApprovalPending (before work starts)
+            if (order.Status != OrderStatus.WaitingForAdminApproval &&
                 order.Status != OrderStatus.PriceApprovalPending)
             {
-                throw new InvalidOperationException("Order can only be cancelled if status is Pending or Paid.");
+                throw new InvalidOperationException("Order can only be cancelled before admin approval or while price approval is pending.");
             }
 
-            // Cannot cancel if processing has started
-            if (order.Status == OrderStatus.Processing || order.Status == OrderStatus.InProgress)
+            // Cannot cancel if work has started (InProgress)
+            if (order.Status == OrderStatus.InProgress)
             {
                 throw new InvalidOperationException("Order cannot be cancelled once processing has started.");
             }
@@ -1178,16 +1349,22 @@ public class OrderService : IOrderService
 
         await _context.SaveChangesAsync();
 
-        // Notify client when admin cancels order
-        if (newStatus == OrderStatus.CancelledByAdmin && order.Client != null)
+        var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+        var reasonSnippet = request.Reason.Length > 200 ? request.Reason[..200] + "..." : request.Reason;
+        var cancelledBy = isCancelledByUser ? "client" : "admin";
+
+        // Notify client (with cancellation reason) - always, including confirmation when client cancels
+        if (order.Client != null)
         {
             try
             {
-                var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+                var clientMessage = isCancelledByUser
+                    ? $"Your order (#{orderNumber}) has been cancelled. Reason: {reasonSnippet}"
+                    : $"Your order (#{orderNumber}) was cancelled. Reason: {reasonSnippet}";
                 await _notificationService.CreateNotificationAsync(
                     order.Client.UserId,
                     "Order Cancelled",
-                    $"Your order (#{orderNumber}) was cancelled",
+                    clientMessage,
                     NotificationType.OrderStatusChange,
                     orderId,
                     NotificationReferenceType.Order,
@@ -1198,6 +1375,41 @@ public class OrderService : IOrderService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to notify client of order cancellation {OrderId}.", orderId);
+            }
+        }
+
+        // Notify SuperAdmin and Admin
+        try
+        {
+            var adminMessage = $"Order (#{orderNumber}) was cancelled by {cancelledBy}. Reason: {reasonSnippet}";
+            await _notificationService.CreateNotificationForRoleAsync("Admin", "Order Cancelled", adminMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, userId);
+            await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", "Order Cancelled", adminMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to notify admins of order cancellation {OrderId}.", orderId);
+        }
+
+        // Notify designer if assigned
+        if (order.Designer?.UserId != null && order.Designer.UserId != userId)
+        {
+            try
+            {
+                var designerMessage = $"Order (#{orderNumber}) was cancelled. Reason: {reasonSnippet}";
+                await _notificationService.CreateNotificationAsync(
+                    order.Designer.UserId,
+                    "Order Cancelled",
+                    designerMessage,
+                    NotificationType.OrderStatusChange,
+                    orderId,
+                    NotificationReferenceType.Order,
+                    orderId,
+                    userId
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to notify designer of order cancellation {OrderId}.", orderId);
             }
         }
 
@@ -1309,7 +1521,13 @@ public class OrderService : IOrderService
             throw new InvalidOperationException("Order has already been refunded.");
         }
 
-        if (request.Amount > order.Price)
+        if (order.Status != OrderStatus.Completed)
+        {
+            throw new InvalidOperationException("Only completed orders can be refunded.");
+        }
+
+        var maxRefund = order.ClientChargePrice > 0 ? order.ClientChargePrice : (order.ClientPrice ?? order.Price);
+        if (request.Amount > maxRefund)
         {
             throw new InvalidOperationException("Refund amount cannot exceed order price.");
         }
@@ -1442,6 +1660,46 @@ public class OrderService : IOrderService
         return await GetOrderByIdAsync(orderId, userId, "Admin");
     }
 
+    public async Task<OrderResponseDto> UpdateClientChargePriceAsync(Guid orderId, UpdateClientChargePriceRequestDto request, Guid userId, string? userRole = null)
+    {
+        if (userRole != "Admin" && userRole != "SuperAdmin")
+            throw new UnauthorizedAccessException("Only Admin or SuperAdmin can update client charge price.");
+
+        if (request.ClientChargePrice < 0)
+            throw new InvalidOperationException("Client charge price cannot be negative.");
+
+        var order = await _context.LogoOrders
+            .Include(o => o.Client)
+                .ThenInclude(c => c.User)
+            .Include(o => o.Designer)
+                .ThenInclude(d => d.User)
+            .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+
+        if (order == null)
+        {
+            throw new InvalidOperationException("Order not found.");
+        }
+
+        if (order.IsInvoiced)
+        {
+            throw new InvalidOperationException("Cannot change client price after order has been invoiced.");
+        }
+
+        order.ClientChargePrice = request.ClientChargePrice;
+        order.ClientPrice = request.ClientChargePrice;
+        order.Price = request.ClientChargePrice;
+        order.UpdatedAt = DateTime.UtcNow;
+        order.UpdatedBy = userId;
+        // Track who updated the price (UpdateClientChargePrice is Admin/SuperAdmin only)
+        order.PriceUpdatedByRole = userRole == "SuperAdmin" ? "SuperAdmin" : "Admin";
+        order.PriceUpdatedByUserId = userId;
+        order.PriceUpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return await GetOrderByIdAsync(orderId, userId, "Admin");
+    }
+
     // Keep DeleteOrderAsync for backward compatibility but mark as obsolete
     [Obsolete("Use CancelOrderAsync instead. Orders should never be hard-deleted.")]
     public async Task<bool> DeleteOrderAsync(Guid orderId, Guid userId, string? userRole = null)
@@ -1476,31 +1734,25 @@ public class OrderService : IOrderService
                 if (currentStatus == OrderStatus.PreviewDelivered)
                 {
                     allowedStatuses.Add(OrderStatus.RevisionRequested);
-                    allowedStatuses.Add(OrderStatus.FinalApproved);
+                    allowedStatuses.Add(OrderStatus.ClientApproved);
                 }
-                // Clients can cancel their own orders in certain statuses
-                if (isOrderOwner && (currentStatus == OrderStatus.WaitingForAdminApproval || 
-                                     currentStatus == OrderStatus.PriceApprovalPending ||
-                                     currentStatus == OrderStatus.Pending))
-                {
-                    allowedStatuses.Add(OrderStatus.Cancelled);
-                }
+                // Clients cancel via CancelOrder endpoint, not UpdateOrderStatus. No Cancelled status in UpdateOrderStatus.
                 break;
 
             case "Designer":
-                // Designers can only:
-                // - Mark as PreviewDelivered when uploading files (usually handled by file upload)
-                // - Update to PreviewDelivered if in InProgress or RevisionRequested
-                if (currentStatus == OrderStatus.InProgress || currentStatus == OrderStatus.RevisionRequested)
-                {
-                    allowedStatuses.Add(OrderStatus.PreviewDelivered);
-                }
+                // Designers cannot change order status via UpdateOrderStatus - upload preview files only
+                // (status change to PreviewDelivered happens via file upload flow, not this endpoint)
                 break;
 
             case "Admin":
             case "SuperAdmin":
                 // Admins and SuperAdmins have full control - can set any status
+                // Exception: Revision workflow - Admin must NOT move RevisionRequested -> InProgress
                 allowedStatuses.AddRange(Enum.GetValues<OrderStatus>());
+                if (currentStatus == OrderStatus.RevisionRequested)
+                {
+                    allowedStatuses.Remove(OrderStatus.InProgress);
+                }
                 break;
 
             default:
@@ -1545,6 +1797,26 @@ public class OrderService : IOrderService
         }
 
         return userIds.Distinct().ToList();
+    }
+
+    private async Task ApplyFileCountsAsync(List<OrderResponseDto> response, List<Guid> orderIds)
+    {
+        if (orderIds.Count == 0) return;
+
+        var counts = await _context.LogoFiles
+            .Where(f => orderIds.Contains(f.OrderId) && !f.IsDeleted)
+            .GroupBy(f => f.OrderId)
+            .Select(g => new { OrderId = g.Key, Total = g.Count(), Visible = g.Count(f => f.IsVisibleToClient) })
+            .ToDictionaryAsync(x => x.OrderId, x => (x.Total, x.Visible));
+
+        foreach (var order in response)
+        {
+            if (counts.TryGetValue(order.Id, out var c))
+            {
+                order.FileCount = c.Total;
+                order.VisibleFileCount = c.Visible;
+            }
+        }
     }
 
     private async Task<List<Guid>> GetAdminAndSuperAdminUserIdsAsync()

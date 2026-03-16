@@ -1,0 +1,18 @@
+<div class="client-retention-chart">
+  <apx-chart
+    *ngIf="chartOptions"
+    [series]="chartOptions.series"
+    [chart]="chartOptions.chart"
+    [stroke]="chartOptions.stroke"
+    [colors]="chartOptions.colors"
+    [xaxis]="chartOptions.xaxis"
+    [yaxis]="chartOptions.yaxis"
+    [tooltip]="chartOptions.tooltip"
+    [legend]="chartOptions.legend"
+    [dataLabels]="chartOptions.dataLabels">
+  </apx-chart>
+  <div *ngIf="!retentionStats?.retentionTrend?.length" class="empty-state">
+    <i class="pi pi-chart-line"></i>
+    <p>No retention trend data available.</p>
+  </div>
+</div>

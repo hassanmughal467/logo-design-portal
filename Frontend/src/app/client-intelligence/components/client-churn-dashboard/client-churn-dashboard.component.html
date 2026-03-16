@@ -1,0 +1,93 @@
+<div class="client-churn-dashboard">
+  <!-- KPI Cards -->
+  <div class="dashboard-row" *ngIf="retentionStats">
+    <div class="kpi-cards">
+      <div class="kpi-card kpi-healthy">
+        <div class="kpi-icon"><i class="pi pi-check-circle"></i></div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ retentionStats.healthyCount | number }}</span>
+          <span class="kpi-label">Healthy</span>
+        </div>
+      </div>
+      <div class="kpi-card kpi-warning">
+        <div class="kpi-icon"><i class="pi pi-exclamation-triangle"></i></div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ retentionStats.warningCount | number }}</span>
+          <span class="kpi-label">Warning</span>
+        </div>
+      </div>
+      <div class="kpi-card kpi-high-risk">
+        <div class="kpi-icon"><i class="pi pi-exclamation-circle"></i></div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ retentionStats.highRiskCount | number }}</span>
+          <span class="kpi-label">High Risk</span>
+        </div>
+      </div>
+      <div class="kpi-card kpi-churn">
+        <div class="kpi-icon"><i class="pi pi-user-minus"></i></div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ retentionStats.churnLikelyCount | number }}</span>
+          <span class="kpi-label">Churn Likely</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading-overlay">
+    <p-progressSpinner strokeWidth="4"></p-progressSpinner>
+  </div>
+
+  <div *ngIf="apiError" class="api-error-banner">
+    <i class="pi pi-exclamation-triangle"></i>
+    <div>
+      <strong>Churn Analytics API unavailable.</strong> Ensure the backend is running.
+      <a (click)="loadData()" class="retry-link">Retry</a>
+    </div>
+  </div>
+
+  <div *ngIf="!loading && !apiError" class="dashboard-charts">
+    <!-- Client Health Distribution + Retention Trend -->
+    <div class="dashboard-row two-col">
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-chart-pie"></i> Client Health Distribution</h3>
+          </div>
+        </ng-template>
+        <app-client-health-distribution [retentionStats]="retentionStats"></app-client-health-distribution>
+      </p-card>
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-chart-line"></i> Retention Trend</h3>
+          </div>
+        </ng-template>
+        <app-client-retention-chart [retentionStats]="retentionStats"></app-client-retention-chart>
+      </p-card>
+    </div>
+
+    <!-- Churn Alerts Panel (30+ days inactive) -->
+    <div class="dashboard-row full-width">
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-bell"></i> Churn Alerts (30+ Days Inactive)</h3>
+          </div>
+        </ng-template>
+        <app-client-churn-alerts-panel [items]="churnAlerts"></app-client-churn-alerts-panel>
+      </p-card>
+    </div>
+
+    <!-- Churn Risk Table -->
+    <div class="dashboard-row full-width">
+      <p-card styleClass="chart-card">
+        <ng-template pTemplate="header">
+          <div class="card-header">
+            <h3><i class="pi pi-list"></i> Churn Risk Table</h3>
+          </div>
+        </ng-template>
+        <app-client-risk-table [items]="riskScores"></app-client-risk-table>
+      </p-card>
+    </div>
+  </div>
+</div>

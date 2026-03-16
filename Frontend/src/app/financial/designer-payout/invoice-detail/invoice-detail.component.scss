@@ -1,0 +1,81 @@
+.invoice-detail-page {
+  .loading-state {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-xl);
+  }
+
+  .invoice-summary-card .invoice-meta {
+    p {
+      margin: 0.25rem 0;
+      font-size: 0.9rem;
+    }
+  }
+
+  .adjustment-group {
+    margin-bottom: var(--spacing-md);
+
+    h5 {
+      margin: 0 0 var(--spacing-xs) 0;
+      font-size: 0.9rem;
+      color: var(--text-color-secondary);
+      font-weight: 600;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: var(--spacing-lg);
+    }
+  }
+
+  .totals-section {
+    padding-top: var(--spacing-md);
+    margin-bottom: 0;
+
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      padding: var(--spacing-sm) 0;
+      font-size: 0.95rem;
+
+      &.final {
+        font-weight: 700;
+        font-size: 1.1rem;
+        margin-top: var(--spacing-sm);
+        padding-top: var(--spacing-md);
+        border-top: 1px solid var(--surface-border);
+      }
+    }
+  }
+
+  .actions-section {
+    margin-top: var(--spacing-lg);
+  }
+
+  a {
+    color: var(--primary-color);
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  .status-badge {
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+
+    &.badge-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: #059669;
+    }
+
+    &.badge-warning {
+      background: rgba(245, 158, 11, 0.15);
+      color: #d97706;
+    }
+  }
+}

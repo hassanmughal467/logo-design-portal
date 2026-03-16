@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { Router, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { AuthService } from '@core/services/auth.service';
 import { NotificationService } from '@core/services/notification.service';
@@ -8,6 +8,7 @@ import { getNotificationIcon } from '@shared/utils/notification-helpers';
 import { Observable, Subject } from 'rxjs';
 import { filter, takeUntil } from 'rxjs/operators';
 import { MenuItem } from 'primeng/api';
+import { OverlayPanel } from 'primeng/overlaypanel';
 
 @Component({
   selector: 'app-main-layout',
@@ -15,6 +16,7 @@ import { MenuItem } from 'primeng/api';
   styleUrls: ['./main-layout.component.scss']
 })
 export class MainLayoutComponent implements OnInit, OnDestroy {
+  @ViewChild('notificationPanel') notificationPanel!: OverlayPanel;
   user: User | null = null;
   sidebarVisible = true;
   globalSearchQuery = '';
@@ -51,19 +53,26 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
           this.buildMenuItems();
           this.buildUserMenu();
           this.loadRecentNotifications();
-          console.log('Menu items built:', this.menuItems);
         }
       });
 
-    // Refresh notification dropdown when realtime notification arrives
+    // Refresh notification dropdown only when it is already open (never auto-open on realtime notification)
     this.notificationService.refreshRequested$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.loadNotifications(5));
+      .subscribe(() => {
+        if (this.notificationPanel?.overlayVisible) {
+          this.loadNotifications(5);
+        }
+      });
 
-    // Activity feed: update existing notification in place when SignalR pushes an update
+    // Activity feed: update existing notification in place when SignalR pushes an update (only if panel is open)
     this.notificationService.notificationReceived$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(notification => this.mergeRealtimeNotification(notification));
+      .subscribe(notification => {
+        if (this.notificationPanel?.overlayVisible) {
+          this.mergeRealtimeNotification(notification);
+        }
+      });
 
     // Update breadcrumbs and close sidebar on mobile when route changes
     this.router.events
@@ -116,16 +125,14 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
         label: 'My Profile',
         icon: 'pi pi-user',
         command: () => {
-          // TODO: Navigate to profile page
-          console.log('Navigate to profile');
+          this.router.navigate(['/profile']);
         }
       },
       {
         label: 'Settings',
         icon: 'pi pi-cog',
         command: () => {
-          // TODO: Navigate to settings
-          console.log('Navigate to settings');
+          this.router.navigate(['/settings']);
         }
       },
       {
@@ -263,7 +270,6 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
 
   private buildMenuItems(): void {
     const user = this.authService.getCurrentUser();
-    console.log('buildMenuItems - user:', user, 'role:', user?.role);
     
     if (!user) {
       console.warn('No user found');
@@ -279,22 +285,15 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
     
     // Convert role to string for comparison (handles enum and string)
     const userRole = String(user.role);
-    console.log('User role as string:', userRole);
 
-    // Base menu items - Dashboard only (other items are role-specific)
-    // Use routerLink only (no command) to avoid double navigation / sidebar blink
+    // Base menu items - Dashboard
     this.menuItems = [
-      {
-        label: 'Dashboard',
-        icon: 'pi pi-home',
-        routerLink: '/dashboard',
-        routerLinkActiveOptions: { exact: false }
-      }
+      { label: 'Dashboard', icon: 'pi pi-home', routerLink: '/dashboard', routerLinkActiveOptions: { exact: false } }
     ];
 
-    // Add menu items based on role
     if (userRole === 'SuperAdmin' || userRole === 'Admin') {
       this.menuItems.push(
+        { label: 'Operations', styleClass: 'menu-section-header' },
         { label: 'Orders', icon: 'pi pi-shopping-cart', routerLink: '/orders' },
         { label: 'Users', icon: 'pi pi-users', routerLink: '/users', badge: userRole === 'SuperAdmin' ? 'Admin' : undefined },
         { label: 'Clients', icon: 'pi pi-user', routerLink: '/clients' },
@@ -303,60 +302,56 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
         { label: 'Messages', icon: 'pi pi-inbox', routerLink: '/messages' },
         { label: 'Reviews', icon: 'pi pi-star', routerLink: '/reviews' },
         { label: 'Files', icon: 'pi pi-file', routerLink: '/files' },
-        { label: 'Invoices', icon: 'pi pi-money-bill', routerLink: '/invoices' },
+        { label: 'Analytics', styleClass: 'menu-section-header' },
         { label: 'Detail Analytics', icon: 'pi pi-chart-bar', routerLink: '/analytics' },
-        { label: 'Financial Overview', icon: 'pi pi-wallet', routerLink: '/financial' }
+        { label: 'Client Intelligence', icon: 'pi pi-chart-pie', routerLink: '/client-intelligence' },
+        { label: 'Financial', styleClass: 'menu-section-header' },
+        { label: 'Invoices', icon: 'pi pi-money-bill', routerLink: '/invoices' },
+        { label: 'Financial Overview', icon: 'pi pi-wallet', routerLink: '/financial', routerLinkActiveOptions: { exact: true } },
+        { label: 'Designer Payout', icon: 'pi pi-money-bill', routerLink: '/financial/designer-payout' },
+        { label: 'Client Pricing', icon: 'pi pi-tag', routerLink: '/client-pricing' },
+        { label: 'Designer Pricing', icon: 'pi pi-tag', routerLink: '/designer-pricing' }
       );
     }
 
     if (userRole === 'SuperAdmin') {
-      this.menuItems.push({
-        label: 'Permissions',
-        icon: 'pi pi-key',
-        routerLink: '/permissions',
-        badge: 'Admin'
-      });
+      this.menuItems.push(
+        { label: 'Administration', styleClass: 'menu-section-header' },
+        { label: 'Permissions', icon: 'pi pi-key', routerLink: '/permissions', badge: 'Admin' }
+      );
     }
 
     if (userRole === 'Client') {
       this.menuItems.push(
+        { label: 'Operations', styleClass: 'menu-section-header' },
         { label: 'My Orders', icon: 'pi pi-shopping-cart', routerLink: '/orders' },
         { label: 'My Projects', icon: 'pi pi-palette', routerLink: '/projects' },
-        { label: 'Detail Analytics', icon: 'pi pi-chart-bar', routerLink: '/analytics' },
         { label: 'Messages', icon: 'pi pi-inbox', routerLink: '/messages' },
         { label: 'Files', icon: 'pi pi-file', routerLink: '/files' },
+        { label: 'Analytics', styleClass: 'menu-section-header' },
+        { label: 'Detail Analytics', icon: 'pi pi-chart-bar', routerLink: '/analytics' },
+        { label: 'Financial', styleClass: 'menu-section-header' },
         { label: 'Invoices', icon: 'pi pi-money-bill', routerLink: '/invoices' },
-        { label: 'Financial Overview', icon: 'pi pi-wallet', routerLink: '/financial' }
+        { label: 'Financial Overview', icon: 'pi pi-wallet', routerLink: '/financial', routerLinkActiveOptions: { exact: true } }
       );
     }
 
     if (userRole === 'Designer') {
       this.menuItems.push(
-        { label: 'Assigned Orders', icon: 'pi pi-shopping-cart', routerLink: '/orders' },
+        { label: 'Operations', styleClass: 'menu-section-header' },
+        { label: 'Orders', icon: 'pi pi-shopping-cart', routerLink: '/orders' },
         { label: 'My Projects', icon: 'pi pi-palette', routerLink: '/projects' },
         { label: 'Messages', icon: 'pi pi-inbox', routerLink: '/messages' },
         { label: 'Files', icon: 'pi pi-file', routerLink: '/files' },
-        { label: 'Invoices', icon: 'pi pi-money-bill', routerLink: '/invoices' },
-        { label: 'Detail Analytics', icon: 'pi pi-chart-bar', routerLink: '/analytics' },
-        { label: 'Financial Overview', icon: 'pi pi-wallet', routerLink: '/financial' }
+        { label: 'Financial', styleClass: 'menu-section-header' },
+        { label: 'Designer Payout', icon: 'pi pi-money-bill', routerLink: '/financial/designer-payout' }
       );
     }
 
-    // Add Notifications for all authenticated users
-    this.menuItems.push({
-      label: 'Notifications',
-      icon: 'pi pi-bell',
-      routerLink: '/notifications',
-      routerLinkActiveOptions: { exact: true }
-    });
-
-    // Add Settings at the end for all authenticated users
-    this.menuItems.push({
-      label: 'Settings',
-      icon: 'pi pi-cog',
-      routerLink: '/settings'
-    });
+    this.menuItems.push(
+      { label: 'Notifications', icon: 'pi pi-bell', routerLink: '/notifications', routerLinkActiveOptions: { exact: true } },
+      { label: 'Settings', icon: 'pi pi-cog', routerLink: '/settings' }
+    );
     
-    console.log('Menu items built. Total:', this.menuItems.length, 'Items:', this.menuItems.map(m => m.label));
   }
 }

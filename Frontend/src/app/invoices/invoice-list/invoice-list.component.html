@@ -1,73 +1,19 @@
 <div class="invoices-page">
-  <div class="page-header">
-    <div class="header-content">
-      <h1 class="page-title">Invoices Management</h1>
-      <p class="page-subtitle">Track payments and manage invoices</p>
+  <app-page-header title="Invoices Management" subtitle="Track payments and manage invoices">
+    <div actions *ngIf="canManageInvoices">
+      <p-button label="Generate Invoice" icon="pi pi-plus" (onClick)="openGenerateDialog()" styleClass="p-button-primary"></p-button>
     </div>
-    <div class="header-actions">
-      <p-button 
-        label="Generate Invoice" 
-        icon="pi pi-plus" 
-        (onClick)="openGenerateDialog()"
-        styleClass="p-button-primary">
-      </p-button>
-    </div>
-  </div>
+  </app-page-header>
 
   <!-- Invoice Statistics Cards -->
-  <div class="stats-grid">
-    <div class="stat-card stat-primary">
-      <div class="stat-icon-wrapper">
-        <div class="stat-icon bg-primary">
-          <i class="pi pi-file-pdf"></i>
-        </div>
-      </div>
-      <div class="stat-content">
-        <h3 class="stat-value">{{ invoiceStats.total }}</h3>
-        <p class="stat-label">Total Invoices</p>
-      </div>
-    </div>
-
-    <div class="stat-card stat-success">
-      <div class="stat-icon-wrapper">
-        <div class="stat-icon bg-success">
-          <i class="pi pi-check-circle"></i>
-        </div>
-      </div>
-      <div class="stat-content">
-        <h3 class="stat-value">{{ invoiceStats.paid }}</h3>
-        <p class="stat-label">Paid</p>
-        <p class="stat-amount">{{ formatCurrency(invoiceStats.paidAmount) }}</p>
-      </div>
-    </div>
-
-    <div class="stat-card stat-warning">
-      <div class="stat-icon-wrapper">
-        <div class="stat-icon bg-warning">
-          <i class="pi pi-clock"></i>
-        </div>
-      </div>
-      <div class="stat-content">
-        <h3 class="stat-value">{{ invoiceStats.unpaid }}</h3>
-        <p class="stat-label">Unpaid</p>
-        <p class="stat-amount">{{ formatCurrency(invoiceStats.pendingAmount) }}</p>
-      </div>
-    </div>
-
-    <div class="stat-card stat-danger">
-      <div class="stat-icon-wrapper">
-        <div class="stat-icon bg-danger">
-          <i class="pi pi-exclamation-triangle"></i>
-        </div>
-      </div>
-      <div class="stat-content">
-        <h3 class="stat-value">{{ invoiceStats.overdue }}</h3>
-        <p class="stat-label">Overdue</p>
-      </div>
-    </div>
+  <div class="kpi-grid">
+    <app-kpi-card label="Total Invoices" [value]="invoiceStats.total" icon="pi pi-file-pdf" variant="primary"></app-kpi-card>
+    <app-kpi-card [label]="'Paid (' + formatCurrency(invoiceStats.paidAmount) + ')'" [value]="invoiceStats.paid" icon="pi pi-check-circle" variant="success"></app-kpi-card>
+    <app-kpi-card [label]="'Unpaid (' + formatCurrency(invoiceStats.pendingAmount) + ')'" [value]="invoiceStats.unpaid" icon="pi pi-clock" variant="warning"></app-kpi-card>
+    <app-kpi-card label="Overdue" [value]="invoiceStats.overdue" icon="pi pi-exclamation-triangle" variant="danger"></app-kpi-card>
   </div>
 
-  <p-card styleClass="invoices-card">
+  <app-card-container>
     <div class="invoice-toolbar">
       <p-button label="Download CSV" icon="pi pi-download" styleClass="p-button-outlined p-button-sm"
         (onClick)="downloadInvoiceReport('csv')"></p-button>
@@ -90,7 +36,7 @@
     </div>
     <p-tabView [(activeIndex)]="selectedInvoiceTabIndex">
       <p-tabPanel header="Unpaid" leftIcon="pi pi-exclamation-circle">
-        <div class="invoice-actions-bar">
+        <div class="invoice-actions-bar" *ngIf="canManageInvoices">
           <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getUnpaidInvoices().length === 0"
             (onClick)="selectedInvoices = getUnpaidInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
         </div>
@@ -98,13 +44,13 @@
           [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
-              <th style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
+              <th *ngIf="canManageInvoices" style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
               <th>Invoice #</th><th>Amount</th><th>Status</th><th>Due Date</th><th>Actions</th>
             </tr>
           </ng-template>
           <ng-template pTemplate="body" let-invoice>
             <tr>
-              <td><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
+              <td *ngIf="canManageInvoices"><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
               <td>{{ invoice.invoiceNumber }}</td>
               <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
               <td>
@@ -118,11 +64,11 @@
                 (onClick)="openPaymentDialog(invoice)"></p-button></td>
             </tr>
           </ng-template>
-          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="6">No unpaid invoices</td></tr></ng-template>
+          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="canManageInvoices ? 6 : 5">No unpaid invoices</td></tr></ng-template>
         </p-table>
       </p-tabPanel>
       <p-tabPanel header="Pending" leftIcon="pi pi-clock">
-        <div class="invoice-actions-bar">
+        <div class="invoice-actions-bar" *ngIf="canManageInvoices">
           <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getPendingInvoices().length === 0"
             (onClick)="selectedInvoices = getPendingInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
         </div>
@@ -130,13 +76,13 @@
           [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
-              <th style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
+              <th *ngIf="canManageInvoices" style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
               <th>Invoice #</th><th>Amount</th><th>Due Date</th><th>Actions</th>
             </tr>
           </ng-template>
           <ng-template pTemplate="body" let-invoice>
             <tr>
-              <td><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
+              <td *ngIf="canManageInvoices"><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
               <td>{{ invoice.invoiceNumber }}</td>
               <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
               <td>{{ formatDate(invoice.dueDate) }}</td>
@@ -144,11 +90,11 @@
                 (onClick)="openPaymentDialog(invoice)"></p-button></td>
             </tr>
           </ng-template>
-          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="5">No pending invoices</td></tr></ng-template>
+          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="canManageInvoices ? 5 : 4">No pending invoices</td></tr></ng-template>
         </p-table>
       </p-tabPanel>
       <p-tabPanel header="Due" leftIcon="pi pi-exclamation-triangle">
-        <div class="invoice-actions-bar">
+        <div class="invoice-actions-bar" *ngIf="canManageInvoices">
           <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getDueInvoices().length === 0"
             (onClick)="selectedInvoices = getDueInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
         </div>
@@ -156,13 +102,13 @@
           [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
-              <th style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
+              <th *ngIf="canManageInvoices" style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
               <th>Invoice #</th><th>Amount</th><th>Due Date</th><th>Actions</th>
             </tr>
           </ng-template>
           <ng-template pTemplate="body" let-invoice>
             <tr>
-              <td><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
+              <td *ngIf="canManageInvoices"><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
               <td>{{ invoice.invoiceNumber }}</td>
               <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
               <td><span class="overdue">{{ formatDate(invoice.dueDate) }}</span></td>
@@ -170,7 +116,7 @@
                 (onClick)="openPaymentDialog(invoice)"></p-button></td>
             </tr>
           </ng-template>
-          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="5">No due invoices</td></tr></ng-template>
+          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="canManageInvoices ? 5 : 4">No due invoices</td></tr></ng-template>
         </p-table>
       </p-tabPanel>
       <p-tabPanel header="Paid" leftIcon="pi pi-check-circle">
@@ -190,7 +136,7 @@
         </p-table>
       </p-tabPanel>
     </p-tabView>
-  </p-card>
+  </app-card-container>
 
   <!-- Generate Invoice Dialog -->
   <p-dialog 
@@ -203,6 +149,35 @@
     [resizable]="false">
     <div class="dialog-content">
       <div class="form-group">
+        <label>Client <span class="required">*</span></label>
+        <p-dropdown 
+          [options]="clientsWithUninvoiced"
+          [(ngModel)]="selectedClient"
+          optionLabel="companyName"
+          placeholder="Select a client with uninvoiced orders"
+          [disabled]="loadingClients"
+          (onChange)="onClientSelected()"
+          [filter]="true"
+          filterBy="companyName,clientName"
+          class="full-width"
+          appendTo="body">
+          <ng-template let-client pTemplate="item">
+            <div class="client-option">
+              <span class="client-name">{{ client.companyName || client.clientName }}</span>
+              <span class="client-meta">{{ client.uninvoicedOrderCount }} uninvoiced · {{ formatCurrency(client.totalPendingAmount) }} pending</span>
+            </div>
+          </ng-template>
+          <ng-template pTemplate="selectedItem" let-client>
+            <span *ngIf="client">{{ client.companyName || client.clientName }} ({{ client.uninvoicedOrderCount }} orders)</span>
+            <span *ngIf="!client">Select a client</span>
+          </ng-template>
+        </p-dropdown>
+        <small class="text-muted">Only clients with uninvoiced completed orders are shown. Clients who have cleared all invoices are excluded.</small>
+        <small *ngIf="!loadingClients && clientsWithUninvoiced.length === 0" class="text-muted" style="display: block; margin-top: 0.5rem; color: var(--green-600);">
+          <i class="pi pi-check-circle"></i> No clients with uninvoiced orders. All caught up!
+        </small>
+      </div>
+      <div class="form-group" *ngIf="selectedClient">
         <label>Billing Type</label>
         <p-dropdown 
           [options]="billingTypes"
@@ -214,7 +189,7 @@
           appendTo="body">
         </p-dropdown>
       </div>
-      <div class="form-group">
+      <div class="form-group" *ngIf="selectedClient">
         <label>Select Orders (Multiple Selection)</label>
         <p-multiSelect 
           [options]="availableOrders"
@@ -222,6 +197,7 @@
           optionLabel="label"
           optionValue="value"
           placeholder="Select completed orders"
+          [disabled]="loadingOrders"
           [filter]="true"
           [showClear]="true"
           class="full-width"
@@ -241,7 +217,7 @@
         label="Generate Invoice" 
         icon="pi pi-check"
         (onClick)="generateInvoice()"
-        [disabled]="selectedOrderIds.length === 0"
+        [disabled]="!selectedClient || selectedOrderIds.length === 0"
         styleClass="p-button-primary modal-footer-btn">
       </p-button>
     </ng-template>

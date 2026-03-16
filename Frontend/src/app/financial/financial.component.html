@@ -1,186 +1,149 @@
 <div class="financial-page">
-  <div class="page-header">
-    <div class="header-content">
-      <h1 class="page-title">Financial Overview</h1>
-      <p class="page-subtitle">Comprehensive financial insights and reports</p>
+  <app-page-header
+    title="Financial Overview"
+    [subtitle]="isAdmin ? 'Comprehensive financial insights and reports' : 'How much am I spending?'">
+  </app-page-header>
+
+  <!-- Admin/SuperAdmin: Full Financial Analytics Dashboard -->
+  <div *ngIf="isAdmin">
+    <div *ngIf="loading" class="loading-container">
+      <p-progressSpinner strokeWidth="4" [style]="{width: '50px', height: '50px'}"></p-progressSpinner>
+      <p>Loading financial analytics...</p>
     </div>
+    <app-financial-dashboard *ngIf="!loading"></app-financial-dashboard>
   </div>
 
-  <div *ngIf="loading" class="loading-container">
-    <p-progressSpinner></p-progressSpinner>
-    <p>Loading financial data...</p>
-  </div>
+  <!-- Client/Designer: Simplified Financial Dashboard -->
+  <div *ngIf="!isAdmin">
+    <div *ngIf="loading" class="loading-container">
+      <p-progressSpinner></p-progressSpinner>
+      <p>Loading financial data...</p>
+    </div>
 
-  <div *ngIf="!loading" class="financial-content">
-    <!-- Financial Snapshot Cards -->
-    <p-card styleClass="financial-card">
-      <div class="financial-snapshot-grid">
-        <div class="snapshot-card snapshot-primary">
-          <div class="snapshot-icon"><i class="pi pi-wallet"></i></div>
-          <div class="snapshot-info">
-            <span class="snapshot-value">{{ formatCurrency(financialSnapshot.lifetimeSpend) }}</span>
-            <span class="snapshot-label">Lifetime Spend</span>
+    <div *ngIf="!loading" class="financial-content">
+      <!-- Activity Overview -->
+      <p-card styleClass="financial-card">
+        <h3 class="kpi-section-title"><i class="pi pi-chart-bar"></i> Activity Overview</h3>
+        <div class="financial-snapshot-grid">
+          <div class="snapshot-card snapshot-info-color">
+            <div class="snapshot-icon"><i class="pi pi-calendar"></i></div>
+            <div class="snapshot-info">
+              <span class="snapshot-value">{{ financialSnapshot.ordersThisMonth }}</span>
+              <span class="snapshot-label">Orders This Month</span>
+            </div>
           </div>
-        </div>
-        <div class="snapshot-card snapshot-info-color">
-          <div class="snapshot-icon"><i class="pi pi-chart-line"></i></div>
-          <div class="snapshot-info">
-            <span class="snapshot-value">{{ formatCurrency(financialSnapshot.monthlySpend) }}</span>
-            <span class="snapshot-label">Monthly Spend</span>
+          <div class="snapshot-card snapshot-secondary">
+            <div class="snapshot-icon"><i class="pi pi-shopping-cart"></i></div>
+            <div class="snapshot-info">
+              <span class="snapshot-value">{{ financialSnapshot.totalOrders }}</span>
+              <span class="snapshot-label">Total Orders</span>
+            </div>
           </div>
-        </div>
-        <div class="snapshot-card snapshot-warning">
-          <div class="snapshot-icon"><i class="pi pi-percentage"></i></div>
-          <div class="snapshot-info">
-            <span class="snapshot-value">{{ formatCurrency(financialSnapshot.averageOrderValue) }}</span>
-            <span class="snapshot-label">Avg Order Value</span>
+          <div class="snapshot-card snapshot-success">
+            <div class="snapshot-icon"><i class="pi pi-check-circle"></i></div>
+            <div class="snapshot-info">
+              <span class="snapshot-value">{{ financialSnapshot.completedOrders }}</span>
+              <span class="snapshot-label">Completed Orders</span>
+            </div>
           </div>
-        </div>
-        <div class="snapshot-card snapshot-success">
-          <div class="snapshot-icon"><i class="pi pi-check-circle"></i></div>
-          <div class="snapshot-info">
-            <span class="snapshot-value">{{ financialSnapshot.totalInvoicesPaid }}</span>
-            <span class="snapshot-label">Invoices Paid</span>
-          </div>
-        </div>
-        <div class="snapshot-card snapshot-danger">
-          <div class="snapshot-icon"><i class="pi pi-clock"></i></div>
-          <div class="snapshot-info">
-            <span class="snapshot-value">{{ financialSnapshot.totalInvoicesPending }}</span>
-            <span class="snapshot-label">Invoices Pending</span>
-          </div>
-        </div>
-      </div>
-    </p-card>
-
-    <!-- Weekly and Monthly Summaries -->
-    <div class="summary-cards-row">
-      <p-card styleClass="summary-card">
-        <h3 class="summary-title"><i class="pi pi-calendar-week"></i> This Week</h3>
-        <div class="summary-content">
-          <div class="summary-item">
-            <span class="summary-label">Total</span>
-            <span class="summary-value">{{ formatCurrency(weeklySummary.total) }}</span>
-          </div>
-          <div class="summary-item">
-            <span class="summary-label">Paid</span>
-            <span class="summary-value success">{{ formatCurrency(weeklySummary.paid) }}</span>
-          </div>
-          <div class="summary-item">
-            <span class="summary-label">Pending</span>
-            <span class="summary-value warning">{{ formatCurrency(weeklySummary.pending) }}</span>
+          <div class="snapshot-card snapshot-warning">
+            <div class="snapshot-icon"><i class="pi pi-clock"></i></div>
+            <div class="snapshot-info">
+              <span class="snapshot-value">{{ financialSnapshot.pendingOrders }}</span>
+              <span class="snapshot-label">Pending Orders</span>
+            </div>
           </div>
         </div>
       </p-card>
 
-      <p-card styleClass="summary-card">
-        <h3 class="summary-title"><i class="pi pi-calendar"></i> This Month</h3>
-        <div class="summary-content">
-          <div class="summary-item">
-            <span class="summary-label">Total</span>
-            <span class="summary-value">{{ formatCurrency(monthlySummary.total) }}</span>
+      <!-- Financial Overview -->
+      <p-card styleClass="financial-card">
+        <h3 class="kpi-section-title"><i class="pi pi-wallet"></i> Financial Overview</h3>
+        <div class="financial-snapshot-grid">
+          <div class="snapshot-card snapshot-primary">
+            <div class="snapshot-icon"><i class="pi pi-wallet"></i></div>
+            <div class="snapshot-info">
+              <span class="snapshot-value">{{ formatCurrency(financialSnapshot.lifetimeSpend) }}</span>
+              <span class="snapshot-label">Lifetime Spend</span>
+            </div>
           </div>
-          <div class="summary-item">
-            <span class="summary-label">Paid</span>
-            <span class="summary-value success">{{ formatCurrency(monthlySummary.paid) }}</span>
+          <div class="snapshot-card snapshot-info-color">
+            <div class="snapshot-icon"><i class="pi pi-chart-line"></i></div>
+            <div class="snapshot-info">
+              <span class="snapshot-value">{{ formatCurrency(financialSnapshot.spendThisMonth) }}</span>
+              <span class="snapshot-label">Spend This Month</span>
+            </div>
           </div>
-          <div class="summary-item">
-            <span class="summary-label">Pending</span>
-            <span class="summary-value warning">{{ formatCurrency(monthlySummary.pending) }}</span>
+          <div class="snapshot-card snapshot-warning">
+            <div class="snapshot-icon"><i class="pi pi-percentage"></i></div>
+            <div class="snapshot-info">
+              <span class="snapshot-value">{{ formatCurrency(financialSnapshot.averageOrderValue) }}</span>
+              <span class="snapshot-label">Average Order Value</span>
+            </div>
+          </div>
+          <div class="snapshot-card snapshot-success">
+            <div class="snapshot-icon"><i class="pi pi-check-circle"></i></div>
+            <div class="snapshot-info">
+              <span class="snapshot-value">{{ financialSnapshot.totalInvoicesPaid }}</span>
+              <span class="snapshot-label">Paid Invoices</span>
+            </div>
+          </div>
+          <div class="snapshot-card snapshot-danger">
+            <div class="snapshot-icon"><i class="pi pi-clock"></i></div>
+            <div class="snapshot-info">
+              <span class="snapshot-value">{{ financialSnapshot.totalInvoicesPending }}</span>
+              <span class="snapshot-label">Pending Invoices</span>
+            </div>
           </div>
         </div>
       </p-card>
+
+      <!-- Spending Insights Panel -->
+      <p-card *ngIf="isClient" styleClass="insights-card">
+        <h3 class="kpi-section-title"><i class="pi pi-lightbulb"></i> Insights</h3>
+        <div *ngIf="insightsLoading" class="insights-loading">
+          <p-progressSpinner strokeWidth="4" [style]="{width: '24px', height: '24px'}"></p-progressSpinner>
+          <span>Loading insights...</span>
+        </div>
+        <div *ngIf="!insightsLoading && financialInsights.length === 0" class="insights-empty">
+          <i class="pi pi-info-circle"></i>
+          <p>No insights available yet. Complete some orders to see personalized insights.</p>
+        </div>
+        <div *ngIf="!insightsLoading && financialInsights.length > 0" class="insights-list">
+          <div class="insight-item" *ngFor="let insight of financialInsights" [ngClass]="'insight-' + insight.severity">
+            <div class="insight-icon"><i class="pi" [ngClass]="insight.icon || 'pi-info-circle'"></i></div>
+            <span class="insight-message">{{ insight.message }}</span>
+          </div>
+        </div>
+      </p-card>
+
+      <!-- Charts -->
+      <div class="financial-charts-row">
+        <p-card styleClass="chart-card">
+          <h3 class="chart-title"><i class="pi pi-chart-line"></i> Monthly Spending Trend</h3>
+          <p class="chart-subtitle">Spending on completed orders by month</p>
+          <div class="chart-container">
+            <p-chart *ngIf="monthlySpendingChartData" type="line" [data]="monthlySpendingChartData" [options]="spendingChartOptions" [style]="{'height': '300px'}"></p-chart>
+            <div *ngIf="!monthlySpendingChartData" class="chart-empty"><p>No spending data</p></div>
+          </div>
+        </p-card>
+        <p-card styleClass="chart-card">
+          <h3 class="chart-title"><i class="pi pi-box"></i> Spending by Package</h3>
+          <p class="chart-subtitle">Spending on completed orders by package type</p>
+          <div class="chart-container">
+            <p-chart *ngIf="spendingByPackageChartData" type="bar" [data]="spendingByPackageChartData" [options]="packageChartOptions" [style]="{'height': '300px'}"></p-chart>
+            <div *ngIf="!spendingByPackageChartData" class="chart-empty"><p>No package data</p></div>
+          </div>
+        </p-card>
+      </div>
+      <p-card styleClass="chart-card">
+        <h3 class="chart-title"><i class="pi pi-file-edit"></i> Invoice Status Distribution</h3>
+        <div class="chart-container" style="height: 300px;">
+          <p-chart *ngIf="invoiceStatusChartData" type="doughnut" [data]="invoiceStatusChartData" [options]="invoiceStatusChartOptions"></p-chart>
+          <div *ngIf="!invoiceStatusChartData" class="chart-empty"><p>No invoice data</p></div>
+        </div>
+        <p-button label="View All Invoices" icon="pi pi-arrow-right" iconPos="right" styleClass="p-button-text p-button-sm" (onClick)="navigateToInvoices()"></p-button>
+      </p-card>
     </div>
-
-    <!-- Trend Chart -->
-    <p-card *ngIf="clientTrendChartData" styleClass="chart-card">
-      <h3 class="chart-title"><i class="pi pi-chart-bar"></i> Orders Trend</h3>
-      <div class="chart-container">
-        <p-chart type="bar" [data]="clientTrendChartData" [options]="clientTrendChartOptions" [style]="{'height': '300px'}"></p-chart>
-      </div>
-    </p-card>
-
-    <!-- Invoices Section -->
-    <p-card *ngIf="invoices.length > 0" styleClass="invoices-card">
-      <div class="card-header">
-        <h3 class="card-title"><i class="pi pi-file-pdf"></i> Invoices</h3>
-        <p-button 
-          label="View All Invoices" 
-          icon="pi pi-arrow-right" 
-          iconPos="right"
-          styleClass="p-button-text"
-          (onClick)="navigateToInvoices()">
-        </p-button>
-      </div>
-      
-      <p-tabView [(activeIndex)]="selectedInvoiceTabIndex">
-        <p-tabPanel header="All Invoices">
-          <p-table [value]="invoices" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
-            <ng-template pTemplate="header">
-              <tr>
-                <th>Invoice #</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Due Date</th>
-                <th>Paid Date</th>
-              </tr>
-            </ng-template>
-            <ng-template pTemplate="body" let-invoice>
-              <tr>
-                <td>{{ invoice.invoiceNumber || invoice.id }}</td>
-                <td>{{ formatCurrency(invoice.totalAmount || invoice.amount || 0) }}</td>
-                <td>
-                  <p-tag 
-                    [value]="invoice.status" 
-                    [severity]="invoice.status === 'Paid' ? 'success' : invoice.status === 'Overdue' ? 'danger' : 'warning'"
-                    [rounded]="true">
-                  </p-tag>
-                </td>
-                <td>{{ invoice.dueDate ? (invoice.dueDate | date:'short') : '-' }}</td>
-                <td>{{ invoice.paidDate ? (invoice.paidDate | date:'short') : '-' }}</td>
-              </tr>
-            </ng-template>
-          </p-table>
-        </p-tabPanel>
-        
-        <p-tabPanel header="Pending">
-          <p-table [value]="getPendingInvoices()" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
-            <ng-template pTemplate="header">
-              <tr>
-                <th>Invoice #</th>
-                <th>Amount</th>
-                <th>Due Date</th>
-              </tr>
-            </ng-template>
-            <ng-template pTemplate="body" let-invoice>
-              <tr>
-                <td>{{ invoice.invoiceNumber || invoice.id }}</td>
-                <td>{{ formatCurrency(invoice.totalAmount || invoice.amount || 0) }}</td>
-                <td>{{ invoice.dueDate ? (invoice.dueDate | date:'short') : '-' }}</td>
-              </tr>
-            </ng-template>
-          </p-table>
-        </p-tabPanel>
-        
-        <p-tabPanel header="Paid">
-          <p-table [value]="getPaidInvoices()" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
-            <ng-template pTemplate="header">
-              <tr>
-                <th>Invoice #</th>
-                <th>Amount</th>
-                <th>Paid Date</th>
-              </tr>
-            </ng-template>
-            <ng-template pTemplate="body" let-invoice>
-              <tr>
-                <td>{{ invoice.invoiceNumber || invoice.id }}</td>
-                <td>{{ formatCurrency(invoice.totalAmount || invoice.amount || 0) }}</td>
-                <td>{{ invoice.paidDate ? (invoice.paidDate | date:'short') : '-' }}</td>
-              </tr>
-            </ng-template>
-          </p-table>
-        </p-tabPanel>
-      </p-tabView>
-    </p-card>
   </div>
 </div>

@@ -1,0 +1,17 @@
+<div class="client-health-distribution">
+  <apx-chart
+    *ngIf="chartOptions"
+    [series]="chartOptions.series"
+    [chart]="chartOptions.chart"
+    [labels]="chartOptions.labels"
+    [colors]="chartOptions.colors"
+    [legend]="chartOptions.legend"
+    [plotOptions]="chartOptions.plotOptions"
+    [dataLabels]="chartOptions.dataLabels"
+    [tooltip]="chartOptions.tooltip">
+  </apx-chart>
+  <div *ngIf="!retentionStats || (retentionStats.healthyCount === 0 && retentionStats.warningCount === 0 && retentionStats.highRiskCount === 0 && retentionStats.churnLikelyCount === 0)" class="empty-state">
+    <i class="pi pi-chart-pie"></i>
+    <p>No client health data available.</p>
+  </div>
+</div>

@@ -1,0 +1,82 @@
+<div class="order-analytics">
+  <div class="empty-section" *ngIf="!data && !loading">
+    <i class="pi pi-chart-line"></i>
+    <p>No order analytics data available.</p>
+  </div>
+  <div class="charts-grid" *ngIf="data">
+    <div class="chart-card" *ngIf="ordersTrendChart">
+      <h3 class="chart-title"><i class="pi pi-chart-line"></i> Orders Trend (Monthly)</h3>
+      <apx-chart [series]="ordersTrendChart.series" [chart]="ordersTrendChart.chart"
+        [xaxis]="ordersTrendChart.xaxis" [stroke]="ordersTrendChart.stroke"
+        [fill]="ordersTrendChart.fill" [colors]="ordersTrendChart.colors"
+        [yaxis]="ordersTrendChart.yaxis" [tooltip]="ordersTrendChart.tooltip"
+        [dataLabels]="ordersTrendChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="ordersTrendDailyChart">
+      <h3 class="chart-title"><i class="pi pi-chart-area"></i> Orders Trend (Daily)</h3>
+      <apx-chart [series]="ordersTrendDailyChart.series" [chart]="ordersTrendDailyChart.chart"
+        [xaxis]="ordersTrendDailyChart.xaxis" [stroke]="ordersTrendDailyChart.stroke"
+        [fill]="ordersTrendDailyChart.fill" [colors]="ordersTrendDailyChart.colors"
+        [yaxis]="ordersTrendDailyChart.yaxis" [tooltip]="ordersTrendDailyChart.tooltip"
+        [dataLabels]="ordersTrendDailyChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="ordersByStatusChart">
+      <h3 class="chart-title"><i class="pi pi-chart-pie"></i> Orders by Status</h3>
+      <apx-chart [series]="ordersByStatusChart.series" [chart]="ordersByStatusChart.chart"
+        [labels]="ordersByStatusChart.labels" [colors]="ordersByStatusChart.colors"
+        [legend]="ordersByStatusChart.legend" [plotOptions]="ordersByStatusChart.plotOptions"
+        [dataLabels]="ordersByStatusChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="ordersByPackageChart">
+      <h3 class="chart-title"><i class="pi pi-chart-bar"></i> Orders by Package</h3>
+      <apx-chart [series]="ordersByPackageChart.series" [chart]="ordersByPackageChart.chart"
+        [xaxis]="ordersByPackageChart.xaxis" [plotOptions]="ordersByPackageChart.plotOptions"
+        [colors]="ordersByPackageChart.colors" [yaxis]="ordersByPackageChart.yaxis"
+        [dataLabels]="ordersByPackageChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="ordersByDayOfWeekChart">
+      <h3 class="chart-title"><i class="pi pi-calendar"></i> Orders by Day of Week</h3>
+      <apx-chart [series]="ordersByDayOfWeekChart.series" [chart]="ordersByDayOfWeekChart.chart"
+        [xaxis]="ordersByDayOfWeekChart.xaxis" [plotOptions]="ordersByDayOfWeekChart.plotOptions"
+        [colors]="ordersByDayOfWeekChart.colors" [yaxis]="ordersByDayOfWeekChart.yaxis"
+        [dataLabels]="ordersByDayOfWeekChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="ordersByHourChart">
+      <h3 class="chart-title"><i class="pi pi-clock"></i> Orders by Hour</h3>
+      <apx-chart [series]="ordersByHourChart.series" [chart]="ordersByHourChart.chart"
+        [xaxis]="ordersByHourChart.xaxis" [plotOptions]="ordersByHourChart.plotOptions"
+        [colors]="ordersByHourChart.colors" [yaxis]="ordersByHourChart.yaxis"
+        [dataLabels]="ordersByHourChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="ordersByClientChart">
+      <h3 class="chart-title"><i class="pi pi-users"></i> Orders by Client</h3>
+      <apx-chart [series]="ordersByClientChart.series" [chart]="ordersByClientChart.chart"
+        [xaxis]="ordersByClientChart.xaxis" [plotOptions]="ordersByClientChart.plotOptions"
+        [colors]="ordersByClientChart.colors" [yaxis]="ordersByClientChart.yaxis"
+        [dataLabels]="ordersByClientChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="ordersByDesignerChart">
+      <h3 class="chart-title"><i class="pi pi-user-edit"></i> Orders by Designer</h3>
+      <apx-chart [series]="ordersByDesignerChart.series" [chart]="ordersByDesignerChart.chart"
+        [xaxis]="ordersByDesignerChart.xaxis" [plotOptions]="ordersByDesignerChart.plotOptions"
+        [colors]="ordersByDesignerChart.colors" [yaxis]="ordersByDesignerChart.yaxis"
+        [dataLabels]="ordersByDesignerChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card chart-card-full" *ngIf="dailyActivityChart">
+      <h3 class="chart-title"><i class="pi pi-activity"></i> Daily Activity (Last 14 Days)</h3>
+      <apx-chart [series]="dailyActivityChart.series" [chart]="dailyActivityChart.chart"
+        [xaxis]="dailyActivityChart.xaxis" [stroke]="dailyActivityChart.stroke"
+        [colors]="dailyActivityChart.colors" [yaxis]="dailyActivityChart.yaxis"
+        [legend]="dailyActivityChart.legend" [dataLabels]="dailyActivityChart.dataLabels">
+      </apx-chart>
+    </div>
+  </div>
+</div>

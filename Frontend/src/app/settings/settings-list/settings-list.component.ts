@@ -365,8 +365,9 @@ export class SettingsListComponent implements OnInit, OnDestroy {
       this.paymentMethods.push({ ...this.newPaymentMethod });
     }
 
-    this.savePaymentMethods();
-    this.showPaymentDialog = false;
+    this.savePaymentMethods(() => {
+      this.showPaymentDialog = false;
+    });
   }
 
   deletePaymentMethod(index: number): void {
@@ -374,7 +375,7 @@ export class SettingsListComponent implements OnInit, OnDestroy {
     this.savePaymentMethods();
   }
 
-  savePaymentMethods(): void {
+  savePaymentMethods(onSuccess?: () => void): void {
     this.saving = true;
     this.apiService.post('settings/payment-methods', { paymentMethods: this.paymentMethods })
       .pipe(takeUntil(this.destroy$))
@@ -386,6 +387,7 @@ export class SettingsListComponent implements OnInit, OnDestroy {
             detail: 'Payment methods saved successfully'
           });
           this.saving = false;
+          onSuccess?.();
         },
         error: (error) => {
           console.error('Payment methods save error:', error);
@@ -499,17 +501,6 @@ export class SettingsListComponent implements OnInit, OnDestroy {
 
     this.changingPassword = true;
     
-    // Log the request for debugging
-    console.log('Changing password for user...');
-    console.log('New password length:', newPassword.length);
-    console.log('New password meets requirements:', {
-      hasUppercase: /[A-Z]/.test(newPassword),
-      hasLowercase: /[a-z]/.test(newPassword),
-      hasNumber: /\d/.test(newPassword),
-      hasSpecial: /[@$!%*?&#]/.test(newPassword),
-      minLength: newPassword.length >= 12
-    });
-    
     this.apiService.post('auth/change-password', {
       currentPassword: currentPassword,
       newPassword: newPassword,
@@ -517,8 +508,7 @@ export class SettingsListComponent implements OnInit, OnDestroy {
     })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response) => {
-          console.log('Password change successful:', response);
+        next: () => {
           this.messageService.add({
             severity: 'success',
             summary: 'Success',
@@ -531,10 +521,6 @@ export class SettingsListComponent implements OnInit, OnDestroy {
           this.changingPassword = false;
         },
         error: (error) => {
-          console.error('Password change error - Full error object:', error);
-          console.error('Error status:', error?.status);
-          console.error('Error error:', error?.error);
-          
           // Extract error message from different possible response formats
           let errorMessage = 'Failed to change password';
           

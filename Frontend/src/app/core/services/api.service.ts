@@ -17,35 +17,29 @@ export class ApiService {
 
   // Generic HTTP methods
   get<T>(endpoint: string): Observable<T> {
-    // Remove leading slash from endpoint if present to avoid double slashes
-    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
-    const fullUrl = `${this.baseUrl}/${cleanEndpoint}`;
-    console.log('API GET request:', fullUrl);
+    const fullUrl = this.buildUrl(endpoint);
     return this.http.get<T>(fullUrl);
   }
 
   post<T>(endpoint: string, body: any): Observable<T> {
-    // Check if body is FormData - if so, let browser set Content-Type with boundary
-    // Otherwise, explicitly set Content-Type to application/json
+    const fullUrl = this.buildUrl(endpoint);
     if (body instanceof FormData) {
-      // FormData will be handled automatically by HttpClient (browser sets Content-Type with boundary)
-      return this.http.post<T>(`${this.baseUrl}/${endpoint}`, body);
+      return this.http.post<T>(fullUrl, body);
     } else {
       // For JSON, explicitly set Content-Type header
       const headers = new HttpHeaders({
         'Content-Type': 'application/json'
       });
-      return this.http.post<T>(`${this.baseUrl}/${endpoint}`, body, { headers });
+      return this.http.post<T>(fullUrl, body, { headers });
     }
   }
 
   put<T>(endpoint: string, body: any): Observable<T> {
-    return this.http.put<T>(`${this.baseUrl}/${endpoint}`, body);
+    return this.http.put<T>(this.buildUrl(endpoint), body);
   }
 
   delete<T>(endpoint: string, body?: any): Observable<T> {
-    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
-    const fullUrl = `${this.baseUrl}/${cleanEndpoint}`;
+    const fullUrl = this.buildUrl(endpoint);
     if (body) {
       const headers = new HttpHeaders({
         'Content-Type': 'application/json'
@@ -56,13 +50,36 @@ export class ApiService {
   }
 
   patch<T>(endpoint: string, body: any): Observable<T> {
-    return this.http.patch<T>(`${this.baseUrl}/${endpoint}`, body);
+    return this.http.patch<T>(this.buildUrl(endpoint), body);
   }
 
-  // Download file as blob (for file downloads with authentication)
   getBlob(endpoint: string): Observable<Blob> {
-    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
-    const fullUrl = `${this.baseUrl}/${cleanEndpoint}`;
-    return this.http.get(fullUrl, { responseType: 'blob' });
+    return this.http.get(this.buildUrl(endpoint), { responseType: 'blob' });
+  }
+
+  private buildUrl(endpoint: string): string {
+    let clean = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+    if (clean.startsWith('api/')) clean = clean.substring(4);
+    return `${this.baseUrl}/${clean}`;
+  }
+
+  /** Extract items from paginated API response (handles both { data: { items } } and legacy { items } formats) */
+  static extractItems<T>(response: any): T[] {
+    if (!response) return [];
+    const items = response?.data?.items ?? response?.items;
+    return Array.isArray(items) ? items : [];
+  }
+
+  /** Extract pagination meta from API response */
+  static extractPagedMeta(response: any): { total: number; page: number; pageSize: number; totalPages: number } {
+    const data = response?.data ?? response;
+    const meta = response?.meta ?? {};
+    return {
+      total: data?.total ?? meta?.total ?? 0,
+      page: data?.page ?? meta?.page ?? 1,
+      pageSize: data?.pageSize ?? meta?.pageSize ?? 20,
+      totalPages: meta?.totalPages ?? (data?.pageSize > 0 && data?.total != null
+        ? Math.ceil(data.total / data.pageSize) : 0)
+    };
   }
 }

@@ -57,9 +57,29 @@
               "extractLicenses": false,
               "sourceMap": true,
               "namedChunks": true
+            },
+            "e2e": {
+              "buildOptimizer": false,
+              "optimization": false,
+              "vendorChunk": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.e2e.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
+        },
+        "test": {
+          "builder": "@angular-devkit/build-angular:karma",
+          "options": {
+            "main": "src/test.ts",
+            "polyfills": ["zone.js", "zone.js/testing"],
+            "tsConfig": "src/tsconfig.spec.json",
+            "karmaConfig": "karma.conf.js"
+          }
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
@@ -72,6 +92,9 @@
             },
             "development": {
               "browserTarget": "logo-design-portal-frontend:build:development"
+            },
+            "e2e": {
+              "browserTarget": "logo-design-portal-frontend:build:e2e"
             }
           },
           "defaultConfiguration": "development"

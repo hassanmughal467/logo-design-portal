@@ -40,7 +40,6 @@ export class DesignerListComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    console.log('DesignerListComponent initialized');
     this.loadDesigners();
   }
 
@@ -50,7 +49,6 @@ export class DesignerListComponent implements OnInit, OnDestroy {
   }
 
   loadDesigners(): void {
-    console.log('Loading designers...');
     this.loading = true;
     this.errorMessage = undefined;
     // Backend endpoint: GET /api/users/designer-profiles
@@ -58,12 +56,9 @@ export class DesignerListComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (designers) => {
-          console.log('Designers loaded:', designers);
           this.designers = designers || [];
           this.loading = false;
-          console.log('Designers count:', this.designers.length);
           if (this.designers.length === 0) {
-            console.log('No designers found');
             this.messageService.add({
               severity: 'info',
               summary: 'No Designers',

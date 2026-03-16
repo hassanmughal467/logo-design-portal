@@ -1,0 +1,212 @@
+<p-card styleClass="pricing-card">
+  <ng-template pTemplate="header">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Client Logo Pricing</h2>
+        <p class="card-subtitle">Set pricing rules per client and design category.</p>
+      </div>
+    </div>
+  </ng-template>
+
+  <!-- Toolbar Row -->
+  <p-toolbar styleClass="pricing-toolbar">
+    <ng-template pTemplate="left">
+      <p-dropdown
+        id="clientSelect"
+        [options]="clients"
+        [(ngModel)]="selectedClient"
+        optionLabel="label"
+        placeholder="Select Client"
+        [disabled]="loading"
+        (onChange)="onClientSelect()"
+        [filter]="true"
+        filterPlaceholder="Search clients"
+        [showClear]="true"
+        appendTo="body"
+        styleClass="client-dropdown">
+      </p-dropdown>
+      <small *ngIf="!loading && clients.length === 0" class="no-clients-hint">No clients found. Ensure client users have a company profile.</small>
+    </ng-template>
+    <ng-template pTemplate="right">
+      <p-button
+        *ngIf="selectedClient"
+        label="Add Pricing"
+        icon="pi pi-plus"
+        (onClick)="openAddDialog()"
+        styleClass="p-button-primary p-button-rounded add-pricing-btn">
+      </p-button>
+    </ng-template>
+  </p-toolbar>
+
+  <p-divider></p-divider>
+
+  <!-- Pricing Table -->
+  <div *ngIf="selectedClient" class="pricings-section">
+    <div *ngIf="loadingPricings" class="loading-state">
+      <i class="pi pi-spin pi-spinner"></i>
+      <span>Loading pricing...</span>
+    </div>
+    <p-table
+      *ngIf="!loadingPricings"
+      [value]="pricings"
+      [paginator]="pricings.length > 10"
+      [rows]="10"
+      styleClass="p-datatable-sm p-datatable-striped p-datatable-gridlines pricing-table"
+      [responsiveLayout]="'scroll'">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Category</th>
+          <th>Type</th>
+          <th>Price</th>
+          <th>Currency</th>
+          <th>Status</th>
+          <th style="width: 120px;">Actions</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-pricing>
+        <tr>
+          <td>{{ pricing.designCategoryName }}</td>
+          <td>{{ pricing.designTypeName }}</td>
+          <td>{{ formatCurrency(pricing.price, pricing.currencyCode) }}</td>
+          <td>{{ pricing.currencyCode }}</td>
+          <td>
+            <p-tag
+              [value]="pricing.isActive ? 'Active' : 'Inactive'"
+              [severity]="pricing.isActive ? 'success' : 'danger'">
+            </p-tag>
+          </td>
+          <td>
+            <p-button
+              icon="pi pi-pencil"
+              (onClick)="openEditDialog(pricing)"
+              styleClass="p-button-text"
+              pTooltip="Edit">
+            </p-button>
+            <p-button
+              icon="pi pi-trash"
+              (onClick)="deletePricing(pricing)"
+              styleClass="p-button-text p-button-danger"
+              pTooltip="Delete">
+            </p-button>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="6">
+            <div class="empty-state">
+              <i class="pi pi-dollar empty-icon"></i>
+              <p class="empty-title">No pricing configured for this client.</p>
+              <p class="empty-subtext">Click 'Add Pricing' to create pricing rules.</p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <div *ngIf="!selectedClient && !loading" class="hint-message">
+    <i class="pi pi-info-circle"></i>
+    Select a client to view and manage their logo pricing.
+  </div>
+</p-card>
+
+<!-- Add Pricing Dialog -->
+<p-dialog
+  header="Add Client Pricing"
+  [(visible)]="displayAddDialog"
+  [modal]="true"
+  [style]="{ width: '450px' }"
+  [closable]="true"
+  (onHide)="displayAddDialog = false">
+  <form [formGroup]="addForm" (ngSubmit)="saveAdd()">
+    <div class="form-field">
+      <label>Design Category</label>
+      <p-dropdown
+        formControlName="designCategory"
+        [options]="designCategoryOptions"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="Select category">
+      </p-dropdown>
+    </div>
+    <div class="form-field">
+      <label>Design Type</label>
+      <p-dropdown
+        formControlName="designType"
+        [options]="filteredDesignTypeOptions"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="Select type">
+      </p-dropdown>
+    </div>
+    <div class="form-field">
+      <label>Price</label>
+      <p-inputNumber
+        formControlName="price"
+        [minFractionDigits]="2"
+        [maxFractionDigits]="2"
+        mode="decimal">
+      </p-inputNumber>
+    </div>
+    <div class="form-field">
+      <label>Currency</label>
+      <p-dropdown
+        formControlName="currencyCode"
+        [options]="currencyOptions"
+        optionLabel="label"
+        optionValue="value">
+      </p-dropdown>
+    </div>
+    <div class="form-field">
+      <p-checkbox formControlName="isActive" [binary]="true" inputId="addActive"></p-checkbox>
+      <label for="addActive">Active</label>
+    </div>
+  </form>
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" (onClick)="displayAddDialog = false" styleClass="p-button-text"></p-button>
+    <p-button label="Save" (onClick)="saveAdd()" [loading]="saving" [disabled]="addForm.invalid"></p-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Edit Pricing Dialog -->
+<p-dialog
+  header="Edit Pricing"
+  [(visible)]="displayEditDialog"
+  [modal]="true"
+  [style]="{ width: '400px' }"
+  [closable]="true"
+  (onHide)="displayEditDialog = false">
+  <form [formGroup]="editForm" (ngSubmit)="saveEdit()">
+    <div class="form-field" *ngIf="selectedPricing">
+      <label>Category / Type</label>
+      <p>{{ selectedPricing.designCategoryName }} - {{ selectedPricing.designTypeName }}</p>
+    </div>
+    <div class="form-field">
+      <label>Price</label>
+      <p-inputNumber
+        formControlName="price"
+        [minFractionDigits]="2"
+        [maxFractionDigits]="2"
+        mode="decimal">
+      </p-inputNumber>
+    </div>
+    <div class="form-field">
+      <label>Currency</label>
+      <p-dropdown
+        formControlName="currencyCode"
+        [options]="currencyOptions"
+        optionLabel="label"
+        optionValue="value">
+      </p-dropdown>
+    </div>
+    <div class="form-field">
+      <p-checkbox formControlName="isActive" [binary]="true" inputId="editActive"></p-checkbox>
+      <label for="editActive">Active</label>
+    </div>
+  </form>
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" (onClick)="displayEditDialog = false" styleClass="p-button-text"></p-button>
+    <p-button label="Save" (onClick)="saveEdit()" [loading]="saving" [disabled]="editForm.invalid"></p-button>
+  </ng-template>
+</p-dialog>

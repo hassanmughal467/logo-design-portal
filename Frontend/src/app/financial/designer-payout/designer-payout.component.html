@@ -1,0 +1,506 @@
+<div class="designer-payout-page">
+  <!-- 1. Page Header -->
+  <header class="page-header">
+    <h1 class="page-title"><i class="pi pi-wallet"></i> Designer Payout</h1>
+    <p class="page-subtitle">{{ isDesigner ? 'View your payout invoices and eligible orders.' : 'Manage designer pricing approvals and generate monthly payout invoices.' }}</p>
+  </header>
+
+  <!-- 2. Payout Summary KPI Cards (Admin) -->
+  <section *ngIf="isAdmin" class="section kpi-cards-section">
+    <div *ngIf="summaryLoading" class="kpi-loading">
+      <p-progressSpinner strokeWidth="4" [style]="{ width: '32px', height: '32px' }"></p-progressSpinner>
+      <span>Loading summary...</span>
+    </div>
+    <div *ngIf="!summaryLoading && payoutSummary" class="kpi-cards">
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon--designers">
+          <i class="pi pi-users"></i>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ payoutSummary.designersWithPendingPayout }}</span>
+          <span class="kpi-label">Designers With Pending Payout</span>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon--orders">
+          <i class="pi pi-shopping-cart"></i>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ payoutSummary.totalEligibleOrders }}</span>
+          <span class="kpi-label">Eligible Orders</span>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-icon--amount">
+          <i class="pi pi-money-bill"></i>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-value">{{ formatPayout(payoutSummary.totalPendingPayoutAmount) }}</span>
+          <span class="kpi-label">Across {{ payoutSummary.totalEligibleOrders }} orders</span>
+        </div>
+      </div>
+    </div>
+    <div *ngIf="!summaryLoading && !payoutSummary" class="kpi-empty">
+      <i class="pi pi-check-circle"></i>
+      <p>No pending payouts.</p>
+    </div>
+  </section>
+
+  <!-- Designer view: My Invoices & Eligible Orders -->
+  <div *ngIf="isDesigner" class="designer-view">
+    <section class="section">
+      <div class="section-card">
+        <div class="section-card-header">
+          <i class="pi pi-clock"></i>
+          <h2>Orders Awaiting Price Approval</h2>
+        </div>
+        <div class="section-card-body">
+      <p-table [value]="myOrdersPendingApproval" [paginator]="true" [rows]="10" [rowHover]="true" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Order</th>
+            <th>Design</th>
+            <th>Proposed (PKR)</th>
+            <th>Status</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-row>
+          <tr>
+            <td>
+              <a [routerLink]="['/orders', row.orderId]"><i class="pi pi-file-edit"></i> {{ row.orderTitle }}</a>
+            </td>
+            <td>{{ row.designCategory }} - {{ row.designType }}</td>
+            <td>{{ row.proposedPrice | number }}</td>
+            <td><span [class]="'badge ' + getStatusBadgeClass(row.priceApprovalStatus)">{{ row.priceApprovalStatus }}</span></td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="4">No orders awaiting price approval.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-card">
+        <div class="section-card-header">
+          <i class="pi pi-file-edit"></i>
+          <h2>My Payout Invoices</h2>
+        </div>
+        <div class="section-card-body">
+      <p-table [value]="designerInvoices" [loading]="loading" [paginator]="true" [rows]="10" [rowHover]="true" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Invoice #</th>
+            <th>Period</th>
+            <th>Amount (PKR)</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-inv>
+          <tr>
+            <td>{{ inv.invoiceNumber }}</td>
+            <td>{{ inv.billingPeriod }}</td>
+            <td>{{ inv.totalAmount | number }}</td>
+            <td>
+              <span [class]="'badge ' + getStatusBadgeClass(inv.status)">{{ inv.status }}</span>
+            </td>
+            <td>
+              <p-button label="View" icon="pi pi-eye" [styleClass]="'p-button-text p-button-sm'" (onClick)="viewInvoice(inv)" pTooltip="View invoice details"></p-button>
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="5">No invoices yet. Admin will generate monthly payout invoices for your completed orders.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-card">
+        <div class="section-card-header">
+          <i class="pi pi-check-circle"></i>
+          <h2>Orders Ready for Payout (Not Yet Invoiced)</h2>
+        </div>
+        <div class="section-card-body">
+      <p-table [value]="eligibleOrders" [paginator]="true" [rows]="10" [rowHover]="true" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Order</th>
+            <th>Design</th>
+            <th>Approved Amount (PKR)</th>
+            <th>Completed</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-row>
+          <tr>
+            <td>
+              <a [routerLink]="['/orders', row.orderId]"><i class="pi pi-file-edit"></i> {{ row.orderTitle }}</a>
+            </td>
+            <td>{{ row.designCategory }} - {{ row.designType }}</td>
+            <td>{{ row.approvedPrice | number }}</td>
+            <td>{{ row.completedDate | date:'shortDate' }}</td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="4">No orders eligible for payout. Complete orders with approved prices to appear here.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Admin view -->
+  <div *ngIf="isAdmin" class="admin-view">
+    <!-- 3. Pending Price Approvals -->
+    <section class="section">
+      <div class="section-card">
+        <div class="section-card-header">
+          <i class="pi pi-clock"></i>
+          <h2>Orders Pending Price Approval</h2>
+        </div>
+        <div class="section-card-body">
+      <p-table [value]="pendingOrders" [loading]="loading" [paginator]="true" [rows]="10" [rowHover]="true" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Order</th>
+            <th>Design</th>
+            <th>Proposed (PKR)</th>
+            <th>Status</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-row>
+          <tr>
+            <td>
+              <a [routerLink]="['/orders', row.orderId]"><i class="pi pi-file-edit"></i> {{ row.orderTitle }}</a>
+            </td>
+            <td>{{ row.designCategory }} - {{ row.designType }}</td>
+            <td>{{ row.proposedPrice | number }}</td>
+            <td><span [class]="'badge ' + getStatusBadgeClass(row.priceApprovalStatus)">{{ row.priceApprovalStatus }}</span></td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="4">No orders pending price approval.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Generate Invoice Panel -->
+    <section class="section">
+      <div class="section-card">
+        <div class="section-card-header">
+          <i class="pi pi-file-pdf"></i>
+          <h2>Generate Monthly Payout Invoice</h2>
+        </div>
+        <div class="section-card-body">
+      <div class="generate-form">
+        <div class="form-row">
+          <div class="form-field">
+            <label>Designer</label>
+            <p-dropdown
+              [(ngModel)]="selectedDesignerId"
+              [options]="designers"
+              optionLabel="label"
+              optionValue="id"
+              placeholder="Select designer"
+              styleClass="w-full"
+              (onChange)="onDesignerSelect()"
+            ></p-dropdown>
+          </div>
+          <div class="form-field">
+            <label>Month</label>
+            <p-dropdown
+              [(ngModel)]="selectedMonth"
+              [options]="monthOptions"
+              optionLabel="label"
+              optionValue="value"
+              styleClass="w-full"
+            ></p-dropdown>
+          </div>
+          <div class="form-field">
+            <label>Year</label>
+            <p-dropdown
+              [(ngModel)]="selectedYear"
+              [options]="yearOptions"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Year"
+              styleClass="w-full"
+            ></p-dropdown>
+          </div>
+          <div class="form-field form-actions">
+            <p-button
+              label="Preview Eligible Orders"
+              icon="pi pi-search"
+              [styleClass]="'p-button-outlined'"
+              [loading]="previewLoading"
+              [disabled]="!selectedDesignerId"
+              (onClick)="previewEligibleOrders()"
+              pTooltip="Preview orders that will be included before generating invoice"
+            ></p-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview Section -->
+      <div *ngIf="showPreview" class="preview-section">
+        <h4>Preview Eligible Orders</h4>
+        <div *ngIf="previewLoading" class="preview-loading">
+          <p-progressSpinner strokeWidth="4" [style]="{ width: '40px', height: '40px' }"></p-progressSpinner>
+          <span>Loading eligible orders...</span>
+        </div>
+        <div *ngIf="!previewLoading && previewOrders.length > 0" class="preview-content">
+          <p-table [value]="previewOrders" [rowHover]="true" styleClass="p-datatable-sm p-datatable-striped">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Order #</th>
+                <th>Category</th>
+                <th>Type</th>
+                <th style="text-align: right">Approved Price</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-row>
+              <tr>
+                <td>
+                  <a [routerLink]="['/orders', row.orderId]"><i class="pi pi-file-edit"></i> {{ row.orderTitle }}</a>
+                </td>
+                <td>{{ row.designCategory || '—' }}</td>
+                <td>{{ row.designType || '—' }}</td>
+                <td style="text-align: right">{{ row.approvedPrice | number }}</td>
+              </tr>
+            </ng-template>
+          </p-table>
+          <div class="preview-totals">
+            <span><strong>Total Orders:</strong> {{ previewOrders.length }}</span>
+            <span><strong>Total Payout Amount:</strong> {{ formatPayout(previewTotalAmount) }}</span>
+          </div>
+          <p-button
+            label="Generate Invoice"
+            icon="pi pi-file-pdf"
+            [loading]="loading"
+            [disabled]="!selectedDesignerId"
+            (onClick)="generateInvoice()"
+            pTooltip="Generate invoice for the previewed orders"
+          ></p-button>
+        </div>
+        <div *ngIf="!previewLoading && previewOrders.length === 0 && showPreview" class="preview-empty">
+          <p>No eligible orders for the selected period.</p>
+        </div>
+      </div>
+
+      <!-- Direct generate (when no preview) -->
+      <div *ngIf="!showPreview" class="direct-generate">
+        <p-button
+          label="Generate Invoice"
+          icon="pi pi-file-pdf"
+          [loading]="loading"
+          [disabled]="!selectedDesignerId"
+          (onClick)="generateInvoice()"
+          pTooltip="Generate invoice for selected designer and period"
+        ></p-button>
+      </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Eligible Orders Preview (inline in above) -->
+    <!-- 5. Designer Invoices Table -->
+    <section class="section">
+      <div class="section-card">
+        <div class="section-card-header">
+          <i class="pi pi-list"></i>
+          <h2>Designer Invoices</h2>
+        </div>
+        <div class="section-card-body">
+      <p-table [value]="designerInvoices" [paginator]="true" [rows]="10" [rowHover]="true" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Invoice #</th>
+            <th>Designer</th>
+            <th>Period</th>
+            <th>Orders Count</th>
+            <th>Amount (PKR)</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-inv>
+          <tr>
+            <td>{{ inv.invoiceNumber }}</td>
+            <td>{{ inv.designerName }}</td>
+            <td>{{ inv.billingPeriod }}</td>
+            <td>{{ getOrdersCount(inv) }}</td>
+            <td>{{ inv.totalAmount | number }}</td>
+            <td>
+              <span [class]="'badge ' + getStatusBadgeClass(inv.status)">{{ inv.status }}</span>
+            </td>
+            <td>
+              <p-button
+                label="View"
+                icon="pi pi-eye"
+                [styleClass]="'p-button-text p-button-sm'"
+                (onClick)="viewInvoice(inv)"
+                pTooltip="View invoice details"
+              ></p-button>
+              <p-button
+                *ngIf="inv.status !== 'Paid'"
+                label="Mark Paid"
+                icon="pi pi-check"
+                [styleClass]="'p-button-text p-button-sm'"
+                severity="success"
+                (onClick)="markInvoicePaid(inv)"
+                pTooltip="Mark invoice as paid"
+              ></p-button>
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="7">Select a designer to view invoices.</td>
+          </tr>
+        </ng-template>
+      </p-table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Invoice Detail Dialog (for editing adjustments) -->
+    <p-dialog
+      [(visible)]="showInvoiceDialog"
+      [header]="'Invoice ' + (selectedInvoice?.invoiceNumber || '')"
+      [modal]="true"
+      [style]="{ width: '600px' }"
+      [draggable]="false"
+      (onHide)="closeInvoiceDialog()"
+    >
+      <div *ngIf="selectedInvoice" class="invoice-detail">
+        <p><strong>Designer:</strong> {{ selectedInvoice.designerName }}</p>
+        <p><strong>Period:</strong> {{ selectedInvoice.billingPeriod }}</p>
+        <p><strong>Total:</strong> PKR {{ selectedInvoice.totalAmount | number }}</p>
+        <p><strong>Status:</strong> {{ selectedInvoice.status }}</p>
+        <h4>Line Items</h4>
+        <p-table [value]="selectedInvoice.items" styleClass="p-datatable-sm">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Order</th>
+              <th>Amount (PKR)</th>
+              <th *ngIf="selectedInvoice.status !== 'Paid'">Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-item>
+            <tr>
+              <td>{{ item.orderTitle }}</td>
+              <td>
+                <span *ngIf="!editingItemId || editingItemId !== item.id">{{ item.amount | number }}</span>
+                <p-inputNumber
+                  *ngIf="editingItemId === item.id"
+                  [(ngModel)]="editItemAmount"
+                  [min]="1"
+                  [maxFractionDigits]="0"
+                  styleClass="w-full"
+                  (keydown.enter)="saveItemEdit(selectedInvoice)"
+                ></p-inputNumber>
+              </td>
+              <td *ngIf="selectedInvoice.status !== 'Paid'">
+                <p-button
+                  *ngIf="editingItemId !== item.id"
+                  icon="pi pi-pencil"
+                  [styleClass]="'p-button-text p-button-sm'"
+                  (onClick)="startEditItem(item)"
+                  pTooltip="Edit amount"
+                ></p-button>
+                <p-button
+                  *ngIf="editingItemId === item.id"
+                  icon="pi pi-check"
+                  [styleClass]="'p-button-text p-button-sm'"
+                  severity="success"
+                  (onClick)="saveItemEdit(selectedInvoice)"
+                  pTooltip="Save"
+                ></p-button>
+                <p-button
+                  *ngIf="editingItemId === item.id"
+                  icon="pi pi-times"
+                  [styleClass]="'p-button-text p-button-sm'"
+                  (onClick)="cancelEditItem()"
+                  pTooltip="Cancel"
+                ></p-button>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+        <div *ngIf="selectedInvoice.adjustments?.length" class="adjustments-section">
+          <h4>Adjustments</h4>
+          <p-table [value]="selectedInvoice.adjustments || []" styleClass="p-datatable-sm">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Description</th>
+                <th>Amount (PKR)</th>
+                <th *ngIf="selectedInvoice.status !== 'Paid'">Actions</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-adj>
+              <tr>
+                <td>{{ adj.description }}</td>
+                <td>{{ adj.amount | number }}</td>
+                <td *ngIf="selectedInvoice.status !== 'Paid'">
+                  <p-button
+                    icon="pi pi-trash"
+                    [styleClass]="'p-button-text p-button-sm p-button-danger'"
+                    (onClick)="removeAdjustment(selectedInvoice, adj)"
+                    pTooltip="Remove"
+                  ></p-button>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+        <div *ngIf="selectedInvoice.status !== 'Paid'" class="add-adjustment-section">
+          <h4>Add Adjustment</h4>
+          <div class="form-row" style="display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 150px;">
+              <label>Description</label>
+              <input pInputText [(ngModel)]="newAdjustmentDesc" placeholder="e.g. Bonus, Deduction" style="width: 100%;" />
+            </div>
+            <div style="width: 120px;">
+              <label>Amount (PKR)</label>
+              <p-inputNumber [(ngModel)]="newAdjustmentAmount" [min]="-999999" [maxFractionDigits]="0" placeholder="0" styleClass="w-full"></p-inputNumber>
+              <small class="p-help">Negative = deduction</small>
+            </div>
+            <p-button label="Add" icon="pi pi-plus" (onClick)="addAdjustment(selectedInvoice)" [disabled]="!newAdjustmentDesc.trim()"></p-button>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <p-button label="View Full Page" icon="pi pi-external-link" [styleClass]="'p-button-text'" (onClick)="viewInvoice(selectedInvoice); closeInvoiceDialog()"></p-button>
+          <p-button
+            *ngIf="selectedInvoice.status !== 'Paid'"
+            label="Mark as Paid"
+            icon="pi pi-check"
+            severity="success"
+            (onClick)="markInvoicePaid(selectedInvoice); closeInvoiceDialog()"
+          ></p-button>
+        </div>
+      </div>
+    </p-dialog>
+  </div>
+
+  <!-- Access denied for non-Admin, non-Designer -->
+  <div *ngIf="!isAdmin && !isDesigner" class="access-denied">
+    <i class="pi pi-lock"></i>
+    <p>Access restricted. Designer or Admin role required.</p>
+  </div>
+</div>

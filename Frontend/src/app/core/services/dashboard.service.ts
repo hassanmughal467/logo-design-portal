@@ -37,7 +37,7 @@ export interface DashboardData {
   recentOrders: Order[];
   allOrders?: Order[]; // Full order list for client history
   ordersByStatus: { status: string; count: number }[];
-  ordersByMonth: { month: string; count: number }[];
+  ordersByMonth: { month: string; count: number; completedCount?: number }[];
   revenueByPackage: { package: string; revenue: number }[];
   // Client-specific data
   invoices?: any[];
@@ -75,7 +75,9 @@ export class DashboardService {
         break;
       case 'SuperAdmin':
       case 'Admin':
-        orders$ = this.apiService.get<Order[]>('orders');
+        orders$ = this.apiService.get<any>('orders?page=1&pageSize=500').pipe(
+          map(res => ApiService.extractItems<Order>(res))
+        );
         break;
       default:
         orders$ = of([]);
@@ -89,8 +91,8 @@ export class DashboardService {
     
     if (user.role === 'SuperAdmin' || user.role === 'Admin') {
       // Try to fetch clients (if endpoint exists)
-      clients$ = this.apiService.get<any[]>('users').pipe(
-        map(users => users.filter(u => u.role === 'Client' || u.roleName === 'Client')),
+      clients$ = this.apiService.get<any>('users?page=1&pageSize=500').pipe(
+        map(res => ApiService.extractItems<any>(res).filter((u: any) => u.role === 'Client' || u.roleName === 'Client')),
         catchError(() => of([]))
       );
       
@@ -128,8 +130,7 @@ export class DashboardService {
       map(({ orders, clients, invoices, galleryItems, notifications }) => 
         this.processDashboardData(orders, clients, invoices, galleryItems, notifications, user.role)
       ),
-      catchError(error => {
-        console.error('Error fetching dashboard data:', error);
+      catchError(() => {
         return of(this.getEmptyDashboardData());
       })
     );
@@ -255,41 +256,57 @@ export class DashboardService {
         return completionDate >= startOfMonth;
       }).length;
 
-      // Lifetime spend (sum of paid invoice amounts only)
-      lifetimeSpend = invoices
-        .filter(inv => inv.status === 'Paid')
-        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
+      // Lifetime spend = SUM(Paid Invoice Amounts) — what the client has actually paid.
+      // Fallback: SUM(Order Price) for non-cancelled orders, minus refunds.
+      if (invoices.length > 0) {
+        lifetimeSpend = invoices
+          .filter(inv => inv.status === 'Paid')
+          .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
+      } else {
+        const cancelledStatuses = [OrderStatus.Cancelled, OrderStatus.CancelledByUser, OrderStatus.CancelledByAdmin];
+        lifetimeSpend = orders
+          .filter(o => !cancelledStatuses.includes(o.status))
+          .reduce((sum, o) => {
+            const price = (o as any).price || 0;
+            const refund = (o as any).isRefunded ? ((o as any).refundAmount || 0) : 0;
+            return sum + Math.max(0, price - refund);
+          }, 0);
+      }
 
-      // Monthly spend (paid invoices this month)
-      monthlySpend = invoices
-        .filter(inv => {
-          if (inv.status !== 'Paid' || !inv.paidDate) return false;
-          const paidDate = new Date(inv.paidDate);
-          return paidDate >= startOfMonth;
-        })
-        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
+      // Monthly spend = SUM(Paid Invoice Amounts) for current month, or fallback to order prices
+      if (invoices.length > 0) {
+        monthlySpend = invoices
+          .filter(inv => {
+            if (inv.status !== 'Paid' || !inv.paidDate) return false;
+            const paidDate = new Date(inv.paidDate);
+            return paidDate >= startOfMonth;
+          })
+          .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
+      } else {
+        monthlySpend = orders
+          .filter(o => new Date(o.createdAt) >= startOfMonth)
+          .filter(o => ![OrderStatus.Cancelled, OrderStatus.CancelledByUser, OrderStatus.CancelledByAdmin].includes(o.status))
+          .reduce((sum, o) => sum + ((o as any).price || 0), 0);
+      }
 
-      // Average order value
-      const nonCancelledOrders = orders.filter(o =>
-        o.status !== OrderStatus.Cancelled && o.status !== OrderStatus.CancelledByUser && o.status !== OrderStatus.CancelledByAdmin
-      );
-      averageOrderValue = nonCancelledOrders.length > 0
-        ? nonCancelledOrders.reduce((sum, o) => sum + (o.price || 0), 0) / nonCancelledOrders.length
-        : 0;
+      // Total orders = COUNT(OrderId) for the client (orders.length)
+      // Avg Order Value = Lifetime Spend / Total Orders
+      const totalOrdersForClient = orders.length;
+      averageOrderValue = totalOrdersForClient > 0 ? lifetimeSpend / totalOrdersForClient : 0;
 
       // Orders by week (last 8 weeks) for trend chart
       ordersByWeek = this.calculateOrdersByWeek(orders, 8);
     }
 
-    // Calculate statistics
+    // Calculate statistics (Client: never include admin/global metrics)
     const stats: DashboardStats = {
       totalOrders: orders.length,
       pendingOrders: orders.filter(o => o.status === OrderStatus.WaitingForAdminApproval).length,
       inProgressOrders: orders.filter(o => o.status === OrderStatus.InProgress).length,
       completedOrders: orders.filter(o => o.status === OrderStatus.Completed).length,
-      totalClients: clients.length,
-      newClientsThisMonth: newClientsThisMonth,
-      totalRevenue: totalRevenue,
+      totalClients: userRole === 'Client' ? 0 : clients.length,
+      newClientsThisMonth: userRole === 'Client' ? 0 : newClientsThisMonth,
+      totalRevenue: userRole === 'Client' ? 0 : totalRevenue,
       averageDeliveryTime: Math.round(averageDeliveryTime * 10) / 10, // Round to 1 decimal
       // Client-specific stats
       activeOrders,
@@ -337,16 +354,23 @@ export class DashboardService {
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6); // Last 6 months
 
-    // Revenue by package (from completed orders)
+    // Revenue by package: for Client = all orders grouped by package (derived from price); for Admin = completed orders
     const packageRevenue = new Map<string, number>();
-    orders
-      .filter(o => o.status === OrderStatus.Completed)
-      .forEach(order => {
-        const packageName = (order as any).packageType || (order as any).package || 'Standard';
-        const price = (order as any).price || 0;
-        const current = packageRevenue.get(packageName) || 0;
-        packageRevenue.set(packageName, current + price);
-      });
+    const getPackageFromPrice = (price: number): string => {
+      if (price < 200) return 'Basic';
+      if (price < 500) return 'Standard';
+      if (price < 1000) return 'Premium';
+      return 'Custom';
+    };
+    const ordersForPackage = userRole === 'Client'
+      ? orders.filter(o => o.status !== OrderStatus.Cancelled && o.status !== OrderStatus.CancelledByUser && o.status !== OrderStatus.CancelledByAdmin)
+      : orders.filter(o => o.status === OrderStatus.Completed);
+    ordersForPackage.forEach(order => {
+      const price = (order as any).price || 0;
+      const packageName = (order as any).packageType || (order as any).package || getPackageFromPrice(price);
+      const current = packageRevenue.get(packageName) || 0;
+      packageRevenue.set(packageName, current + price);
+    });
     const revenueByPackage = Array.from(packageRevenue.entries())
       .map(([packageName, revenue]) => ({ package: packageName, revenue }))
       .sort((a, b) => b.revenue - a.revenue);

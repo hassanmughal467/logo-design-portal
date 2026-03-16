@@ -6,6 +6,7 @@ import { FileUploadComponent } from './file-upload.component';
 import { ButtonModule } from 'primeng/button';
 import { InputTextareaModule } from 'primeng/inputtextarea';
 import { DropdownModule } from 'primeng/dropdown';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { FileUploadModule as PrimeFileUploadModule } from 'primeng/fileupload';
 import { DialogModule } from 'primeng/dialog';
 import { TooltipModule } from 'primeng/tooltip';
@@ -28,6 +29,7 @@ const routes: Routes = [
     ButtonModule,
     InputTextareaModule,
     DropdownModule,
+    InputNumberModule,
     PrimeFileUploadModule,
     DialogModule,
     TooltipModule,

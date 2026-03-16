@@ -93,7 +93,6 @@ export class FileListComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    console.log('FileListComponent initialized');
     
     // Check user role
     const user = this.authService.getCurrentUser();
@@ -140,10 +139,11 @@ export class FileListComponent implements OnInit, OnDestroy {
 
   loadClientsForFilter(): Promise<void> {
     return new Promise((resolve) => {
-      this.apiService.get<any[]>('users')
+      this.apiService.get<any>('users?page=1&pageSize=500')
         .pipe(takeUntil(this.destroy$))
         .subscribe({
-          next: (users) => {
+          next: (response) => {
+            const users = ApiService.extractItems<any>(response);
             // Build mapping of User.Id to ClientProfile.Id
             this.userIdToClientProfileIdMap.clear();
             const clientUsers = users.filter(u => u.role === 'Client' || u.roleName === 'Client');
@@ -179,10 +179,11 @@ export class FileListComponent implements OnInit, OnDestroy {
   }
 
   loadUsersForFilter(): void {
-    this.apiService.get<any[]>('users')
+    this.apiService.get<any>('users?page=1&pageSize=500')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (users) => {
+        next: (response) => {
+          const users = ApiService.extractItems<any>(response);
           // Build user map for role lookup
           users.forEach(user => {
             const userId = user.id;
@@ -255,11 +256,14 @@ export class FileListComponent implements OnInit, OnDestroy {
 
   loadFiles(): void {
     this.loading = true;
-    this.apiService.get<any[]>('files')
+    this.apiService.get<any>(`files?page=${this.pageNumber}&pageSize=${this.pageSize}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (files) => {
-          console.log('Files received from API:', files);
+        next: (response) => {
+          const files = ApiService.extractItems<any>(response);
+          const meta = ApiService.extractPagedMeta(response);
+          this.totalFiles = meta.total;
+          this.totalPages = this.pageSize > 0 ? Math.ceil(this.totalFiles / this.pageSize) : 0;
           if (!files || files.length === 0) {
             this.logoGroups = [];
             this.clientGroups = [];
@@ -297,7 +301,6 @@ export class FileListComponent implements OnInit, OnDestroy {
           this.loadOrdersAndGroup();
         },
         error: (error) => {
-          console.error('Error loading files:', error);
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
@@ -321,12 +324,14 @@ export class FileListComponent implements OnInit, OnDestroy {
       ordersEndpoint = 'orders/assigned-orders';
     }
     
-    this.apiService.get<any[]>(ordersEndpoint)
+    const ordersUrl = ordersEndpoint === 'orders' ? `${ordersEndpoint}?page=1&pageSize=500` : ordersEndpoint;
+    this.apiService.get<any>(ordersUrl)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (orders) => {
+        next: (response) => {
+          const orders = response?.items ?? (Array.isArray(response) ? response : []);
           const orderMap = new Map<string, any>();
-          orders.forEach(order => {
+          orders.forEach((order: any) => {
             orderMap.set(order.id, order);
           });
 
@@ -335,7 +340,7 @@ export class FileListComponent implements OnInit, OnDestroy {
             this.loadClientsForFilter().then(() => {
               // Build mapping from orders - order.clientId is ClientProfile.Id
               // Find matching User.Id from clientOptions by matching client info
-              orders.forEach(order => {
+              orders.forEach((order: any) => {
                 if (order.clientId && order.client) {
                   // First, try to find by clientProfile.id if available in users
                   let matchingUserId: string | null = null;
@@ -831,17 +836,20 @@ export class FileListComponent implements OnInit, OnDestroy {
   }
 
   downloadFile(fileId: string, fileName: string): void {
-    const token = this.authService.getAccessToken();
-    const baseUrl = this.apiService.getBaseUrl();
-    const url = `${baseUrl}/files/${fileId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    this.apiService.getBlob(`files/${fileId}/download`).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName || `file-${fileId}`;
+        link.click();
+        URL.revokeObjectURL(url);
+        this.messageService.add({ severity: 'success', summary: 'Download', detail: 'File downloaded successfully' });
+      },
+      error: (err) => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to download file' });
+      }
+    });
   }
 
   formatFileSize(bytes: number): string {

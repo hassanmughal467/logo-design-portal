@@ -1,4 +1,5 @@
 using LogoDesignPortal.Application;
+using LogoDesignPortal.Application.Configuration;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.API.Middleware;
 using LogoDesignPortal.Domain.Entities;
@@ -6,6 +7,7 @@ using LogoDesignPortal.Infrastructure;
 using LogoDesignPortal.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -14,12 +16,29 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Validate connection string in Production - fail fast with clear message (common IIS 500.30 cause)
+if (!builder.Environment.IsDevelopment())
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString) ||
+        connectionString.Contains("YOUR_MYSQL_PASSWORD", StringComparison.OrdinalIgnoreCase) ||
+        connectionString.Contains("REPLACE_IN_WEB_CONFIG", StringComparison.OrdinalIgnoreCase) ||
+        connectionString.Contains("REPLACE_WITH_ACTUAL", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException(
+            "Database connection string not configured for Production. " +
+            "Set ConnectionStrings__DefaultConnection in web.config <environmentVariables> or appsettings.Production.json. " +
+            "Example: Server=localhost;Port=3306;Database=LogoDesignPortalDb;User=root;Password=YOUR_ACTUAL_PASSWORD;");
+    }
+}
+
 // Add services to the container - ensure camelCase for JSON (Angular expects it)
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 builder.Services.AddEndpointsApiExplorer();
 
@@ -60,7 +79,9 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // Configure JWT Authentication
-var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured");
+var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured. Use User Secrets (dev) or environment variables (production).");
+if (jwtKey.Length < 32)
+    throw new InvalidOperationException("JWT Key must be at least 32 characters for security. Use a strong random key in production.");
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("JWT Issuer not configured");
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? throw new InvalidOperationException("JWT Audience not configured");
 
@@ -104,6 +125,10 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<LogoDesignPortal.Application.Interfaces.IRealtimeNotificationSender, LogoDesignPortal.API.Services.SignalRRealtimeNotificationSender>();
 builder.Services.AddSingleton<LogoDesignPortal.Application.Interfaces.IRealtimeEntityUpdateSender, LogoDesignPortal.API.Services.SignalRRealtimeEntityUpdateSender>();
 
+// Production safety kill-switch configuration
+builder.Services.Configure<ProductionSafetyOptions>(
+    builder.Configuration.GetSection(ProductionSafetyOptions.SectionName));
+
 // Add Application and Infrastructure layers
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -114,25 +139,31 @@ builder.Services.AddSingleton<LogoDesignPortal.API.Services.FileStorageInitializ
 // Orphan file cleanup - runs every 24 hours, scans preview (Temporary) storage only
 builder.Services.AddHostedService<LogoDesignPortal.API.Services.OrphanFileCleanupService>();
 
-// CORS - origins from config (appsettings.Production.json when deployed to IIS)
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? new[] { "http://localhost:4200", "https://localhost:4200", "http://localhost:83", "http://209.209.42.42", "http://209.209.42.42:83", "http://209.209.42.42:4200", "https://admin.hawkmerchandising.com" };
+// Billing auto-invoice - runs daily, generates invoices for Weekly (Mondays) and Monthly (1st) clients
+builder.Services.AddHostedService<LogoDesignPortal.API.Services.BillingAutoInvoiceService>();
 
+// CORS - allow frontend domain (admin.hawkmerchandising.com) and local dev origins
+// OPTIONS preflight is handled by CORS middleware; UseCors must run before UseAuthentication
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAdmin", policy => policy
-        .WithOrigins("https://admin.hawkmerchandising.com", "http://admin.hawkmerchandising.com", "http://localhost:4200", "https://localhost:4200")
+        .WithOrigins(
+            "http://admin.hawkmerchandising.com",
+            "https://admin.hawkmerchandising.com",
+            "http://localhost:4200",
+            "https://localhost:4200")
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .AllowCredentials()); // Required for SignalR WebSocket
+        .SetPreflightMaxAge(TimeSpan.FromSeconds(86400)) // Cache preflight for 24h
+        .AllowCredentials()); // Required for SignalR WebSocket and JWT cookies
+});
 
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.WithOrigins(allowedOrigins)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials(); // Allow credentials for cookies/auth
-    });
+// Forwarded headers for IIS deployment (X-Forwarded-Proto, X-Forwarded-For)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 var app = builder.Build();
@@ -144,11 +175,14 @@ app.UseSwaggerUI(c =>
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Logo Design Portal API v1");
 });
 
-// Global Exception Handler (must be first to catch all errors)
-app.UseMiddleware<ExceptionMiddleware>();
+// Forwarded headers first (required for IIS - correct scheme/host when behind reverse proxy)
+app.UseForwardedHeaders();
 
-// CORS must be very early to handle preflight OPTIONS requests
+// CORS must run BEFORE authentication so preflight OPTIONS requests succeed without 401
 app.UseCors("AllowAdmin");
+
+// Global Exception Handler
+app.UseMiddleware<ExceptionMiddleware>();
 
 // Only redirect to HTTPS in production, not in development
 if (!app.Environment.IsDevelopment())
@@ -171,71 +205,65 @@ app.MapHub<LogoDesignPortal.API.Hubs.NotificationHub>("/hubs/notifications");
 var fileStorageInitializer = app.Services.GetRequiredService<LogoDesignPortal.API.Services.FileStorageInitializer>();
 fileStorageInitializer.Initialize();
 
-// Ensure database is created and seeded (async to avoid blocking startup)
-_ = Task.Run(async () =>
+// Apply migrations and seed data BEFORE accepting requests (prevents 500s from incomplete schema)
+using (var scope = app.Services.CreateScope())
 {
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
     try
     {
-        using (var scope = app.Services.CreateScope())
+        logger.LogInformation("Initializing database...");
+
+        // Apply pending migrations (blocking - ensures schema is ready before first request)
+        var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+        if (pendingMigrations.Any())
         {
-            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            
-            logger.LogInformation("Initializing database...");
-            
-            // Apply pending migrations
-            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-            if (pendingMigrations.Any())
-            {
-                logger.LogInformation("Applying pending migrations...");
-                await context.Database.MigrateAsync();
-                logger.LogInformation("Migrations applied successfully.");
-            }
-            else
-            {
-                logger.LogInformation("Database is up to date.");
-            }
-
-            // Seed payment settings with dummy values if they don't exist
-            await SeedPaymentSettingsAsync(context, logger);
-
-            // Seed or reset SuperAdmin user
-            var superAdminRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
-            if (superAdminRole != null)
-            {
-                var superAdmin = await context.Users.FirstOrDefaultAsync(u => u.Email == "superadmin@logodesign.com");
-                if (superAdmin == null)
-                {
-                    // Create new SuperAdmin
-                    superAdmin = new User
-                    {
-                        Id = Guid.NewGuid(),
-                        Email = "superadmin@logodesign.com",
-                        FirstName = "Super",
-                        LastName = "Admin",
-                        PasswordHash = BCrypt.Net.BCrypt.HashPassword("SuperAdmin@123"),
-                        RoleId = superAdminRole.Id,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    context.Users.Add(superAdmin);
-                    await context.SaveChangesAsync();
-                    logger.LogInformation("SuperAdmin user created.");
-                }
-            }
-            
-            logger.LogInformation("Database initialization completed.");
+            logger.LogInformation("Applying pending migrations: {Migrations}", string.Join(", ", pendingMigrations));
+            await context.Database.MigrateAsync();
+            logger.LogInformation("Migrations applied successfully.");
         }
+        else
+        {
+            logger.LogInformation("Database is up to date.");
+        }
+
+        // Seed payment settings with dummy values if they don't exist
+        await SeedPaymentSettingsAsync(context, logger);
+
+        // Seed or reset SuperAdmin user
+        var superAdminRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
+        if (superAdminRole != null)
+        {
+            var superAdmin = await context.Users.FirstOrDefaultAsync(u => u.Email == "superadmin@logodesign.com");
+            if (superAdmin == null)
+            {
+                superAdmin = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = "superadmin@logodesign.com",
+                    FirstName = "Super",
+                    LastName = "Admin",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("SuperAdmin@123"),
+                    RoleId = superAdminRole.Id,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                context.Users.Add(superAdmin);
+                await context.SaveChangesAsync();
+                logger.LogInformation("SuperAdmin user created.");
+            }
+        }
+
+        logger.LogInformation("Database initialization completed.");
     }
     catch (Exception ex)
     {
-        // Log error but don't crash the application
-        var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
-        var logger = loggerFactory.CreateLogger<Program>();
-        logger.LogError(ex, "Error initializing database. The application will continue, but database operations may fail.");
-        logger.LogWarning("Make sure MySQL is running and connection string in appsettings.json is correct.");
+        logger.LogError(ex, "Database initialization failed. Application will not start.");
+        logger.LogWarning("Ensure MySQL is running and connection string in appsettings.json (or env) is correct.");
+        throw; // Fail startup - do not serve requests with incomplete/missing schema
     }
-});
+}
 
 app.Run();
 

@@ -1,5 +1,6 @@
 export interface GalleryItem {
   id: string;
+  fileId?: string;
   orderId: string;
   orderTitle: string;
   previewImagePath: string;

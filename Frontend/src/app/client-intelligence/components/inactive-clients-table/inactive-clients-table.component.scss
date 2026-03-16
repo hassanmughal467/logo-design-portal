@@ -1,0 +1,27 @@
+.inactive-clients-table {
+  .days-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    background: #fef3c7;
+    color: #92400e;
+    font-weight: 500;
+
+    &.high {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+  }
+
+  .empty-message {
+    text-align: center;
+    padding: 2rem !important;
+    color: #6b7280;
+
+    i {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      display: block;
+      color: #10b981;
+    }
+  }
+}

@@ -1,0 +1,37 @@
+<div class="designer-analytics">
+  <div class="empty-section" *ngIf="!data && !loading">
+    <i class="pi pi-users"></i>
+    <p>No designer analytics data available.</p>
+  </div>
+  <div class="charts-grid">
+  <div class="chart-card" *ngIf="designerChart">
+    <h3 class="chart-title"><i class="pi pi-users"></i> Designer Performance - Orders Completed</h3>
+    <apx-chart [series]="designerChart.series" [chart]="designerChart.chart"
+      [xaxis]="designerChart.xaxis" [yaxis]="designerChart.yaxis"
+      [plotOptions]="designerChart.plotOptions" [colors]="designerChart.colors"
+      [dataLabels]="designerChart.dataLabels" [legend]="designerChart.legend">
+    </apx-chart>
+  </div>
+  <div class="chart-card" *ngIf="designerActivityChart">
+    <h3 class="chart-title"><i class="pi pi-calendar"></i> Designer Activity Timeline</h3>
+    <apx-chart [series]="designerActivityChart.series" [chart]="designerActivityChart.chart"
+      [xaxis]="designerActivityChart.xaxis" [stroke]="designerActivityChart.stroke"
+      [colors]="designerActivityChart.colors" [yaxis]="designerActivityChart.yaxis"
+      [legend]="designerActivityChart.legend" [dataLabels]="designerActivityChart.dataLabels">
+    </apx-chart>
+  </div>
+  </div>
+  <div class="leaderboard" *ngIf="designers.length > 0">
+    <h3 class="chart-title"><i class="pi pi-trophy"></i> Designer Leaderboard</h3>
+    <div class="leaderboard-list">
+      <div class="leaderboard-item" *ngFor="let d of designers; let i = index">
+        <span class="rank">#{{ i + 1 }}</span>
+        <div class="designer-info">
+          <strong>{{ d.designerName }}</strong>
+          <span class="metrics">Completed: {{ d.ordersCompleted }} | Approval: {{ d.approvalRate }}% | Revisions: {{ d.revisionRate }}% | Workload: {{ d.currentWorkload }}</span>
+        </div>
+        <span class="avg-time">{{ d.averageCompletionTimeDays }} days avg</span>
+      </div>
+    </div>
+  </div>
+</div>

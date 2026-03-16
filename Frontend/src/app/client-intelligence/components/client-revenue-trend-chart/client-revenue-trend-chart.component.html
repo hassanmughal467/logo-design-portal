@@ -1,0 +1,11 @@
+<div class="client-revenue-trend-chart">
+  <apx-chart *ngIf="chartOptions" [series]="chartOptions.series" [chart]="chartOptions.chart"
+    [stroke]="chartOptions.stroke" [fill]="chartOptions.fill" [colors]="chartOptions.colors"
+    [xaxis]="chartOptions.xaxis" [yaxis]="chartOptions.yaxis"
+    [tooltip]="chartOptions.tooltip" [dataLabels]="chartOptions.dataLabels">
+  </apx-chart>
+  <div *ngIf="!items?.length" class="empty-state">
+    <i class="pi pi-chart-line"></i>
+    <p>No revenue trend data available</p>
+  </div>
+</div>

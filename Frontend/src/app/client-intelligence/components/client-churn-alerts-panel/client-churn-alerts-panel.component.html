@@ -1,0 +1,25 @@
+<div class="client-churn-alerts-panel">
+  <div class="alerts-list" *ngIf="items?.length">
+    <div class="alert-item" *ngFor="let item of items" [class.high-value]="item.totalRevenue >= 1000">
+      <div class="alert-icon">
+        <i class="pi pi-user-minus"></i>
+      </div>
+      <div class="alert-content">
+        <div class="alert-header">
+          <strong>{{ item.clientName || 'Unknown' }}</strong>
+          <p-tag [value]="item.daysSinceLastOrder + ' days inactive'" [severity]="getSeverity(item.daysSinceLastOrder)"></p-tag>
+        </div>
+        <p class="alert-message">{{ item.alertMessage }}</p>
+        <div class="alert-meta">
+          <span>Last order: {{ formatDate(item.lastOrderDate) }}</span>
+          <span>Revenue: {{ formatCurrency(item.totalRevenue) }}</span>
+          <span>{{ item.orderCount }} order(s)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div *ngIf="!items?.length" class="empty-state">
+    <i class="pi pi-check-circle"></i>
+    <p>No churn alerts. All clients have been active within the last 30 days.</p>
+  </div>
+</div>

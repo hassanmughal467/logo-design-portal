@@ -404,30 +404,35 @@ Before running the application, verify:
 
 ## 🗄️ Database Setup
 
-### Option 1: Automatic (Recommended for Testing)
-The application will automatically create the database on first run using `EnsureCreated()`.
+### Automatic (Recommended)
+The application applies EF Core migrations automatically at startup using `Database.MigrateAsync()`. No manual migration step is required for local development or IIS deployment.
 
-### Option 2: Using Migrations (Production-like)
+- **First run**: Migrations create/update the schema.
+- **Subsequent runs**: Only pending migrations are applied (idempotent).
+
+### Manual Migration (Optional)
+To apply migrations manually (e.g. before first deploy):
 ```bash
-# Navigate to Infrastructure project
-cd src/LogoDesignPortal.Infrastructure
+cd src/LogoDesignPortal.API
+dotnet ef database update --project ../LogoDesignPortal.Infrastructure --startup-project .
+```
 
-# Create migration
-dotnet ef migrations add InitialCreate --startup-project ../LogoDesignPortal.API
-
-# Apply migration
-dotnet ef database update --startup-project ../LogoDesignPortal.API
+To create a new migration:
+```bash
+dotnet ef migrations add <MigrationName> --project ../LogoDesignPortal.Infrastructure --startup-project .
 ```
 
 ### Verify Database Connection
-Update `src/LogoDesignPortal.API/appsettings.json`:
+Update `src/LogoDesignPortal.API/appsettings.json` (or use User Secrets):
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=LogoDesignPortalDb;Trusted_Connection=true;TrustServerCertificate=true;"
+    "DefaultConnection": "Server=127.0.0.1;Port=3306;Database=LogoDesignPortalDb;User=root;Password=YOUR_PASSWORD;"
   }
 }
 ```
+
+For MySQL. SQLite is also supported if the connection string contains `Data Source=` or `.db`.
 
 ---
 

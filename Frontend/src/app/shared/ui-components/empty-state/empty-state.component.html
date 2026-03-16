@@ -1,0 +1,8 @@
+<div class="empty-state">
+  <i [class]="icon" class="empty-state-icon"></i>
+  <p class="empty-state-title">{{ title }}</p>
+  <p class="empty-state-subtitle" *ngIf="subtitle">{{ subtitle }}</p>
+  <div class="empty-state-actions">
+    <ng-content></ng-content>
+  </div>
+</div>

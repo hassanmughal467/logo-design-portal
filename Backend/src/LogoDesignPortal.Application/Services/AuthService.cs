@@ -79,8 +79,8 @@ public class AuthService : IAuthService
 
         var token = await _jwtTokenService.GenerateTokenAsync(user);
         var refreshToken = _jwtTokenService.GenerateRefreshToken();
-        var accessTokenHours = int.TryParse(_configuration["Jwt:AccessTokenExpiryHours"], out var ath) ? ath : 1;
-        var refreshTokenHours = int.TryParse(_configuration["Jwt:RefreshTokenExpiryHours"], out var rth) ? rth : 1;
+        var accessTokenExpiry = GetAccessTokenExpiry();
+        var refreshTokenHours = int.TryParse(_configuration["Jwt:RefreshTokenExpiryHours"], out var rth) ? rth : 168;
 
         user.RefreshToken = refreshToken;
         user.RefreshTokenExpiryTime = DateTime.UtcNow.AddHours(refreshTokenHours);
@@ -90,7 +90,7 @@ public class AuthService : IAuthService
         {
             Token = token,
             RefreshToken = refreshToken,
-            ExpiresAt = DateTime.UtcNow.AddHours(accessTokenHours),
+            ExpiresAt = accessTokenExpiry,
             User = new UserDto
             {
                 Id = user.Id,
@@ -178,8 +178,8 @@ public class AuthService : IAuthService
 
         var token = await _jwtTokenService.GenerateTokenAsync(userWithRole);
         var refreshToken = _jwtTokenService.GenerateRefreshToken();
-        var accessTokenHours = int.TryParse(_configuration["Jwt:AccessTokenExpiryHours"], out var ath) ? ath : 1;
-        var refreshTokenHours = int.TryParse(_configuration["Jwt:RefreshTokenExpiryHours"], out var rth) ? rth : 1;
+        var accessTokenExpiry = GetAccessTokenExpiry();
+        var refreshTokenHours = int.TryParse(_configuration["Jwt:RefreshTokenExpiryHours"], out var rth) ? rth : 168;
 
         userWithRole.RefreshToken = refreshToken;
         userWithRole.RefreshTokenExpiryTime = DateTime.UtcNow.AddHours(refreshTokenHours);
@@ -189,7 +189,7 @@ public class AuthService : IAuthService
         {
             Token = token,
             RefreshToken = refreshToken,
-            ExpiresAt = DateTime.UtcNow.AddHours(accessTokenHours),
+            ExpiresAt = accessTokenExpiry,
             User = new UserDto
             {
                 Id = userWithRole.Id,
@@ -222,8 +222,8 @@ public class AuthService : IAuthService
 
         var newToken = await _jwtTokenService.GenerateTokenAsync(user);
         var newRefreshToken = _jwtTokenService.GenerateRefreshToken();
-        var accessTokenHours = int.TryParse(_configuration["Jwt:AccessTokenExpiryHours"], out var ath) ? ath : 1;
-        var refreshTokenHours = int.TryParse(_configuration["Jwt:RefreshTokenExpiryHours"], out var rth) ? rth : 1;
+        var accessTokenExpiry = GetAccessTokenExpiry();
+        var refreshTokenHours = int.TryParse(_configuration["Jwt:RefreshTokenExpiryHours"], out var rth) ? rth : 168;
 
         user.RefreshToken = newRefreshToken;
         user.RefreshTokenExpiryTime = DateTime.UtcNow.AddHours(refreshTokenHours);
@@ -233,7 +233,7 @@ public class AuthService : IAuthService
         {
             Token = newToken,
             RefreshToken = newRefreshToken,
-            ExpiresAt = DateTime.UtcNow.AddHours(accessTokenHours),
+            ExpiresAt = accessTokenExpiry,
             User = new UserDto
             {
                 Id = user.Id,
@@ -243,6 +243,15 @@ public class AuthService : IAuthService
                 RoleName = user.Role?.Name ?? string.Empty
             }
         };
+    }
+
+    private DateTime GetAccessTokenExpiry()
+    {
+        if (int.TryParse(_configuration["Jwt:AccessTokenExpiryMinutes"], out var minutes) && minutes > 0)
+            return DateTime.UtcNow.AddMinutes(minutes);
+        if (int.TryParse(_configuration["Jwt:AccessTokenExpiryHours"], out var hours))
+            return DateTime.UtcNow.AddHours(hours);
+        return DateTime.UtcNow.AddMinutes(15);
     }
 
     public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequestDto request)
@@ -320,8 +329,8 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("SuperAdmin user not found.");
         }
 
-        // Reset to default password
-        superAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword("SuperAdmin@123");
+        const string defaultPassword = "SuperAdmin@123";
+        superAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword(defaultPassword);
         superAdmin.IsActive = true;
         superAdmin.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();

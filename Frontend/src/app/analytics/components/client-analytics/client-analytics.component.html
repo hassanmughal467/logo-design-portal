@@ -1,0 +1,47 @@
+<div class="client-analytics">
+  <div class="empty-section" *ngIf="!data && !loading">
+    <i class="pi pi-user"></i>
+    <p>No client analytics data available.</p>
+  </div>
+  <div class="charts-grid" *ngIf="data">
+    <div class="chart-card" *ngIf="newVsReturningChart">
+      <h3 class="chart-title"><i class="pi pi-chart-pie"></i> New vs Returning Clients</h3>
+      <apx-chart [series]="newVsReturningChart.series" [chart]="newVsReturningChart.chart"
+        [labels]="newVsReturningChart.labels" [colors]="newVsReturningChart.colors"
+        [legend]="newVsReturningChart.legend" [dataLabels]="newVsReturningChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="ordersPerClientChart">
+      <h3 class="chart-title"><i class="pi pi-chart-bar"></i> Orders per Client</h3>
+      <apx-chart [series]="ordersPerClientChart.series" [chart]="ordersPerClientChart.chart"
+        [xaxis]="ordersPerClientChart.xaxis" [plotOptions]="ordersPerClientChart.plotOptions"
+        [colors]="ordersPerClientChart.colors" [yaxis]="ordersPerClientChart.yaxis"
+        [dataLabels]="ordersPerClientChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card chart-card-full" *ngIf="retentionTrendChart">
+      <h3 class="chart-title"><i class="pi pi-chart-line"></i> Client Retention Trend</h3>
+      <apx-chart [series]="retentionTrendChart.series" [chart]="retentionTrendChart.chart"
+        [xaxis]="retentionTrendChart.xaxis" [stroke]="retentionTrendChart.stroke"
+        [colors]="retentionTrendChart.colors" [yaxis]="retentionTrendChart.yaxis"
+        [legend]="retentionTrendChart.legend" [dataLabels]="retentionTrendChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="topClientsByOrdersChart">
+      <h3 class="chart-title"><i class="pi pi-sort-numeric-down"></i> Top Clients by Orders</h3>
+      <apx-chart [series]="topClientsByOrdersChart.series" [chart]="topClientsByOrdersChart.chart"
+        [xaxis]="topClientsByOrdersChart.xaxis" [plotOptions]="topClientsByOrdersChart.plotOptions"
+        [colors]="topClientsByOrdersChart.colors" [yaxis]="topClientsByOrdersChart.yaxis"
+        [dataLabels]="topClientsByOrdersChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="clientLifetimeValueChart">
+      <h3 class="chart-title"><i class="pi pi-dollar"></i> Client Lifetime Value</h3>
+      <apx-chart [series]="clientLifetimeValueChart.series" [chart]="clientLifetimeValueChart.chart"
+        [xaxis]="clientLifetimeValueChart.xaxis" [plotOptions]="clientLifetimeValueChart.plotOptions"
+        [colors]="clientLifetimeValueChart.colors" [yaxis]="clientLifetimeValueChart.yaxis"
+        [dataLabels]="clientLifetimeValueChart.dataLabels">
+      </apx-chart>
+    </div>
+  </div>
+</div>

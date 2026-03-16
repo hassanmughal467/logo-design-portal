@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using LogoDesignPortal.Domain.Enums;
 
 namespace LogoDesignPortal.Application.DTOs.Users;
 
@@ -7,6 +8,7 @@ public class UpdateClientProfileDto
     [EmailAddress]
     public string? InvoiceEmail { get; set; }
 
+    public BillingType? BillingType { get; set; }
     public string? CompanyName { get; set; }
     public string? ContactName { get; set; }
     public string? PhoneNumber { get; set; }
@@ -19,4 +21,5 @@ public class UpdateClientProfileDto
     public string? PostalCode { get; set; }
     public string? Website { get; set; }
     public string? Reference { get; set; }
+    public CustomerType? CustomerType { get; set; }
 }

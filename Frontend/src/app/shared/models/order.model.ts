@@ -7,9 +7,23 @@ export interface Order {
   status: OrderStatus;
   priority?: OrderPriority;
   price: number;
+  clientBasePrice?: number;
+  clientChargePrice?: number;
+  currencyCode?: string;
+  standardPrice?: number;
+  designerProposedPrice?: number;
+  designerApprovedPrice?: number;
   proposedPrice?: number;
+  approvedPrice?: number;
+  priceApprovalStatus?: string;
   requiresPriceApproval: boolean;
   priceApproved: boolean;
+  /** Role of user who last updated client charge price (Admin, SuperAdmin, Client, Designer) */
+  priceUpdatedByRole?: string;
+  /** When the client charge price was last updated */
+  priceUpdatedAt?: Date;
+  designCategory?: string;
+  designType?: string;
   createdAt: Date;
   updatedAt?: Date;
   dueDate?: Date;
@@ -22,6 +36,10 @@ export interface Order {
   fileCount: number;
   visibleFileCount: number;
   revisionCount: number;
+  /** Max revisions allowed for this package. Null/undefined = unlimited. */
+  revisionLimit?: number;
+  /** True when client has used all revisions and cannot request more (unless admin approves extra). */
+  revisionLimitExceeded?: boolean;
   commentCount: number;
   client?: {
     id: string;
@@ -62,26 +80,21 @@ export interface Order {
   allowUploads?: boolean;
 }
 
+/** Order lifecycle: WaitingForAdminApproval → PriceApprovalPending → InProgress →
+ * PreviewDelivered → RevisionRequested → ClientApproved → Completed */
 export enum OrderStatus {
-  // Original statuses (keeping for backward compatibility)
   WaitingForAdminApproval = 'WaitingForAdminApproval',
   PriceApprovalPending = 'PriceApprovalPending',
   InProgress = 'InProgress',
   PreviewDelivered = 'PreviewDelivered',
   RevisionRequested = 'RevisionRequested',
-  FinalApproved = 'FinalApproved',
+  /** Client approved design; Admin reviews before marking Completed */
+  ClientApproved = 'ClientApproved',
   Completed = 'Completed',
   Cancelled = 'Cancelled',
-  
-  // New professional statuses
-  Pending = 'Pending',
-  Paid = 'Paid',
-  Processing = 'Processing',
   CancelledByUser = 'CancelledByUser',
   CancelledByAdmin = 'CancelledByAdmin',
   Refunded = 'Refunded',
-  Failed = 'Failed',
-  Archived = 'Archived'
 }
 
 export enum OrderPriority {
@@ -97,11 +110,12 @@ export interface CreateOrderRequest {
   price: number;
   priority?: number; // Backend expects integer: 1=Low, 2=Medium, 3=High, 4=Urgent
   deadline?: Date;
-  instructions?: string;
   requiredFormats?: string;
   requirements?: string;
   colorPreferences?: string;
   stylePreferences?: string;
+  designCategory?: number;
+  designType?: number;
 }
 
 export interface AssignOrderRequest {

@@ -1,5 +1,28 @@
+.loading-state,
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  min-height: 200px;
+
+  p {
+    margin-top: 1rem;
+    color: var(--text-color-secondary);
+  }
+}
+
+.error-state {
+  h3 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-color);
+  }
+}
+
 .designer-detail-container {
-  padding: 2rem;
+  padding: 1.5rem 2rem;
 
   .header {
     display: flex;
@@ -9,24 +32,68 @@
 
     h2 {
       margin: 0;
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--text-color);
     }
   }
 
   .info-cards {
     margin-bottom: 2rem;
+
+    ::ng-deep .p-card {
+      border-radius: 12px;
+      border: 1px solid var(--surface-border);
+      overflow: hidden;
+    }
+
+    ::ng-deep .p-card-body {
+      padding: 1.5rem 1.75rem;
+    }
+
+    h3 {
+      margin: 0 0 1.25rem 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-color);
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--surface-border);
+    }
+
+    p {
+      margin: 0 0 0.75rem 0;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      color: var(--text-color);
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+
+      strong {
+        display: inline-block;
+        min-width: 140px;
+        color: var(--text-color-secondary);
+        font-weight: 500;
+      }
+    }
   }
 
   .badge-success {
-    background-color: #28a745;
-    color: white;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--green-600, #059669);
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
   }
 
   .badge-danger {
-    background-color: #dc3545;
-    color: white;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--red-600, #dc2626);
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
   }
 }

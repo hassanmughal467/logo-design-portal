@@ -3,9 +3,11 @@ using Moq;
 using LogoDesignPortal.Application.Services;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
+using LogoDesignPortal.Application.Configuration;
 using AutoMapper;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
+using Microsoft.Extensions.Options;
 
 namespace LogoDesignPortal.Application.Tests.Services;
 
@@ -24,7 +26,9 @@ public class InvoiceServiceTests
             _contextMock.Object,
             _mapperMock.Object,
             Mock.Of<INotificationService>(),
-            Mock.Of<IRealtimeEntityUpdateSender>()
+            Mock.Of<IRealtimeEntityUpdateSender>(),
+            Options.Create(new ProductionSafetyOptions()),
+            Mock.Of<Microsoft.Extensions.Logging.ILogger<InvoiceService>>()
         );
     }
 

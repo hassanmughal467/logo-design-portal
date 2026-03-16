@@ -68,12 +68,10 @@ export class LoginComponent implements OnInit {
     this.loading = true;
     const { email, password } = this.loginForm.value;
 
-    console.log('Attempting login with:', { email });
 
     this.authService.login({ email, password }).subscribe({
-      next: (response) => {
-        console.log('Login successful:', response);
-        // Clear any errors on success
+      next: () => {
+        this.loading = false;
         this.loginError = '';
         this.messageService.add({
           severity: 'success',
@@ -83,7 +81,6 @@ export class LoginComponent implements OnInit {
         this.router.navigate([this.returnUrl]);
       },
       error: (error) => {
-        console.error('Login error:', error);
         this.loading = false;
         
         // Extract error message from backend response

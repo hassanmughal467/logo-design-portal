@@ -147,7 +147,7 @@ export class RealtimeNotificationService implements OnDestroy {
       severity,
       summary: title,
       detail: message,
-      life: 5000,
+      life: 10000,
       data: redirectUrl ? { redirectUrl } : undefined
     });
   }

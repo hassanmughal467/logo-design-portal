@@ -1,3 +1,4 @@
+using LogoDesignPortal.Application.DTOs.Common;
 using LogoDesignPortal.Application.DTOs.Users;
 
 namespace LogoDesignPortal.Application.Interfaces;
@@ -7,6 +8,7 @@ public interface IUserService
     Task<UserResponseDto> CreateUserAsync(CreateUserRequestDto request);
     Task<UserResponseDto?> GetUserByIdAsync(Guid id);
     Task<List<UserResponseDto>> GetAllUsersAsync();
+    Task<PagedResultDto<UserResponseDto>> GetUsersPagedAsync(int page, int pageSize);
     Task<UserResponseDto> UpdateUserAsync(Guid id, UpdateUserRequestDto request, Guid? performedBy = null);
     Task<UserResponseDto> UpdateUserProfileAsync(Guid id, UpdateClientProfileDto request);
     Task<bool> DeleteUserAsync(Guid id, Guid deletedBy);

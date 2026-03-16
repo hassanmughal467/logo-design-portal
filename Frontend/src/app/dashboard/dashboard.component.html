@@ -1,40 +1,27 @@
 <div class="dashboard">
-  <!-- Header Section -->
-  <div class="dashboard-header">
-    <div class="header-content">
-      <h1 class="dashboard-title">Dashboard</h1>
-      <p class="welcome-text">Welcome back, <strong>{{ user?.firstName }} {{ user?.lastName }}</strong>!</p>
-    </div>
-    <div class="header-actions">
-      <p-button 
+  <app-page-header
+    title="Dashboard"
+    [subtitle]="'Welcome back, ' + (user?.firstName || '') + ' ' + (user?.lastName || '') + '! ' + (user?.role === 'Client' ? 'What is happening with my orders right now?' : '')">
+    <div actions>
+      <p-button
         *ngIf="user?.role === 'Client'"
-        label="New Order" 
-        icon="pi pi-plus" 
+        label="Create New Order"
+        icon="pi pi-plus"
         (onClick)="openCreateOrderModal()"
-        styleClass="p-button-primary">
+        styleClass="p-button-primary client-primary-action">
       </p-button>
-      <div class="quick-nav" style="display: flex; gap: 0.5rem; margin-left: 1rem;">
-        <p-button 
-          *ngIf="user?.role === 'SuperAdmin' || user?.role === 'Admin'"
-          label="Users" icon="pi pi-users" 
-          (onClick)="navigateToRoute('/users')" styleClass="p-button-outlined"></p-button>
-        <p-button 
-          label="Orders" icon="pi pi-shopping-cart" 
-          (onClick)="navigateToRoute('/orders')" styleClass="p-button-outlined"></p-button>
-        <p-button 
-          *ngIf="user?.role === 'SuperAdmin' || user?.role === 'Admin'"
-          label="Designers" icon="pi pi-user-edit" 
-          (onClick)="navigateToRoute('/designers')" styleClass="p-button-outlined"></p-button>
-        <p-button 
-          *ngIf="user?.role === 'SuperAdmin'"
-          label="Permissions" icon="pi pi-key" 
-          (onClick)="navigateToRoute('/permissions')" styleClass="p-button-outlined"></p-button>
-        <p-button 
-          label="Files" icon="pi pi-file" 
-          (onClick)="navigateToRoute('/files')" styleClass="p-button-outlined"></p-button>
+      <div class="quick-nav" *ngIf="user?.role !== 'Client'" style="display: flex; gap: 0.5rem; margin-left: 0.75rem;">
+        <p-button *ngIf="user?.role === 'SuperAdmin' || user?.role === 'Admin'"
+          label="Users" icon="pi pi-users" (onClick)="navigateToRoute('/users')" styleClass="p-button-outlined"></p-button>
+        <p-button label="Orders" icon="pi pi-shopping-cart" (onClick)="navigateToRoute('/orders')" styleClass="p-button-outlined"></p-button>
+        <p-button *ngIf="user?.role === 'SuperAdmin' || user?.role === 'Admin'"
+          label="Designers" icon="pi pi-user-edit" (onClick)="navigateToRoute('/designers')" styleClass="p-button-outlined"></p-button>
+        <p-button *ngIf="user?.role === 'SuperAdmin'"
+          label="Permissions" icon="pi pi-key" (onClick)="navigateToRoute('/permissions')" styleClass="p-button-outlined"></p-button>
+        <p-button label="Files" icon="pi pi-file" (onClick)="navigateToRoute('/files')" styleClass="p-button-outlined"></p-button>
       </div>
     </div>
-  </div>
+  </app-page-header>
 
   <!-- Loading -->
   <div *ngIf="loading" class="loading-container">
@@ -45,13 +32,21 @@
   <!-- Dashboard Content -->
   <div *ngIf="!loading" class="dashboard-content">
 
-    <!-- ═══ CLIENT DASHBOARD ═══ -->
+    <!-- ═══ CLIENT DASHBOARD (Quick Operational Overview) ═══ -->
     <ng-container *ngIf="user?.role === 'Client'">
 
-      <!-- ACTION REQUIRED (always visible when items exist) -->
+      <!-- ACTION REQUIRED (always visible when items exist, expand/collapse) -->
       <div class="action-required-section" *ngIf="actionRequiredItems.length > 0">
-        <h2 class="section-heading"><i class="pi pi-exclamation-circle"></i> Action Required</h2>
-        <div class="action-required-list">
+        <h2 class="section-heading action-required-toggle" (click)="actionRequiredCollapsed = !actionRequiredCollapsed"
+          [attr.aria-expanded]="!actionRequiredCollapsed" role="button" tabindex="0"
+          (keydown.enter)="actionRequiredCollapsed = !actionRequiredCollapsed"
+          (keydown.space)="actionRequiredCollapsed = !actionRequiredCollapsed; $event.preventDefault()">
+          <i class="pi pi-chevron-right toggle-chevron" [class.collapsed]="actionRequiredCollapsed"></i>
+          <i class="pi pi-exclamation-circle"></i>
+          <span>Action Required</span>
+          <span class="action-count-badge">{{ actionRequiredItems.length }}</span>
+        </h2>
+        <div class="action-required-list" [class.collapsed]="actionRequiredCollapsed">
           <div class="action-required-item" *ngFor="let item of actionRequiredItems"
             [class]="'action-severity-' + item.severity">
             <div class="action-icon-wrap"><i [class]="item.icon"></i></div>
@@ -65,19 +60,128 @@
         </div>
       </div>
 
-      <!-- COMPACT SUMMARY BAR (always visible) -->
-      <div class="summary-bar">
-        <div class="summary-item" *ngFor="let item of summaryMetrics"
-          [class.clickable]="item.route" (click)="item.route && navigateToRoute(item.route)">
-          <div class="summary-icon" [class]="'bg-' + item.color"><i [class]="item.icon"></i></div>
-          <div class="summary-text">
-            <span class="summary-value">
-              <span *ngIf="item.isCurrency">$</span>{{ item.isCurrency ? (item.value | number:'1.2-2') : (item.value | number) }}
-            </span>
-            <span class="summary-label">{{ item.label }}</span>
+      <!-- KPI Cards: Active Orders | Completed | Pending Invoices | Due Amount | Total Orders -->
+      <div class="client-operational-cards client-summary-cards">
+        <div class="operational-card" [class.clickable]="true" (click)="navigateToRoute('/orders')">
+          <div class="operational-icon bg-info"><i class="pi pi-shopping-cart"></i></div>
+          <div class="operational-content">
+            <span class="operational-value">{{ dashboardData.stats.activeOrders }}</span>
+            <span class="operational-label">Active Orders</span>
+          </div>
+        </div>
+        <div class="operational-card" [class.clickable]="true" (click)="navigateToRoute('/orders')">
+          <div class="operational-icon bg-success"><i class="pi pi-check-circle"></i></div>
+          <div class="operational-content">
+            <span class="operational-value">{{ dashboardData.stats.completedOrders }}</span>
+            <span class="operational-label">Completed Orders</span>
+          </div>
+        </div>
+        <div class="operational-card" [class.clickable]="true" (click)="navigateToRoute('/invoices')">
+          <div class="operational-icon bg-warning"><i class="pi pi-file"></i></div>
+          <div class="operational-content">
+            <span class="operational-value">{{ dashboardData.stats.pendingInvoices || 0 }}</span>
+            <span class="operational-label">Pending Invoices</span>
+          </div>
+        </div>
+        <div class="operational-card" [class.clickable]="true" (click)="navigateToRoute('/invoices')">
+          <div class="operational-icon bg-danger"><i class="pi pi-dollar"></i></div>
+          <div class="operational-content">
+            <span class="operational-value">{{ formatCurrency(dashboardData.stats.dueAmount || 0) }}</span>
+            <span class="operational-label">Due Amount</span>
+          </div>
+        </div>
+        <div class="operational-card" [class.clickable]="true" (click)="navigateToRoute('/orders')">
+          <div class="operational-icon bg-primary"><i class="pi pi-list"></i></div>
+          <div class="operational-content">
+            <span class="operational-value">{{ dashboardData.stats.totalOrders }}</span>
+            <span class="operational-label">Total Orders</span>
           </div>
         </div>
       </div>
+
+      <!-- Quick Actions -->
+      <div class="client-quick-actions">
+        <div class="quick-action-item" (click)="openCreateOrderModal()">
+          <div class="quick-action-icon bg-primary"><i class="pi pi-plus"></i></div>
+          <div class="quick-action-content">
+            <h4>Create New Order</h4>
+            <p>Start a new logo design project</p>
+          </div>
+          <i class="pi pi-arrow-right quick-action-arrow"></i>
+        </div>
+        <div class="quick-action-item" (click)="navigateToRoute('/orders')">
+          <div class="quick-action-icon bg-info"><i class="pi pi-shopping-cart"></i></div>
+          <div class="quick-action-content">
+            <h4>View My Orders</h4>
+            <p>Track and manage your orders</p>
+          </div>
+          <i class="pi pi-arrow-right quick-action-arrow"></i>
+        </div>
+        <div class="quick-action-item" (click)="navigateToRoute('/invoices')">
+          <div class="quick-action-icon bg-success"><i class="pi pi-money-bill"></i></div>
+          <div class="quick-action-content">
+            <h4>View Invoices</h4>
+            <p>View and pay your invoices</p>
+          </div>
+          <i class="pi pi-arrow-right quick-action-arrow"></i>
+        </div>
+      </div>
+
+      <!-- Recent Orders -->
+      <p-card styleClass="dashboard-panel order-history-panel">
+        <ng-template pTemplate="header">
+          <div class="header-row">
+            <div class="header-row-left">
+              <div class="order-history-header-icon">
+                <i class="pi pi-list"></i>
+              </div>
+              <span class="order-history-title">Recent Orders</span>
+            </div>
+            <p-button [label]="showArchived ? 'Hide Archived' : 'Show Archived'" icon="pi pi-archive" styleClass="p-button-text p-button-sm" (onClick)="toggleShowArchived()"></p-button>
+          </div>
+        </ng-template>
+        <div class="filter-row">
+          <span class="p-input-icon-left order-history-search-wrap">
+            <i class="pi pi-search"></i>
+            <input type="text" pInputText [(ngModel)]="orderSearchFilter" (input)="onOrderSearchFilterChange()" placeholder="Search orders..." class="order-history-search-input" />
+          </span>
+          <p-dropdown [options]="orderStatusOptions" [(ngModel)]="orderStatusFilter" (onChange)="onOrderStatusFilterChange()"
+            placeholder="All Statuses" styleClass="p-input-sm order-history-status-dropdown"></p-dropdown>
+          <span class="filter-row-spacer"></span>
+          <a class="view-all-orders-link view-all-orders" (click)="navigateToOrders()">View All Orders <i class="pi pi-arrow-right"></i></a>
+        </div>
+        <div *ngIf="filteredOrders.length === 0" class="empty-state">
+          <i class="pi pi-inbox empty-icon"></i>
+          <p class="empty-text">No orders found</p>
+          <p-button label="Create Order" icon="pi pi-plus" (onClick)="openCreateOrderModal()" styleClass="p-button-primary client-primary-action"></p-button>
+        </div>
+        <div class="order-history-table-wrapper" *ngIf="filteredOrders.length > 0">
+          <p-table [value]="filteredOrders" [paginator]="true" [rows]="10" [rowsPerPageOptions]="[5, 10, 25]"
+            styleClass="p-datatable-sm order-history-table" [responsive]="true">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Last Update</th>
+              <th>Due Date</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-order>
+            <tr class="order-row" (click)="navigateToOrder(order.id)">
+              <td><div class="order-title"><i class="pi pi-file-edit"></i><span>{{ order.title }}</span></div></td>
+              <td><p-tag [value]="formatStatus(order.status)" [severity]="getStatusSeverity(order.status)" [rounded]="true"></p-tag></td>
+              <td><span class="date-text">{{ formatRelativeDate(order.updatedAt || order.createdAt) }}</span></td>
+              <td><span class="date-text" [class.overdue]="isOverdue(order.dueDate)">{{ order.dueDate ? formatDate(order.dueDate) : 'N/A' }}</span></td>
+              <td>
+                <p-button icon="pi pi-eye" styleClass="p-button-text p-button-rounded p-button-sm" (onClick)="navigateToOrder(order.id); $event.stopPropagation()" pTooltip="View"></p-button>
+                <p-button *ngIf="order.status === 'Completed'" icon="pi pi-copy" styleClass="p-button-text p-button-rounded p-button-sm" (onClick)="quickReorder(order); $event.stopPropagation()" pTooltip="Copy"></p-button>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+        </div>
+      </p-card>
 
       <!-- HIDDEN: Detailed Analytics - Now available as separate page (/analytics) -->
       <!-- Uncomment below to restore Detailed Analytics panel in dashboard -->
@@ -191,77 +295,6 @@
         </div>
       </p-panel>
       -->
-
-      <!-- COLLAPSIBLE: Order History (expanded by default) -->
-      <p-panel [toggleable]="true" [collapsed]="false" toggler="header" styleClass="dashboard-panel">
-        <ng-template pTemplate="header">
-          <div class="panel-header-content">
-            <i class="pi pi-list"></i>
-            <span>Order History</span>
-            <p-tag class="panel-badge" [value]="allOrders.length + ' orders'" severity="info" [rounded]="true"></p-tag>
-          </div>
-        </ng-template>
-        <div class="order-history-toolbar">
-          <p-button [label]="showArchived ? 'Hide Archived' : 'Show Archived'" 
-            [icon]="showArchived ? 'pi pi-eye-slash' : 'pi pi-box'" 
-            styleClass="p-button-text p-button-sm" (onClick)="toggleShowArchived(); $event.stopPropagation()"></p-button>
-          <p-button label="View All Orders" icon="pi pi-arrow-right" iconPos="right"
-            styleClass="p-button-text p-button-sm" (onClick)="navigateToOrders(); $event.stopPropagation()"></p-button>
-        </div>
-        <div class="order-filters-bar">
-          <span class="p-input-icon-left">
-            <i class="pi pi-search"></i>
-            <input type="text" pInputText [(ngModel)]="orderSearchFilter" (input)="onOrderSearchFilterChange()"
-              (click)="$event.stopPropagation()" placeholder="Search orders..." class="search-input" />
-          </span>
-          <p-dropdown [options]="orderStatusOptions" [(ngModel)]="orderStatusFilter" optionLabel="label"
-            optionValue="value" placeholder="Filter by status" (onChange)="onOrderStatusFilterChange()"
-            [styleClass]="'filter-dropdown'" (click)="$event.stopPropagation()"></p-dropdown>
-        </div>
-        <div *ngIf="filteredOrders.length === 0" class="empty-state">
-          <i class="pi pi-inbox empty-icon"></i>
-          <p class="empty-text">No orders found</p>
-          <p class="empty-subtext">Create your first order to get started!</p>
-          <p-button label="Create Order" icon="pi pi-plus" (onClick)="openCreateOrderModal()" styleClass="p-button-primary"></p-button>
-        </div>
-        <p-table *ngIf="filteredOrders.length > 0" [value]="filteredOrders" [paginator]="true" [rows]="10"
-          styleClass="p-datatable-sm recent-orders-table" [responsive]="true">
-          <ng-template pTemplate="header">
-            <tr>
-              <th>Title</th>
-              <th>Status</th>
-              <th>Last Update</th>
-              <th>Due Date</th>
-              <th style="width: 220px">Actions</th>
-            </tr>
-          </ng-template>
-          <ng-template pTemplate="body" let-order>
-            <tr class="order-row">
-              <td><div class="order-title"><i class="pi pi-file-edit"></i><span>{{ order.title }}</span></div></td>
-              <td><p-tag [value]="order.status" [severity]="getStatusSeverity(order.status)" [rounded]="true"></p-tag></td>
-              <td><span class="date-text">{{ formatRelativeDate(order.updatedAt || order.createdAt) }}</span></td>
-              <td><span class="date-text" [class.overdue]="isOverdue(order.dueDate)">{{ formatDate(order.dueDate) }}</span></td>
-              <td>
-                <div class="action-buttons">
-                  <p-button icon="pi pi-eye" styleClass="p-button-text p-button-rounded p-button-sm"
-                    (onClick)="navigateToOrder(order.id); $event.stopPropagation()" pTooltip="View Details" tooltipPosition="top"></p-button>
-                  <p-button icon="pi pi-history" styleClass="p-button-text p-button-rounded p-button-sm p-button-info"
-                    (onClick)="openTimeline(order); $event.stopPropagation()" pTooltip="Activity Timeline" tooltipPosition="top"></p-button>
-                  <p-button *ngIf="canApproveOrder(order)" icon="pi pi-check" 
-                    styleClass="p-button-text p-button-rounded p-button-sm p-button-success"
-                    (onClick)="approveOrder(order); $event.stopPropagation()" pTooltip="Approve" tooltipPosition="top"></p-button>
-                  <p-button *ngIf="canRequestRevision(order)" icon="pi pi-refresh" 
-                    styleClass="p-button-text p-button-rounded p-button-sm p-button-warning"
-                    (onClick)="requestRevision(order); $event.stopPropagation()" pTooltip="Request Revision" tooltipPosition="top"></p-button>
-                  <p-button *ngIf="order.status === 'Completed' || order.status === 'FinalApproved'" icon="pi pi-copy" 
-                    styleClass="p-button-text p-button-rounded p-button-sm p-button-secondary"
-                    (onClick)="quickReorder(order); $event.stopPropagation()" pTooltip="Quick Reorder" tooltipPosition="top"></p-button>
-                </div>
-              </td>
-            </tr>
-          </ng-template>
-        </p-table>
-      </p-panel>
 
       <!-- HIDDEN: File Gallery - No longer needed on overview -->
       <!-- Uncomment below to restore File Gallery panel in dashboard -->
@@ -444,26 +477,22 @@
       </p-panel>
       -->
 
-      <!-- Notifications panel - uses NotificationService.unreadCount$ -->
-      <p-panel [toggleable]="true" [collapsed]="true" toggler="header" styleClass="dashboard-panel">
+      <!-- COLLAPSIBLE: Notifications -->
+      <p-panel [toggleable]="true" [(collapsed)]="notificationsPanelCollapsed" toggler="header" styleClass="dashboard-panel">
         <ng-template pTemplate="header">
           <div class="panel-header-content">
             <i class="pi pi-bell"></i>
             <span>Notifications</span>
-            <ng-container *ngIf="notificationUnreadCount$ | async as count">
-              <p-tag *ngIf="count > 0" class="panel-badge" [value]="count + ' new'" severity="danger" [rounded]="true"></p-tag>
-            </ng-container>
+            <p-tag *ngIf="notifications.length > 0" class="panel-badge" [value]="notifications.length + ' items'" severity="info" [rounded]="true"></p-tag>
           </div>
         </ng-template>
         <div *ngIf="notifications.length === 0" class="empty-state">
           <i class="pi pi-bell-slash empty-icon"></i>
           <p class="empty-text">No notifications</p>
         </div>
-        <div class="notifications-list" *ngIf="notifications.length > 0">
+        <div class="notifications-list notifications-list--scrollable" *ngIf="notifications.length > 0">
           <div class="notification-item" *ngFor="let notification of notifications" [class.unread]="!notification.isRead" (click)="onNotificationClick(notification)" [style.cursor]="(notification.redirectUrl || notification.referenceId || notification.orderId) ? 'pointer' : 'default'">
-            <div class="notification-icon">
-              <i [class]="'pi ' + (notification.type?.includes('Order') ? 'pi-shopping-cart' : 'pi-file')"></i>
-            </div>
+            <div class="notification-icon"><i [class]="'pi ' + (notification.type?.includes('Order') ? 'pi-shopping-cart' : 'pi-file')"></i></div>
             <div class="notification-content">
               <h4>{{ notification.title }}</h4>
               <p>{{ notification.message }}</p>
@@ -585,8 +614,12 @@
               <i class="pi pi-chart-pie"></i>
               <h3>Orders by Status</h3>
             </div>
-            <div class="chart-container">
+            <div class="chart-container chart-container--donut">
               <p-chart type="doughnut" [data]="statusChartData" [options]="statusChartOptions" [style]="{'width': '100%', 'height': '100%'}"></p-chart>
+              <div class="donut-center" *ngIf="statusChartTotalOrders > 0">
+                <span class="donut-center-value">{{ statusChartTotalOrders }}</span>
+                <span class="donut-center-label">Total Orders</span>
+              </div>
             </div>
           </div>
         </div>
@@ -601,7 +634,7 @@
             </div>
           </div>
         </div>
-        <div class="chart-card" *ngIf="dashboardData.revenueByPackage.length > 0 && (user?.role === 'SuperAdmin' || user?.role === 'Admin')">
+        <div class="chart-card" *ngIf="(dashboardData?.revenueByPackage?.length ?? 0) > 0 && (user?.role === 'SuperAdmin' || user?.role === 'Admin')">
           <div class="chart-card-inner">
             <div class="chart-card-header">
               <i class="pi pi-chart-bar"></i>
@@ -618,7 +651,11 @@
       <div class="admin-recent-orders">
         <div class="section-card">
           <div class="section-card-header">
-            <div class="section-card-title-group">
+            <div class="section-card-title-group section-card-toggle" (click)="recentOrdersCollapsed = !recentOrdersCollapsed"
+              [attr.aria-expanded]="!recentOrdersCollapsed" role="button" tabindex="0"
+              (keydown.enter)="recentOrdersCollapsed = !recentOrdersCollapsed"
+              (keydown.space)="recentOrdersCollapsed = !recentOrdersCollapsed; $event.preventDefault()">
+              <i class="pi pi-chevron-right section-toggle-chevron" [class.collapsed]="recentOrdersCollapsed"></i>
               <div class="section-card-icon">
                 <i class="pi pi-list"></i>
               </div>
@@ -627,9 +664,9 @@
                 <p class="section-card-subtitle">Latest {{ dashboardData.recentOrders.length || 0 }} orders</p>
               </div>
             </div>
-            <p-button label="View All" icon="pi pi-arrow-right" iconPos="right" styleClass="p-button-text p-button-sm" (onClick)="navigateToOrders()"></p-button>
+            <p-button label="View All" icon="pi pi-arrow-right" iconPos="right" styleClass="p-button-text p-button-sm" (onClick)="navigateToOrders(); $event.stopPropagation()"></p-button>
           </div>
-          <div class="section-card-body">
+          <div class="section-card-body" [class.collapsed]="recentOrdersCollapsed">
             <div *ngIf="!dashboardData || dashboardData.recentOrders.length === 0" class="empty-state">
               <i class="pi pi-inbox empty-icon"></i>
               <p class="empty-text">No orders found</p>
@@ -655,13 +692,17 @@
                     </div>
                   </td>
                   <td>
-                    <p-tag [value]="order.status" [severity]="getStatusSeverity(order.status)" [rounded]="true"></p-tag>
+                    <p-tag [value]="formatStatus(order.status)" [severity]="getStatusSeverity(order.status)" [rounded]="true"></p-tag>
                   </td>
                   <td><span class="date-text">{{ formatDate(order.createdAt) }}</span></td>
                   <td><span class="date-text" [class.overdue]="isOverdue(order.dueDate)">{{ formatDate(order.dueDate) }}</span></td>
                   <td style="text-align: center;">
                     <p-button icon="pi pi-eye" styleClass="p-button-text p-button-rounded p-button-sm"
                       (onClick)="navigateToOrder(order.id); $event.stopPropagation()" pTooltip="View Details" tooltipPosition="top"></p-button>
+                    <p-button *ngIf="canGenerateInvoice(order)"
+                      icon="pi pi-file-pdf" styleClass="p-button-text p-button-rounded p-button-sm"
+                      (onClick)="generateInvoice(order); $event.stopPropagation()"
+                      pTooltip="Generate Invoice" tooltipPosition="top"></p-button>
                   </td>
                 </tr>
               </ng-template>

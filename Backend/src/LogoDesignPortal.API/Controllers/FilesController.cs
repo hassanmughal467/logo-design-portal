@@ -1,3 +1,5 @@
+using LogoDesignPortal.API.Extensions;
+using LogoDesignPortal.API.Models;
 using LogoDesignPortal.Application.DTOs.Files;
 using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Interfaces;
@@ -25,7 +27,7 @@ public class FilesController : ControllerBase
     [RequestSizeLimit(50 * 1024 * 1024)]
     [ProducesResponseType(typeof(FileUploadResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> UploadFile(Guid orderId, IFormFile file, [FromForm] string? fileType = "Reference", [FromForm] string? description = null)
+    public async Task<IActionResult> UploadFile(Guid orderId, IFormFile file, [FromForm] string? fileType = "Reference", [FromForm] string? description = null, [FromForm] int? designCategory = null, [FromForm] int? designType = null, [FromForm] decimal? proposedPrice = null)
     {
         try
         {
@@ -34,8 +36,8 @@ public class FilesController : ControllerBase
                 return BadRequest(new { error = "No file uploaded." });
             }
 
-            var uploadedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var result = await _fileService.UploadFileAsync(orderId, file, uploadedBy, fileType, description);
+            var uploadedBy = User.GetUserIdOrThrow();
+            var result = await _fileService.UploadFileAsync(orderId, file, uploadedBy, fileType, description, designCategory, designType, proposedPrice);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -48,7 +50,7 @@ public class FilesController : ControllerBase
     [RequestSizeLimit(50 * 1024 * 1024)]
     [ProducesResponseType(typeof(List<FileUploadResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> UploadMultipleFiles(Guid orderId, [FromForm] IFormFile[] files, [FromForm] string? fileType = "Reference", [FromForm] string? description = null)
+    public async Task<IActionResult> UploadMultipleFiles(Guid orderId, [FromForm] IFormFile[] files, [FromForm] string? fileType = "Reference", [FromForm] string? description = null, [FromForm] int? designCategory = null, [FromForm] int? designType = null, [FromForm] decimal? proposedPrice = null)
     {
         try
         {
@@ -57,8 +59,8 @@ public class FilesController : ControllerBase
                 return BadRequest(new { error = "No files uploaded." });
             }
 
-            var uploadedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var result = await _fileService.UploadMultipleFilesAsync(orderId, files, uploadedBy, fileType, description);
+            var uploadedBy = User.GetUserIdOrThrow();
+            var result = await _fileService.UploadMultipleFilesAsync(orderId, files, uploadedBy, fileType, description, designCategory, designType, proposedPrice);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -75,7 +77,7 @@ public class FilesController : ControllerBase
     {
         try
         {
-            var approvedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var approvedBy = User.GetUserIdOrThrow();
             var result = await _fileService.ApproveFileAsync(id, request, approvedBy);
             return Ok(result);
         }
@@ -94,16 +96,14 @@ public class FilesController : ControllerBase
     {
         try
         {
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userIdClaim))
+            var userId = User.GetUserId();
+            if (userId == null)
             {
                 return Unauthorized(new { error = "User not authenticated." });
             }
-
-            var userId = Guid.Parse(userIdClaim);
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             
-            var (fileContent, fileName, contentType) = await _fileService.DownloadFileAsync(id, userId, userRole);
+            var (fileContent, fileName, contentType) = await _fileService.DownloadFileAsync(id, userId.Value, userRole);
             
             return File(fileContent, contentType, fileName);
         }
@@ -131,15 +131,21 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(List<FileResponseDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAllFiles()
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllFiles([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var userRole = User.FindFirstValue(ClaimTypes.Role);
-            var files = await _fileService.GetAllFilesAsync(userId, userRole);
-            return Ok(files);
+            pageSize = Math.Clamp(pageSize, 1, 100);
+            var paged = await _fileService.GetAllFilesPagedAsync(userId, userRole, page, pageSize);
+            var totalPages = paged.PageSize > 0 ? (int)Math.Ceiling((double)paged.Total / paged.PageSize) : 0;
+            return Ok(new ApiResponse<object>
+            {
+                Data = new { items = paged.Items, total = paged.Total, page = paged.Page, pageSize = paged.PageSize },
+                Meta = new ApiMeta { Total = paged.Total, Page = paged.Page, PageSize = paged.PageSize, TotalPages = totalPages }
+            });
         }
         catch (FormatException)
         {
@@ -158,7 +164,7 @@ public class FilesController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var files = await _fileService.GetOrderFilesAsync(orderId, userId, userRole);
             return Ok(files);
@@ -184,7 +190,7 @@ public class FilesController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var result = await _fileService.DeleteFileAsync(id, userId, userRole);
             return Ok(new { message = "File deleted successfully." });

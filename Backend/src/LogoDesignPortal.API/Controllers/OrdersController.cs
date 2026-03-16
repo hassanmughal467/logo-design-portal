@@ -1,4 +1,6 @@
 using LogoDesignPortal.API.Attributes;
+using LogoDesignPortal.API.Extensions;
+using LogoDesignPortal.API.Models;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Interfaces;
@@ -30,7 +32,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.CreateOrderAsync(request, userId);
             return CreatedAtAction(nameof(GetOrderById), new { id = order.Id }, order);
         }
@@ -58,8 +61,7 @@ public class OrdersController : ControllerBase
             if (request == null)
                 return BadRequest(new { error = "Invalid order data." });
 
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+            if (User.GetUserId() is not { } userId)
                 return Unauthorized(new { error = "User identity could not be determined." });
 
             var fileArray = files.ToArray();
@@ -84,7 +86,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var order = await _orderService.GetOrderByIdAsync(id, userId, userRole);
             
@@ -112,7 +115,8 @@ public class OrdersController : ControllerBase
     [ProducesResponseType(typeof(List<OrderResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyOrders()
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized(new { error = "User identity could not be determined." });
         var orders = await _orderService.GetOrdersByClientAsync(userId);
         return Ok(orders);
     }
@@ -122,21 +126,28 @@ public class OrdersController : ControllerBase
     [ProducesResponseType(typeof(List<OrderResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAssignedOrders()
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized(new { error = "User identity could not be determined." });
         var orders = await _orderService.GetOrdersByDesignerAsync(userId);
         return Ok(orders);
     }
 
     [HttpGet]
-    [Authorize] // Must be authenticated
-    [RequirePermission("ViewAllOrders")] // Permission-based: SuperAdmin can grant to Admin
-    [ProducesResponseType(typeof(List<OrderResponseDto>), StatusCodes.Status200OK)]
+    [Authorize]
+    [RequirePermission("ViewAllOrders")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetAllOrders()
+    public async Task<IActionResult> GetAllOrders([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
         var userRole = User.FindFirstValue(ClaimTypes.Role);
-        var orders = await _orderService.GetAllOrdersAsync(userRole);
-        return Ok(orders);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var paged = await _orderService.GetOrdersPagedAsync(userRole, page, pageSize);
+        var totalPages = paged.PageSize > 0 ? (int)Math.Ceiling((double)paged.Total / paged.PageSize) : 0;
+        return Ok(new ApiResponse<object>
+        {
+            Data = new { items = paged.Items, total = paged.Total, page = paged.Page, pageSize = paged.PageSize },
+            Meta = new ApiMeta { Total = paged.Total, Page = paged.Page, PageSize = paged.PageSize, TotalPages = totalPages }
+        });
     }
 
     [HttpPost("{id}/assign")]
@@ -149,7 +160,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var assignedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } assignedBy)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.AssignOrderToDesignerAsync(id, request.DesignerId, assignedBy);
             return Ok(order);
         }
@@ -167,7 +179,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var order = await _orderService.UpdateOrderStatusAsync(id, request, userId, userRole);
             return Ok(order);
@@ -186,7 +199,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var requestedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } requestedBy)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.RequestPriceApprovalAsync(id, request, requestedBy);
             return Ok(order);
         }
@@ -204,7 +218,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var approvedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } approvedBy)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.ApprovePriceAsync(id, request, approvedBy);
             return Ok(order);
         }
@@ -222,7 +237,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var approvedBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } approvedBy)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.ApproveOrderAsync(id, approvedBy);
             return Ok(order);
         }
@@ -240,7 +256,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var sentBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } sentBy)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.SendFilesToClientAsync(id, fileIds, sentBy);
             return Ok(order);
         }
@@ -260,7 +277,8 @@ public class OrdersController : ControllerBase
         {
             if (request == null)
                 return BadRequest(new { error = "PreviewBatchId is required." });
-            var sentBy = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } sentBy)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.SendPreviewBatchToClientAsync(id, request.PreviewBatchId, sentBy);
             return Ok(order);
         }
@@ -279,7 +297,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.UpdateOrderAsync(id, request, userId);
             return Ok(order);
         }
@@ -289,7 +308,7 @@ public class OrdersController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Forbid(ex.Message);
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
     }
 
@@ -302,7 +321,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var order = await _orderService.CancelOrderAsync(id, request, userId, userRole!);
             return Ok(order);
@@ -313,7 +333,7 @@ public class OrdersController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Forbid(ex.Message);
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
     }
 
@@ -325,7 +345,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.ArchiveOrderAsync(id, request, userId);
             return Ok(order);
         }
@@ -343,7 +364,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.UnarchiveOrderAsync(id, userId);
             return Ok(order);
         }
@@ -361,8 +383,29 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.RefundOrderAsync(id, request, userId);
+            return Ok(order);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPut("{id}/client-price")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateClientChargePrice(Guid id, [FromBody] UpdateClientChargePriceRequestDto request)
+    {
+        try
+        {
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
+            var userRole = User.FindFirstValue(System.Security.Claims.ClaimTypes.Role);
+            var order = await _orderService.UpdateClientChargePriceAsync(id, request, userId, userRole);
             return Ok(order);
         }
         catch (InvalidOperationException ex)
@@ -379,7 +422,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.SetAllowUploadsAsync(id, request.AllowUploads, userId);
             return Ok(order);
         }
@@ -398,7 +442,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var logs = await _orderService.GetOrderLogsWithAccessAsync(id, userId, userRole);
             return Ok(logs);
@@ -409,7 +454,8 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { error = ex.Message });
+            _logger.LogError(ex, "Error getting order logs for order {OrderId}", id);
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "An error occurred while retrieving order logs." });
         }
     }
 
@@ -423,7 +469,8 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var cancelRequest = new CancelOrderRequestDto
             {
@@ -438,7 +485,7 @@ public class OrdersController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Forbid(ex.Message);
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
     }
 }

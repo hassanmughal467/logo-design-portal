@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <Content Update="web.config" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="appsettings.Testing.json" CopyToPublishDirectory="Never" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0">
       <PrivateAssets>all</PrivateAssets>

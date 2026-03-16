@@ -1,0 +1,17 @@
+<div class="client-alerts-panel">
+  <div class="alerts-list" *ngIf="items?.length">
+    <div *ngFor="let alert of items" class="alert-item" [class]="'alert-' + getAlertSeverity(alert.alertType)">
+      <div class="alert-icon">
+        <i class="pi" [ngClass]="getAlertIcon(alert.alertType)"></i>
+      </div>
+      <div class="alert-content">
+        <p class="alert-message">{{ alert.message }}</p>
+        <span class="alert-time">{{ formatDate(alert.occurredAt) }}</span>
+      </div>
+    </div>
+  </div>
+  <div *ngIf="!items?.length" class="empty-state">
+    <i class="pi pi-bell"></i>
+    <p>No alerts at this time</p>
+  </div>
+</div>

@@ -1,6 +1,8 @@
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
+import { AuthService } from '@core/services/auth.service';
+import { BillingService, BillingQueueOverview, BillingEligibleOrder } from '@core/services/billing.service';
 import { MessageService } from 'primeng/api';
 import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -53,9 +55,13 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   // Generate invoice dialog
   showGenerateDialog = false;
-  availableOrders: any[] = [];
+  clientsWithUninvoiced: BillingQueueOverview[] = [];
+  selectedClient: BillingQueueOverview | null = null;
+  availableOrders: { label: string; value: string }[] = [];
   selectedOrderIds: string[] = [];
   selectedBillingType: number = 1; // Default: PerLogo
+  loadingClients = false;
+  loadingOrders = false;
   billingTypes = [
     { label: 'Per Logo', value: 1 },
     { label: 'Weekly', value: 2 },
@@ -98,11 +104,19 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   constructor(
     private apiService: ApiService,
+    private authService: AuthService,
+    private billingService: BillingService,
     private messageService: MessageService,
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
     private router: Router
   ) {}
+
+  /** Admin/SuperAdmin only: Generate Invoice, Bulk Pay, Pay (mark-paid). */
+  get canManageInvoices(): boolean {
+    const role = this.authService.getCurrentUser()?.role || this.authService.getCurrentUser()?.roleName;
+    return role === 'Admin' || role === 'SuperAdmin';
+  }
 
   ngOnInit(): void {
     this.loadInvoices();
@@ -162,19 +176,18 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           console.error('Error loading invoices:', error);
-          // Create mock invoices from orders for demo
-          this.createMockInvoices();
-          this.calculateStats(this.invoices);
+          this.invoices = [];
           this.loading = false;
           this.cdr.markForCheck();
-          this.openInvoiceFromRoute();
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Failed to Load Invoices',
+            detail: error?.error?.error || 'Could not load invoices. Please try again.',
+            life: 5000
+          });
+          this.cdr.markForCheck();
         }
       });
-  }
-
-  private createMockInvoices(): void {
-    // Mock data for demonstration - will be replaced when backend API is ready
-    this.invoices = [];
   }
 
   downloadInvoice(invoiceId: string): void {
@@ -196,8 +209,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
             detail: 'Invoice PDF downloaded successfully'
           });
         },
-        error: (error) => {
-          console.error('Error downloading invoice PDF:', error);
+        error: () => {
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
@@ -208,10 +220,69 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   openGenerateDialog(): void {
-    this.loadAvailableOrders();
+    this.selectedClient = null;
+    this.availableOrders = [];
     this.selectedOrderIds = [];
     this.selectedBillingType = 1;
+    this.loadClientsWithUninvoiced();
     this.showGenerateDialog = true;
+  }
+
+  loadClientsWithUninvoiced(): void {
+    this.loadingClients = true;
+    this.billingService.getBillingQueue()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (clients) => {
+          this.clientsWithUninvoiced = clients;
+          this.loadingClients = false;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.clientsWithUninvoiced = [];
+          this.loadingClients = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load clients with uninvoiced orders'
+          });
+          this.cdr.markForCheck();
+        }
+      });
+  }
+
+  onClientSelected(): void {
+    this.selectedOrderIds = [];
+    this.availableOrders = [];
+    if (!this.selectedClient) return;
+    this.loadEligibleOrdersForClient();
+  }
+
+  loadEligibleOrdersForClient(): void {
+    if (!this.selectedClient) return;
+    this.loadingOrders = true;
+    this.billingService.getEligibleOrders(this.selectedClient.clientId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (orders: BillingEligibleOrder[]) => {
+          this.availableOrders = orders.map(o => ({
+            label: `Order #${o.orderNumber} – ${o.title} – $${o.price}`,
+            value: o.orderId
+          }));
+          this.loadingOrders = false;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.availableOrders = [];
+          this.loadingOrders = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load eligible orders'
+          });
+          this.cdr.markForCheck();
+        }
+      });
   }
   
   openDetailDialog(invoice: Invoice): void {
@@ -219,23 +290,15 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.showDetailDialog = true;
   }
 
-  loadAvailableOrders(): void {
-    this.apiService.get<any[]>('orders')
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (orders) => {
-          // Filter orders that don't have invoices yet
-          this.availableOrders = orders
-            .filter(o => o.status === 'Completed')
-            .map(o => ({ label: `${o.title} - $${o.price}`, value: o.id }));
-        },
-        error: () => {
-          this.availableOrders = [];
-        }
-      });
-  }
-
   generateInvoice(): void {
+    if (!this.selectedClient) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Warning',
+        detail: 'Please select a client'
+      });
+      return;
+    }
     if (this.selectedOrderIds.length === 0) {
       this.messageService.add({
         severity: 'warn',
@@ -245,13 +308,11 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Support both single order (backward compatibility) and multiple orders
-    const request: any = {
+    const billingPeriod = new Date().toLocaleString('default', { month: 'long' }) + ' ' + new Date().getFullYear();
+    this.billingService.createInvoiceFromOrders(this.selectedClient.clientId, {
       orderIds: this.selectedOrderIds,
-      billingType: this.selectedBillingType
-    };
-
-    this.apiService.post('invoices', request)
+      billingPeriod
+    })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
@@ -262,6 +323,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           });
           this.showGenerateDialog = false;
           this.loadInvoices();
+          this.loadStatistics();
+          this.cdr.markForCheck();
         },
         error: (error) => {
           this.messageService.add({
@@ -269,6 +332,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
             summary: 'Error',
             detail: error.error?.error || 'Failed to generate invoice'
           });
+          this.cdr.markForCheck();
         }
       });
   }
@@ -283,6 +347,10 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
             summary: 'Success',
             detail: 'Invoice sent successfully'
           });
+          this.showDetailDialog = false;
+          this.loadInvoices();
+          this.loadStatistics();
+          this.cdr.markForCheck();
         },
         error: () => {
           this.messageService.add({

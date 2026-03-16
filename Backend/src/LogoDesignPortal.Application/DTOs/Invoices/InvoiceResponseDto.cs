@@ -26,6 +26,7 @@ public class InvoiceResponseDto
     public string Status { get; set; } = string.Empty; // Paid, Unpaid, Overdue
     public string? PaymentMethod { get; set; }
     public string? Notes { get; set; }
+    public string? BillingPeriod { get; set; }
     public List<InvoiceItemDto> Items { get; set; } = new List<InvoiceItemDto>();
     public DateTime CreatedAt { get; set; }
     public bool IsLocked { get; set; } // True if status is Paid

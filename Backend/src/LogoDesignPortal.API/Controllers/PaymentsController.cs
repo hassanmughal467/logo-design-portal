@@ -1,3 +1,4 @@
+using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.DTOs.Payments;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -27,7 +28,7 @@ public class PaymentsController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var payment = await _paymentService.CreatePaymentAsync(request, userId);
             return CreatedAtAction(nameof(GetPayment), new { id = payment.Id }, payment);
         }
@@ -48,7 +49,7 @@ public class PaymentsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPayment(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         var payment = await _paymentService.GetPaymentByIdWithAccessAsync(id, userId, userRole);
         if (payment == null)
@@ -64,7 +65,7 @@ public class PaymentsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPaymentsByInvoice(Guid invoiceId)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         var payments = await _paymentService.GetPaymentsByInvoiceWithAccessAsync(invoiceId, userId, userRole);
         if (payments == null)
@@ -81,7 +82,7 @@ public class PaymentsController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var paymentLink = await _paymentService.GeneratePaymentLinkAsync(
                 request.InvoiceId, 
                 request.PaymentMethod, 
@@ -106,7 +107,7 @@ public class PaymentsController : ControllerBase
     {
         try
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             var payment = await _paymentService.ProcessPaymentAsync(request, userId);
             return Ok(payment);
         }

@@ -1,0 +1,49 @@
+<div class="workflow-analytics">
+  <div class="empty-section" *ngIf="!data && !loading">
+    <i class="pi pi-sitemap"></i>
+    <p>No workflow analytics data available.</p>
+  </div>
+  <div class="workflow-grid" *ngIf="data">
+    <div class="chart-card" *ngIf="funnelChart">
+      <h3 class="chart-title"><i class="pi pi-sitemap"></i> Order Funnel</h3>
+      <apx-chart [series]="funnelChart.series" [chart]="funnelChart.chart"
+        [xaxis]="funnelChart.xaxis" [plotOptions]="funnelChart.plotOptions"
+        [colors]="funnelChart.colors" [yaxis]="funnelChart.yaxis"
+        [dataLabels]="funnelChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="revisionChart">
+      <h3 class="chart-title"><i class="pi pi-chart-pie"></i> Revision Distribution</h3>
+      <apx-chart [series]="revisionChart.series" [chart]="revisionChart.chart"
+        [labels]="revisionChart.labels" [colors]="revisionChart.colors"
+        [legend]="revisionChart.legend" [dataLabels]="revisionChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="revisionQualityChart">
+      <h3 class="chart-title"><i class="pi pi-refresh"></i> Revision Quality</h3>
+      <apx-chart [series]="revisionQualityChart.series" [chart]="revisionQualityChart.chart"
+        [labels]="revisionQualityChart.labels" [colors]="revisionQualityChart.colors"
+        [legend]="revisionQualityChart.legend" [dataLabels]="revisionQualityChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="chart-card" *ngIf="ordersStuckChart">
+      <h3 class="chart-title"><i class="pi pi-exclamation-triangle"></i> Orders Stuck in Stage</h3>
+      <apx-chart [series]="ordersStuckChart.series" [chart]="ordersStuckChart.chart"
+        [xaxis]="ordersStuckChart.xaxis" [plotOptions]="ordersStuckChart.plotOptions"
+        [colors]="ordersStuckChart.colors" [yaxis]="ordersStuckChart.yaxis"
+        [dataLabels]="ordersStuckChart.dataLabels">
+      </apx-chart>
+    </div>
+    <div class="metrics-card" *ngIf="funnel">
+      <h3 class="chart-title"><i class="pi pi-info-circle"></i> Workflow Metrics</h3>
+      <div class="metric-row">
+        <span class="metric-label">Avg Order Completion Time</span>
+        <span class="metric-value">{{ data.averageOrderCompletionTimeDays }} days</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Avg Revisions per Order</span>
+        <span class="metric-value">{{ data.averageRevisionsPerOrder }}</span>
+      </div>
+    </div>
+  </div>
+</div>

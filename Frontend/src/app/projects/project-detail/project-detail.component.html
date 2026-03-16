@@ -85,7 +85,7 @@
                       type="file" 
                       multiple
                       (change)="onFilesSelected($event)"
-                      accept=".jpg,.jpeg,.png,.pdf,.ai,.eps,.svg"
+                      accept=".jpg,.jpeg,.png,.pdf,.ai,.eps,.svg,.pes,.dst,.jef,.exp,.vp3,.xxx,.hus,.art,.vip,.vip3,.shv,.pec,.jpm,.sew,.emb,.csd,.pcs,.phb,.phc,.stx,.s10,.dsb,.zsk"
                       class="file-input" />
                     <small class="help-text">Accepted: JPG, PNG, PDF, AI, EPS, SVG (Max 10MB each)</small>
                   </div>
@@ -141,7 +141,7 @@
                     <p-button 
                       icon="pi pi-download" 
                       styleClass="p-button-text p-button-rounded"
-                      (onClick)="downloadFile(file.id)"
+                      (onClick)="downloadFile(file)"
                       pTooltip="Download">
                     </p-button>
                   </div>

@@ -45,7 +45,15 @@
     p { margin-top: 1rem; font-size: 0.95rem; }
   }
 
-  // ═══ SUMMARY CARDS ═══
+  // ═══ KPI GRID (using app-kpi-card) ═══
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 24px;
+  }
+
+  // ═══ SUMMARY CARDS (legacy, kept for reference) ═══
   .summary-cards {
     display: flex;
     gap: 1rem;

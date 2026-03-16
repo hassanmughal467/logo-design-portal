@@ -9,7 +9,7 @@ import { Order, OrderStatus } from '@shared/models/order.model';
 import { isOrderLocked } from '@shared/utils/order-locking';
 import { LogoFile } from '@shared/models/file.model';
 import { OrderRevision } from '@shared/models/revision.model';
-import { OrderComment } from '@shared/models/comment.model';
+import { OrderComment, OrderCommentUnreadCounts } from '@shared/models/comment.model';
 
 @Component({
   selector: 'app-order-detail',
@@ -26,11 +26,15 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   files: LogoFile[] = [];
   revisions: OrderRevision[] = [];
   comments: OrderComment[] = [];
+  unreadCounts: OrderCommentUnreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0 };
   loading = false;
+  loadFailed = false;
+  errorMessage = '';
   activeTab = 0;
   
   // Dialogs
   showPriceApprovalDialog = false;
+  showDesignerPriceApprovalDialog = false;
   showApproveDialog = false;
   showAssignDialog = false;
   showSendFilesDialog = false;
@@ -40,6 +44,10 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   showCancelOrderDialog = false;
   showArchiveConfirmDialog = false;
   showRefundDialog = false;
+  showEditClientPriceDialog = false;
+  
+  // Edit client price
+  editClientChargePrice = 0;
   
   // Cancel/Archive data
   cancellationReason = '';
@@ -50,6 +58,8 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   // Form data
   proposedPrice = 0;
   priceApprovalNotes = '';
+  designerPriceApprovalAction: 'Approve' | 'Modify' | 'Reject' = 'Approve';
+  designerApprovedPrice = 0;
   selectedDesignerId: string | null = null;
   availableDesigners: any[] = [];
   selectedFileIds: string[] = [];
@@ -103,7 +113,10 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       this.files = [];
       this.revisions = [];
       this.comments = [];
+      this.unreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0 };
       this.activeTab = 0;
+      this.loadFailed = false;
+      this.errorMessage = '';
     }
   }
 
@@ -123,6 +136,8 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
 
   loadOrder(orderId: string): void {
     this.loading = true;
+    this.loadFailed = false;
+    this.errorMessage = '';
     this.apiService.get<Order>(`orders/${orderId}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -131,10 +146,14 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
           this.loadFiles(orderId);
           this.loadRevisions(orderId);
           this.loadComments(orderId);
+          this.loadUnreadCounts(orderId);
           this.loading = false;
         },
         error: (error) => {
-          // Handle 403 Forbidden (authorization failure) vs 401 Unauthorized (authentication failure)
+          this.loading = false;
+          this.loadFailed = true;
+          this.errorMessage = error.error?.error || (error.status === 403 ? 'You do not have access to view this order.' : error.status === 404 ? 'Order not found.' : 'Failed to load order.');
+
           if (error.status === 403) {
             this.messageService.add({
               severity: 'warn',
@@ -154,11 +173,10 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
               detail: error.error?.error || 'Failed to load order'
             });
           }
-          this.loading = false;
           if (this.isRouteMode) {
             this.router.navigate(['/orders']);
           } else {
-            this.closeModal();
+            // Keep modal open to show error UI (user can close manually)
           }
         }
       });
@@ -215,6 +233,47 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
         },
         error: () => {
           this.comments = [];
+        }
+      });
+  }
+
+  loadUnreadCounts(orderId: string): void {
+    this.apiService.get<OrderCommentUnreadCounts>(`comments/orders/${orderId}/unread-counts`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (counts) => {
+          this.unreadCounts = counts;
+        },
+        error: () => {
+          this.unreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0 };
+        }
+      });
+  }
+
+  onTabChange(index: number): void {
+    this.activeTab = index;
+    if (index === 2 && this.order?.id) {
+      this.apiService.post(`comments/orders/${this.order.id}/mark-read`, {})
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: () => this.loadUnreadCounts(this.order!.id),
+          error: () => {}
+        });
+    }
+  }
+
+  approveCommentForClient(comment: OrderComment): void {
+    if (!this.order) return;
+    this.apiService.put(`comments/${comment.id}/visibility`, { visibleToClient: true })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Comment approved for client' });
+          this.loadComments(this.order!.id);
+          this.loadUnreadCounts(this.order!.id);
+        },
+        error: (err) => {
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to approve comment' });
         }
       });
   }
@@ -295,6 +354,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
           });
           this.loadOrder(this.order!.id);
           this.orderUpdated.emit();
+          this.closeModal();
         },
         error: (error) => {
           this.messageService.add({
@@ -314,10 +374,11 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   loadDesigners(): void {
-    this.apiService.get<any[]>('users')
+    this.apiService.get<any>('users?page=1&pageSize=500')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (users) => {
+        next: (response) => {
+          const users = ApiService.extractItems<any>(response);
           this.availableDesigners = users
             .filter(u => u.role === 'Designer' || u.roleName === 'Designer')
             .map(u => {
@@ -346,6 +407,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
         this.showAssignDialog = false;
         this.loadOrder(this.order!.id);
         this.orderUpdated.emit();
+        this.closeModal();
       },
       error: (error) => {
         this.messageService.add({
@@ -363,8 +425,13 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     this.showSendFilesDialog = true;
   }
 
+  /** Files eligible for forwarding to client (excludes client-uploaded files) */
+  get filesToForward(): LogoFile[] {
+    return this.files.filter(f => f.uploadedByRole !== 'Client');
+  }
+
   selectAllFilesToSend(): void {
-    this.selectedFileIds = this.files.map(f => f.id);
+    this.selectedFileIds = this.filesToForward.map(f => f.id);
   }
 
   deselectAllFilesToSend(): void {
@@ -383,11 +450,12 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
             summary: 'Success',
             detail: 'Files sent to client successfully'
           });
-        this.showSendFilesDialog = false;
-        this.loadOrder(this.order!.id);
-        this.loadFiles(this.order!.id);
-        this.orderUpdated.emit();
-      },
+          this.showSendFilesDialog = false;
+          this.loadOrder(this.order!.id);
+          this.loadFiles(this.order!.id);
+          this.orderUpdated.emit();
+          this.closeModal();
+        },
         error: (error) => {
           this.messageService.add({
             severity: 'error',
@@ -444,6 +512,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
           this.revisionFiles = [];
           this.loadOrder(this.order!.id);
           this.orderUpdated.emit();
+          this.closeModal();
         },
         error: (error) => {
           this.messageService.add({
@@ -459,7 +528,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     if (!this.order) return;
 
     this.confirmationService.confirm({
-      message: 'Once approved, your logo will be marked as completed and ready for invoice.<br>All preview and revision files will be permanently deleted, and only final approved files will be saved. Are you sure you want to proceed?',
+      message: 'Once approved, your logo will be saved and the admin will mark the order as completed.<br>All preview and revision files will be permanently deleted, and only final approved files will be saved. Are you sure you want to proceed?',
       header: 'Approve Logo',
       icon: 'pi pi-exclamation-triangle',
       acceptLabel: 'Yes, Approve',
@@ -473,10 +542,11 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
               this.messageService.add({
                 severity: 'success',
                 summary: 'Success',
-                detail: 'Logo approved successfully. Order is now completed.'
+                detail: 'Logo approved successfully. Admin will mark the order as completed.'
               });
               this.loadOrder(this.order!.id);
               this.orderUpdated.emit();
+              this.closeModal();
             },
             error: (error) => {
               this.messageService.add({
@@ -558,6 +628,20 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     });
   }
 
+  formatStatus(status: string): string {
+    const labelMap: { [key: string]: string } = {
+      'ClientApproved': 'Approved',
+      'PreviewDelivered': 'Preview Delivered',
+      'RevisionRequested': 'Revision Requested',
+      'WaitingForAdminApproval': 'Waiting For Admin Approval',
+      'PriceApprovalPending': 'Price Approval Pending',
+      'InProgress': 'In Progress',
+      'CancelledByUser': 'Cancelled By User',
+      'CancelledByAdmin': 'Cancelled By Admin'
+    };
+    return labelMap[status] || status.replace(/([A-Z])/g, ' $1').trim();
+  }
+
   getStatusSeverity(status: string): string {
     const severityMap: { [key: string]: string } = {
       'WaitingForAdminApproval': 'warning',
@@ -565,7 +649,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       'InProgress': 'info',
       'PreviewDelivered': 'success',
       'RevisionRequested': 'warn',
-      'FinalApproved': 'success',
+      'ClientApproved': 'success',
       'Completed': 'success',
       'Cancelled': 'danger'
     };
@@ -584,20 +668,88 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     return this.isClient && this.order?.status === OrderStatus.PriceApprovalPending;
   }
 
+  /** Admin: Designer proposed price differs from standard; needs approval */
+  canApproveDesignerPrice(): boolean {
+    return (this.isAdmin || this.isSuperAdmin)
+      && !!this.order
+      && this.order.priceApprovalStatus === 'PendingApproval'
+      && !isOrderLocked(this.order.status);
+  }
+
+  openDesignerPriceApprovalDialog(): void {
+    this.designerApprovedPrice = this.order?.designerProposedPrice ?? this.order?.proposedPrice ?? 0;
+    this.designerPriceApprovalAction = 'Approve';
+    this.showDesignerPriceApprovalDialog = true;
+  }
+
+  submitDesignerPriceApproval(): void {
+    if (!this.order) return;
+    const approvedPrice = this.designerPriceApprovalAction === 'Reject' ? undefined : this.designerApprovedPrice;
+    if ((this.designerPriceApprovalAction === 'Approve' || this.designerPriceApprovalAction === 'Modify') && (!approvedPrice || approvedPrice <= 0)) {
+      this.messageService.add({ severity: 'warn', summary: 'Required', detail: 'Approved price is required.' });
+      return;
+    }
+    this.apiService.put(`designer-payout/orders/${this.order.id}/approve-price`, {
+      action: this.designerPriceApprovalAction,
+      approvedPrice: approvedPrice ?? null
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.showDesignerPriceApprovalDialog = false;
+        this.loadOrder(this.order!.id);
+        this.orderUpdated.emit();
+        this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Designer price approval processed.' });
+      },
+      error: (err) => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to process approval' });
+      }
+    });
+  }
+
   canAssignDesigner(): boolean {
     return (this.isAdmin || this.isSuperAdmin) && !this.order?.designerId;
+  }
+
+  /** Admin can allow extra revisions when client has exceeded package limit */
+  canAllowExtraRevisions(): boolean {
+    return !!(this.isAdmin || this.isSuperAdmin)
+      && !!this.order
+      && !!this.order.revisionLimitExceeded
+      && (this.order.status === OrderStatus.PreviewDelivered || this.order.status === OrderStatus.RevisionRequested);
+  }
+
+  allowExtraRevisions(): void {
+    if (!this.order) return;
+    this.apiService.put<Order>(`orders/${this.order.id}/allow-extra-revisions`, { allowExtraRevisions: true })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (updated) => {
+          this.order = updated;
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Client can now request additional revisions.' });
+        },
+        error: (err) => {
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to allow extra revisions' });
+        }
+      });
   }
 
   canRequestRevision(): boolean {
     // Only allow revision if:
     // 1. User is a client
     // 2. Order status is PreviewDelivered (strict requirement)
+    // 3. Revision limit not exceeded (unless admin approved extra revisions)
     if (!this.isClient || !this.order) {
       return false;
     }
 
-    // Strict rule: Only allow when status is PreviewDelivered
-    return this.order.status === OrderStatus.PreviewDelivered;
+    if (this.order.status !== OrderStatus.PreviewDelivered) {
+      return false;
+    }
+
+    if (this.order.revisionLimitExceeded) {
+      return false;
+    }
+
+    return true;
   }
 
   canApproveLogo(): boolean {
@@ -665,11 +817,9 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       return true;
     }
     
-    // Clients can only cancel if status is Pending or Paid (or WaitingForAdminApproval/PriceApprovalPending for backward compatibility)
+    // Clients can only cancel before work has started
     if (this.isClient) {
-      return this.order.status === OrderStatus.Pending || 
-             this.order.status === OrderStatus.Paid ||
-             this.order.status === OrderStatus.WaitingForAdminApproval || 
+      return this.order.status === OrderStatus.WaitingForAdminApproval || 
              this.order.status === OrderStatus.PriceApprovalPending;
     }
     
@@ -695,8 +845,39 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     return (this.isAdmin || this.isSuperAdmin) && 
            this.order !== null && 
            !this.order.isRefunded &&
-           (this.order.status === OrderStatus.Completed || 
-            this.order.status === OrderStatus.Paid);
+           this.order.status === OrderStatus.Completed;
+  }
+
+  /** Admin/SuperAdmin: Mark ClientApproved order as Completed (fast process) */
+  canMarkAsCompleted(): boolean {
+    return (this.isAdmin || this.isSuperAdmin) && 
+           this.order?.status === OrderStatus.ClientApproved;
+  }
+
+  markOrderCompleted(): void {
+    if (!this.order) return;
+
+    this.apiService.put(`orders/${this.order.id}/status`, { status: OrderStatus.Completed })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Order marked as completed'
+          });
+          this.loadOrder(this.order!.id);
+          this.orderUpdated.emit();
+          this.closeModal();
+        },
+        error: (error) => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.error?.error || 'Failed to complete order'
+          });
+        }
+      });
   }
 
   approveFile(file: LogoFile): void {
@@ -726,6 +907,28 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   // Edit Order
   openEditOrderDialog(): void {
     this.showEditOrderDialog = true;
+  }
+
+  openEditClientPriceDialog(): void {
+    this.editClientChargePrice = this.order?.clientChargePrice ?? this.order?.clientBasePrice ?? this.order?.price ?? 0;
+    this.showEditClientPriceDialog = true;
+  }
+
+  saveClientChargePrice(): void {
+    if (!this.order || this.editClientChargePrice < 0) return;
+    this.apiService.put(`orders/${this.order.id}/client-price`, {
+      clientChargePrice: this.editClientChargePrice
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.showEditClientPriceDialog = false;
+        this.loadOrder(this.order!.id);
+        this.orderUpdated.emit();
+        this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Client charge price updated.' });
+      },
+      error: (err) => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to update price' });
+      }
+    });
   }
 
   onOrderUpdated(updatedOrder: Order): void {
@@ -758,6 +961,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
           this.showCancelOrderDialog = false;
           this.loadOrder(this.order!.id);
           this.orderUpdated.emit();
+          this.closeModal();
         },
         error: (error) => {
           this.messageService.add({
@@ -792,6 +996,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
           this.showArchiveConfirmDialog = false;
           this.loadOrder(this.order!.id);
           this.orderUpdated.emit();
+          this.closeModal();
         },
         error: (error) => {
           this.messageService.add({
@@ -830,7 +1035,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
 
   // Refund Order
   openRefundDialog(): void {
-    this.refundAmount = this.order?.price || 0;
+    this.refundAmount = this.order?.clientChargePrice ?? this.order?.clientBasePrice ?? this.order?.price ?? 0;
     this.refundReason = '';
     this.showRefundDialog = true;
   }
@@ -838,7 +1043,8 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   confirmRefundOrder(): void {
     if (!this.order || !this.refundReason.trim() || this.refundAmount <= 0) return;
 
-    if (this.refundAmount > this.order.price) {
+    const maxRefund = this.order.clientChargePrice ?? this.order.clientBasePrice ?? this.order.price;
+    if (this.refundAmount > maxRefund) {
       this.messageService.add({
         severity: 'error',
         summary: 'Error',
@@ -862,6 +1068,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
           this.showRefundDialog = false;
           this.loadOrder(this.order!.id);
           this.orderUpdated.emit();
+          this.closeModal();
         },
         error: (error) => {
           this.messageService.add({
@@ -880,7 +1087,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     
     // Check if order is completed or final approved
     const isCompleted = this.order.status === OrderStatus.Completed || 
-                       this.order.status === OrderStatus.FinalApproved;
+                       this.order.status === OrderStatus.ClientApproved;
     
     // If completed, uploads are disabled by default (unless admin explicitly enabled them)
     if (isCompleted) {
@@ -905,7 +1112,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     }
     
     const isCompleted = this.order.status === OrderStatus.Completed || 
-                        this.order.status === OrderStatus.FinalApproved;
+                        this.order.status === OrderStatus.ClientApproved;
     return isCompleted;
   }
 

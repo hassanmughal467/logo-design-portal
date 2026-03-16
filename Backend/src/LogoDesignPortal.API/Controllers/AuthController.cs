@@ -1,8 +1,9 @@
+using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.DTOs.Auth;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace LogoDesignPortal.API.Controllers;
 
@@ -12,14 +13,17 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly ILogger<AuthController> _logger;
+    private readonly IWebHostEnvironment _environment;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(IAuthService authService, ILogger<AuthController> logger, IWebHostEnvironment environment)
     {
         _authService = authService;
         _logger = logger;
+        _environment = environment;
     }
 
     [HttpPost("login")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -42,6 +46,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -79,19 +84,18 @@ public class AuthController : ControllerBase
             {
                 error = isConstraintOrSchema
                     ? "Registration failed. The email may already exist, or the database may need migrations applied."
-                    : "Registration failed. Please try again.",
-                detail = innerMsg
+                    : "Registration failed. Please try again."
             });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Registration failed for email: {Email}. Error: {Message}", request.Email, ex.Message);
-            var errorMessage = ex.InnerException?.Message ?? ex.Message;
-            return StatusCode(500, new { error = "Registration failed. Please try again.", detail = errorMessage });
+            return StatusCode(500, new { error = "Registration failed. Please try again." });
         }
     }
 
     [HttpPost("refresh-token")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto request)
@@ -126,7 +130,7 @@ public class AuthController : ControllerBase
                 return BadRequest(new { error = string.Join(" ", errors) });
             }
 
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userId = User.GetUserIdOrThrow();
             _logger.LogInformation("Changing password for user: {UserId}", userId);
             await _authService.ChangePasswordAsync(userId, request);
             _logger.LogInformation("Password changed successfully for user: {UserId}", userId);
@@ -184,6 +188,12 @@ public class AuthController : ControllerBase
     {
         try
         {
+            // Disable in production - only available in Development for initial setup/recovery
+            if (!_environment.IsDevelopment())
+            {
+                _logger.LogWarning("ResetSuperAdminPassword rejected - endpoint disabled in non-Development environment");
+                return StatusCode(StatusCodes.Status404NotFound, new { error = "This endpoint is not available." });
+            }
             // Restrict to localhost only for security - prevents remote password reset attacks
             var remoteIp = HttpContext.Connection.RemoteIpAddress;
             if (remoteIp != null && !System.Net.IPAddress.IsLoopback(remoteIp))
@@ -194,11 +204,9 @@ public class AuthController : ControllerBase
 
             _logger.LogInformation("Resetting SuperAdmin password to default");
             await _authService.ResetSuperAdminPasswordAsync();
-            _logger.LogInformation("SuperAdmin password reset successfully");
+            _logger.LogWarning("SuperAdmin password reset. Dev credentials: superadmin@logodesign.com / SuperAdmin@123 - Check server logs only, never expose in API.");
             return Ok(new { 
-                message = "SuperAdmin password has been reset to default.",
-                email = "superadmin@logodesign.com",
-                password = "SuperAdmin@123"
+                message = "SuperAdmin password has been reset to default. Check server logs for credentials (development only)."
             });
         }
         catch (Exception ex)
@@ -209,6 +217,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("forgot-password")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto request)
@@ -243,6 +252,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("reset-password-with-token")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ResetPasswordWithToken([FromBody] ResetPasswordWithTokenRequestDto request)

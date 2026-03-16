@@ -40,8 +40,8 @@ export class ErrorInterceptor implements HttpInterceptor {
               break;
 
             case 403:
-              // Forbidden - user doesn't have permission
-              errorMessage = 'You do not have permission to perform this action';
+              // Forbidden - use backend message when available
+              errorMessage = error.error?.error || 'You do not have permission to perform this action';
               // Don't show alert for certain endpoints where 403 is expected for some roles
               // These services handle the errors gracefully
               const requestUrl = (request.url || '').toLowerCase();
@@ -88,11 +88,16 @@ export class ErrorInterceptor implements HttpInterceptor {
               // Check for error message in common locations
               errorMessage = error.error?.error || error.error?.message || `Error Code: ${error.status}`;
               if (error.status >= 400 && error.status < 500) {
-                this.messageService.add({
-                  severity: 'warn',
-                  summary: 'Request Error',
-                  detail: errorMessage
-                });
+                // Skip global toast for endpoints that handle errors in-component (avoids duplicate messages)
+                const url = (request.url || '').toLowerCase();
+                const isFileUploadEndpoint = url.includes('/files/upload') || url.includes('/files/upload-multiple');
+                if (!isFileUploadEndpoint) {
+                  this.messageService.add({
+                    severity: 'warn',
+                    summary: 'Request Error',
+                    detail: errorMessage
+                  });
+                }
               }
           }
         }

@@ -11,14 +11,29 @@
   
   <p-confirmDialog></p-confirmDialog>
   
+  <!-- Loading state -->
+  <div class="order-detail-container loading-state" *ngIf="loading && !order">
+    <p-progressSpinner></p-progressSpinner>
+    <p>Loading order details...</p>
+  </div>
+  
+  <!-- Error state -->
+  <div class="order-detail-container error-state" *ngIf="loadFailed && !order">
+    <i class="pi pi-exclamation-triangle" style="font-size: 3rem; color: var(--red-500); margin-bottom: 1rem;"></i>
+    <h3>Failed to Load Order</h3>
+    <p>{{ errorMessage || 'An error occurred while loading the order.' }}</p>
+    <p-button label="Close" icon="pi pi-times" (onClick)="closeModal()" styleClass="p-button-outlined"></p-button>
+  </div>
+  
   <!-- Client view when revision is requested: show status message instead of empty modal -->
   <div class="order-detail-container revision-pending-view" *ngIf="order && !shouldShowOrderDetails()">
+    <app-order-progress-timeline [order]="order"></app-order-progress-timeline>
     <div class="revision-pending-message">
       <i class="pi pi-refresh" style="font-size: 3rem; color: var(--primary-color); margin-bottom: 1rem;"></i>
       <h3>Revision in Progress</h3>
       <p>Your revision has been requested for order <strong>{{ order.title }}</strong>.</p>
       <p>The designer is currently working on your feedback. You'll be notified when new previews are ready for your review.</p>
-      <p-tag [value]="order.status" [severity]="getStatusSeverity(order.status)"></p-tag>
+      <p-tag [value]="formatStatus(order.status)" [severity]="getStatusSeverity(order.status)"></p-tag>
     </div>
   </div>
   
@@ -49,7 +64,7 @@
     <div class="header-left">
       <h2>{{ order.title }}</h2>
       <p-tag 
-        [value]="order.status" 
+        [value]="formatStatus(order.status)" 
         [severity]="getStatusSeverity(order.status)"
       ></p-tag>
     </div>
@@ -81,6 +96,13 @@
         icon="pi pi-check-circle" 
         (onClick)="openPriceApprovalDialog()"
         severity="success"
+      ></p-button>
+      <p-button 
+        *ngIf="canApproveDesignerPrice()"
+        label="Approve Designer Price" 
+        icon="pi pi-wallet" 
+        (onClick)="openDesignerPriceApprovalDialog()"
+        severity="warning"
       ></p-button>
       <p-button 
         *ngIf="canAssignDesigner() && !isOrderLocked(order.status)"
@@ -133,19 +155,72 @@
         severity="warning"
         [styleClass]="'p-button-outlined'"
       ></p-button>
+      <p-button 
+        *ngIf="canMarkAsCompleted() && !isOrderLocked(order.status)"
+        label="Mark as Completed" 
+        icon="pi pi-check-circle" 
+        (onClick)="markOrderCompleted()"
+        severity="success"
+        [styleClass]="'p-button-success'"
+      ></p-button>
     </div>
   </div>
 
   <div class="order-info-grid">
     <div class="info-card">
       <h3>Order Information</h3>
-      <div class="info-item">
-        <label>Price:</label>
-        <span>${{ order.price | number:'1.2-2' }}</span>
+      <!-- Client Pricing Section (Admin/Client only, never Designer) -->
+      <div *ngIf="!isDesigner" class="pricing-section">
+        <h4 class="pricing-section-title">Client Pricing</h4>
+        <div class="info-item">
+          <label>Client Base Price:</label>
+          <span>{{ (order.currencyCode || 'USD') }} {{ (order.clientBasePrice ?? order.price) | number:'1.2-2' }}</span>
+        </div>
+        <div class="info-item">
+          <label>Client Charge Price:</label>
+          <span>{{ (order.currencyCode || 'USD') }} {{ (order.clientChargePrice ?? order.clientBasePrice ?? order.price) | number:'1.2-2' }}</span>
+        </div>
+        <div class="info-item">
+          <label>Currency:</label>
+          <span>{{ order.currencyCode || 'USD' }}</span>
+        </div>
+        <div class="info-item" *ngIf="order.priceUpdatedByRole || order.priceUpdatedAt">
+          <label>Last Updated By:</label>
+          <span>{{ order.priceUpdatedByRole || '—' }}</span>
+        </div>
+        <div class="info-item" *ngIf="order.priceUpdatedAt">
+          <label>Updated At:</label>
+          <span>{{ order.priceUpdatedAt | date:'short' }}</span>
+        </div>
+        <p-button *ngIf="(isAdmin || isSuperAdmin) && !isOrderLocked(order.status)" label="Edit Client Price" icon="pi pi-pencil" [styleClass]="'p-button-text p-button-sm'" (onClick)="openEditClientPriceDialog()"></p-button>
       </div>
-      <div class="info-item" *ngIf="order.proposedPrice">
-        <label>Proposed Price:</label>
-        <span>${{ order.proposedPrice | number:'1.2-2' }}</span>
+      <!-- Designer Pricing Section (Admin + Designer; Designer sees their proposed/approved price and status) -->
+      <div *ngIf="(isAdmin || isSuperAdmin) || isDesigner" class="pricing-section">
+        <h4 class="pricing-section-title">Designer Pricing</h4>
+        <div class="info-item" *ngIf="(isAdmin || isSuperAdmin) && order.standardPrice != null">
+          <label>Standard Price (PKR):</label>
+          <span>PKR {{ order.standardPrice | number:'1.0-0' }}</span>
+        </div>
+        <div class="info-item" *ngIf="(order.designerProposedPrice ?? order.proposedPrice)">
+          <label>Designer Proposed Price (PKR):</label>
+          <span>PKR {{ (order.designerProposedPrice ?? order.proposedPrice) | number:'1.0-0' }}</span>
+        </div>
+        <div class="info-item" *ngIf="(order.designerApprovedPrice ?? order.approvedPrice)">
+          <label>Designer Approved Price (PKR):</label>
+          <span>PKR {{ (order.designerApprovedPrice ?? order.approvedPrice) | number:'1.0-0' }}</span>
+        </div>
+        <div class="info-item" *ngIf="order.priceApprovalStatus">
+          <label>Price Status:</label>
+          <span>{{ order.priceApprovalStatus }}</span>
+        </div>
+      </div>
+      <div class="info-item" *ngIf="(order.designCategory && order.designType) && !isClient">
+        <label>Design:</label>
+        <span>{{ order.designCategory }} - {{ order.designType }}</span>
+      </div>
+      <div class="info-item" *ngIf="order.stylePreferences && (isAdmin || isSuperAdmin || isDesigner)">
+        <label>Stitch Type:</label>
+        <span>{{ order.stylePreferences }}</span>
       </div>
       <div class="info-item">
         <label>Created:</label>
@@ -161,7 +236,7 @@
       </div>
     </div>
 
-    <div class="info-card" *ngIf="order.instructions || order.requiredFormats">
+    <div class="info-card" *ngIf="order.instructions || order.requiredFormats || order.colorPreferences || order.stylePreferences">
       <h3>Requirements</h3>
       <div class="info-item" *ngIf="order.instructions">
         <label>Instructions:</label>
@@ -187,9 +262,17 @@
     <p>{{ order.description }}</p>
   </div>
 
-  <p-tabView [(activeIndex)]="activeTab">
+  <!-- Order Progress Timeline -->
+  <app-order-progress-timeline [order]="order"></app-order-progress-timeline>
+
+  <p-tabView [(activeIndex)]="activeTab" (activeIndexChange)="onTabChange($event)">
     <!-- Files Tab -->
-    <p-tabPanel header="Files" [leftIcon]="'pi pi-file'">
+    <p-tabPanel>
+      <ng-template pTemplate="header">
+        <i class="pi pi-file" style="margin-right: 0.5rem;"></i>
+        <span>Files</span>
+        <span *ngIf="unreadCounts.unreadFiles > 0" class="tab-badge">{{ unreadCounts.unreadFiles }}</span>
+      </ng-template>
       <div class="tab-content">
         <div class="tab-header">
           <h3>Order Files</h3>
@@ -280,7 +363,12 @@
     </p-tabPanel>
 
     <!-- Revisions Tab -->
-    <p-tabPanel header="Revisions" [leftIcon]="'pi pi-refresh'">
+    <p-tabPanel>
+      <ng-template pTemplate="header">
+        <i class="pi pi-refresh" style="margin-right: 0.5rem;"></i>
+        <span>Revisions</span>
+        <span *ngIf="unreadCounts.unreadRevisions > 0" class="tab-badge">{{ unreadCounts.unreadRevisions }}</span>
+      </ng-template>
       <div class="tab-content">
         <div class="tab-header">
           <h3>Revision Requests</h3>
@@ -290,6 +378,22 @@
             icon="pi pi-plus" 
             (onClick)="openRevisionDialog()"
           ></p-button>
+          <p-button 
+            *ngIf="canAllowExtraRevisions() && !isOrderLocked(order.status)"
+            label="Allow Extra Revisions" 
+            icon="pi pi-unlock" 
+            (onClick)="allowExtraRevisions()"
+            severity="secondary"
+          ></p-button>
+        </div>
+        
+        <div *ngIf="isClient && order?.revisionLimitExceeded && order?.status === 'PreviewDelivered'" class="revision-limit-message">
+          <i class="pi pi-exclamation-triangle"></i>
+          Revision limit ({{ order.revisionLimit }}) reached. Contact support for additional revisions.
+        </div>
+        
+        <div class="revision-info" *ngIf="order">
+          <span class="revision-count">Revisions used: {{ order.revisionCount }}{{ order.revisionLimit != null ? ' / ' + order.revisionLimit : ' (unlimited)' }}</span>
         </div>
         
         <div class="revision-list">
@@ -316,7 +420,12 @@
     </p-tabPanel>
 
     <!-- Comments Tab -->
-    <p-tabPanel header="Comments" [leftIcon]="'pi pi-comments'">
+    <p-tabPanel>
+      <ng-template pTemplate="header">
+        <i class="pi pi-comments" style="margin-right: 0.5rem;"></i>
+        <span>Comments</span>
+        <span *ngIf="unreadCounts.unreadComments > 0" class="tab-badge">{{ unreadCounts.unreadComments }}</span>
+      </ng-template>
       <div class="tab-content">
         <div class="tab-header">
           <h3>Order Comments</h3>
@@ -336,11 +445,20 @@
                 <span class="role">{{ comment.createdByRole }}</span>
                 <span class="date">{{ comment.createdAt | date:'short' }}</span>
               </div>
-              <p-tag 
-                *ngIf="comment.isInternal"
-                value="Internal" 
-                severity="info"
-              ></p-tag>
+              <div class="comment-header-tags">
+                <p-tag 
+                  *ngIf="comment.isInternal"
+                  value="Internal" 
+                  severity="info"
+                ></p-tag>
+                <p-button 
+                  *ngIf="(isAdmin || isSuperAdmin) && comment.createdByRole === 'Designer' && !comment.visibleToClient && !isOrderLocked(order.status)"
+                  icon="pi pi-eye" 
+                  [styleClass]="'p-button-text p-button-sm'"
+                  pTooltip="Approve for client visibility"
+                  (onClick)="approveCommentForClient(comment)"
+                ></p-button>
+              </div>
             </div>
             <div class="comment-content">
               <p>{{ comment.content }}</p>
@@ -370,7 +488,7 @@
   [resizable]="false"
 >
   <div class="dialog-content">
-    <div class="form-group" *ngIf="isAdmin">
+    <div class="form-group" *ngIf="isAdmin || isSuperAdmin">
       <label>Proposed Price (USD)</label>
       <p-inputNumber 
         [(ngModel)]="proposedPrice"
@@ -392,7 +510,7 @@
   </div>
   <ng-template pTemplate="footer">
     <p-button 
-      *ngIf="isAdmin"
+      *ngIf="isAdmin || isSuperAdmin"
       label="Request Approval" 
       icon="pi pi-check" 
       (onClick)="requestPriceApproval()"
@@ -415,6 +533,58 @@
       label="Cancel" 
       icon="pi pi-times" 
       (onClick)="showPriceApprovalDialog = false"
+      [styleClass]="'p-button-text'"
+    ></p-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Designer Price Approval Dialog (Admin) -->
+<p-dialog 
+  [(visible)]="showDesignerPriceApprovalDialog" 
+  header="Designer Price Approval" 
+  [modal]="true"
+  [style]="{width: '500px'}"
+  [draggable]="false"
+  [resizable]="false"
+>
+  <div class="dialog-content" *ngIf="order">
+    <p>Designer proposed <strong>PKR {{ (order.designerProposedPrice ?? order.proposedPrice) | number:'1.0-0' }}</strong> for {{ order.designCategory }} - {{ order.designType }}.</p>
+    <p *ngIf="order.standardPrice != null" class="p-help">Standard price for this type: PKR {{ order.standardPrice | number:'1.0-0' }}</p>
+    <div class="form-group">
+      <label>Action</label>
+      <p-selectButton 
+        [(ngModel)]="designerPriceApprovalAction"
+        [options]="[
+          { label: 'Approve', value: 'Approve' },
+          { label: 'Modify', value: 'Modify' },
+          { label: 'Reject', value: 'Reject' }
+        ]"
+        optionLabel="label"
+        optionValue="value"
+      ></p-selectButton>
+    </div>
+    <div class="form-group" *ngIf="designerPriceApprovalAction !== 'Reject'">
+      <label>Approved Price (PKR) <span class="required">*</span></label>
+      <p-inputNumber 
+        [(ngModel)]="designerApprovedPrice"
+        [min]="1"
+        [maxFractionDigits]="0"
+        styleClass="w-full"
+      ></p-inputNumber>
+      <small *ngIf="designerPriceApprovalAction === 'Approve'">Uses designer proposed price by default.</small>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button 
+      label="Submit" 
+      icon="pi pi-check" 
+      (onClick)="submitDesignerPriceApproval()"
+      [disabled]="(designerPriceApprovalAction !== 'Reject' && designerApprovedPrice <= 0)"
+    ></p-button>
+    <p-button 
+      label="Cancel" 
+      icon="pi pi-times" 
+      (onClick)="showDesignerPriceApprovalDialog = false"
       [styleClass]="'p-button-text'"
     ></p-button>
   </ng-template>
@@ -468,6 +638,35 @@
   </ng-template>
 </p-dialog>
 
+<!-- Edit Client Price Dialog -->
+<p-dialog 
+  [(visible)]="showEditClientPriceDialog"
+  [modal]="true"
+  [style]="{width: '400px'}"
+  [closable]="true"
+  [draggable]="false"
+  [resizable]="false"
+  header="Edit Client Charge Price"
+  styleClass="edit-client-price-dialog">
+  <div class="dialog-content" *ngIf="order">
+    <div class="form-group">
+      <label>Client Charge Price ({{ order.currencyCode || 'USD' }})</label>
+      <p-inputNumber 
+        [(ngModel)]="editClientChargePrice"
+        mode="decimal"
+        [min]="0"
+        [maxFractionDigits]="2"
+        styleClass="w-full"
+      ></p-inputNumber>
+      <small class="p-help">Base price: {{ (order.currencyCode || 'USD') }} {{ (order.clientBasePrice ?? order.price) | number:'1.2-2' }}</small>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" icon="pi pi-times" (onClick)="showEditClientPriceDialog = false" [styleClass]="'p-button-text'"></p-button>
+    <p-button label="Save" icon="pi pi-check" (onClick)="saveClientChargePrice()" [disabled]="editClientChargePrice < 0"></p-button>
+  </ng-template>
+</p-dialog>
+
 <!-- Edit Order Dialog -->
 <p-dialog 
   [(visible)]="showEditOrderDialog"
@@ -512,7 +711,10 @@
       </button>
     </div>
     <div class="file-checkbox-list">
-      <div *ngFor="let file of files" class="file-checkbox-item">
+      <div *ngIf="filesToForward.length === 0" class="empty-state" style="padding: 1rem; color: var(--text-color-secondary);">
+        No designer/admin files available to forward. Client-uploaded files are excluded.
+      </div>
+      <div *ngFor="let file of filesToForward" class="file-checkbox-item">
         <p-checkbox 
           [value]="file.id"
           [(ngModel)]="selectedFileIds"
@@ -571,8 +773,8 @@
       <p-fileUpload 
         #revisionFileUpload
         [multiple]="true"
-        [maxFileSize]="10485760"
-        accept="image/*,.pdf,.ai,.eps,.psd"
+        [maxFileSize]="26214400"
+        accept="image/*,.pdf,.ai,.eps,.psd,.svg,.pes,.dst,.jef,.exp,.vp3,.xxx,.hus,.art,.vip,.vip3,.shv,.pec,.jpm,.sew,.emb,.csd,.pcs,.phb,.phc,.stx,.s10,.dsb,.zsk"
         (onSelect)="onRevisionFileSelect($event)"
         [auto]="false"
         [showUploadButton]="false"
@@ -682,7 +884,7 @@
     </div>
     <div class="order-info" *ngIf="order">
       <p><strong>Order:</strong> {{ order.title }}</p>
-      <p><strong>Status:</strong> {{ order.status }}</p>
+      <p><strong>Status:</strong> {{ formatStatus(order.status) }}</p>
       <p *ngIf="order.client"><strong>Client:</strong> {{ order.client.companyName || (order.client.firstName + ' ' + order.client.lastName) }}</p>
     </div>
     <p class="warning-text"><strong>This action cannot be undone.</strong></p>
@@ -731,7 +933,7 @@
     </div>
     <div class="order-info" *ngIf="order">
       <p><strong>Order:</strong> {{ order.title }}</p>
-      <p><strong>Status:</strong> {{ order.status }}</p>
+      <p><strong>Status:</strong> {{ formatStatus(order.status) }}</p>
     </div>
   </div>
   <ng-template pTemplate="footer">
@@ -768,11 +970,11 @@
         [(ngModel)]="refundAmount"
         mode="decimal"
         [min]="0.01"
-        [max]="order?.price || 999999"
+        [max]="(order?.clientChargePrice ?? order?.clientBasePrice ?? order?.price) || 999999"
         [maxFractionDigits]="2"
         [styleClass]="'w-full'"
       ></p-inputNumber>
-      <small class="p-help" *ngIf="order">Order total: ${{ order.price }}</small>
+      <small class="p-help" *ngIf="order">Order total: {{ (order.currencyCode || 'USD') }} {{ (order.clientChargePrice ?? order.clientBasePrice ?? order.price) | number:'1.2-2' }}</small>
     </div>
     <div class="form-group">
       <label for="refund-reason">Refund Reason <span class="required">*</span></label>
@@ -787,7 +989,7 @@
     </div>
     <div class="order-info" *ngIf="order">
       <p><strong>Order:</strong> {{ order.title }}</p>
-      <p><strong>Order Price:</strong> ${{ order.price }}</p>
+      <p><strong>Order Price:</strong> {{ (order.currencyCode || 'USD') }} {{ (order.clientChargePrice ?? order.clientBasePrice ?? order.price) | number:'1.2-2' }}</p>
     </div>
   </div>
   <ng-template pTemplate="footer">

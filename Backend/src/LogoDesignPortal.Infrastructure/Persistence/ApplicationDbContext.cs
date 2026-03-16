@@ -29,12 +29,18 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<ClientGallery> ClientGalleries { get; set; }
     public DbSet<Invoice> Invoices { get; set; }
     public DbSet<InvoiceOrder> InvoiceOrders { get; set; }
+    public DbSet<DesignerInvoice> DesignerInvoices { get; set; }
+    public DbSet<DesignerInvoiceItem> DesignerInvoiceItems { get; set; }
+    public DbSet<DesignerInvoiceAdjustment> DesignerInvoiceAdjustments { get; set; }
     public DbSet<InvoiceLog> InvoiceLogs { get; set; }
     public DbSet<Payment> Payments { get; set; }
     public DbSet<Message> Messages { get; set; }
     public DbSet<Review> Reviews { get; set; }
     public DbSet<Settings> Settings { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
+    public DbSet<DesignPricing> DesignPricings { get; set; } = null!;
+    public DbSet<ClientLogoPricing> ClientLogoPricings { get; set; } = null!;
+    public DbSet<DesignerLogoPricing> DesignerLogoPricings { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,6 +48,24 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
         // Apply configurations
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
+
+        // Global query filters for soft deletes
+        modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<LogoOrder>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<LogoFile>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Invoice>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<ClientProfile>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<DesignerProfile>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<OrderComment>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Settings>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<ClientGallery>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<AuditLog>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<DesignerLogoPricing>().HasQueryFilter(e => !e.IsDeleted);
+
+        // Additional indexes for performance
+        modelBuilder.Entity<LogoFile>().HasIndex(e => e.OrderId);
+        modelBuilder.Entity<Notification>().HasIndex(e => new { e.UserId, e.IsRead });
+        modelBuilder.Entity<User>().HasIndex(e => e.Email);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

@@ -6,10 +6,12 @@ namespace LogoDesignPortal.API.Services;
 public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
 {
     private readonly IHubContext<Hubs.NotificationHub> _hubContext;
+    private readonly ILogger<SignalRRealtimeEntityUpdateSender> _logger;
 
-    public SignalRRealtimeEntityUpdateSender(IHubContext<Hubs.NotificationHub> hubContext)
+    public SignalRRealtimeEntityUpdateSender(IHubContext<Hubs.NotificationHub> hubContext, ILogger<SignalRRealtimeEntityUpdateSender> logger)
     {
         _hubContext = hubContext;
+        _logger = logger;
     }
 
     public async Task SendOrderCreatedAsync(Guid orderId, IEnumerable<Guid> userIds)
@@ -24,9 +26,9 @@ public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
                     .SendAsync("OrderCreated", payload);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical
+            _logger.LogWarning(ex, "SignalR OrderCreated failed: OrderId={OrderId}. Operation continues.", orderId);
         }
     }
 
@@ -38,9 +40,9 @@ public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
                 .Group($"user-{designerUserId}")
                 .SendAsync("OrderAssigned", new { orderId });
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical
+            _logger.LogWarning(ex, "SignalR OrderAssigned failed: OrderId={OrderId}. Operation continues.", orderId);
         }
     }
 
@@ -56,9 +58,9 @@ public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
                     .SendAsync("PreviewUploaded", payload);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical
+            _logger.LogWarning(ex, "SignalR PreviewUploaded failed: OrderId={OrderId}. Operation continues.", orderId);
         }
     }
 
@@ -74,9 +76,9 @@ public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
                     .SendAsync("OrderStatusChanged", payload);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical - data sync failure must not affect business logic
+            _logger.LogWarning(ex, "SignalR OrderStatusChanged failed: OrderId={OrderId}. Operation continues.", orderId);
         }
     }
 
@@ -92,9 +94,9 @@ public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
                     .SendAsync("PreviewApproved", payload);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical
+            _logger.LogWarning(ex, "SignalR PreviewApproved failed: OrderId={OrderId}. Operation continues.", orderId);
         }
     }
 
@@ -110,9 +112,9 @@ public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
                     .SendAsync("PreviewRejected", payload);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical
+            _logger.LogWarning(ex, "SignalR PreviewRejected failed: OrderId={OrderId}. Operation continues.", orderId);
         }
     }
 
@@ -124,9 +126,9 @@ public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
                 .Group($"user-{clientUserId}")
                 .SendAsync("PreviewDelivered", new { orderId, status });
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical
+            _logger.LogWarning(ex, "SignalR PreviewDelivered failed: OrderId={OrderId}. Operation continues.", orderId);
         }
     }
 
@@ -142,9 +144,9 @@ public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
                     .SendAsync("OrderUpdated", payload);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical
+            _logger.LogWarning(ex, "SignalR OrderUpdated failed: OrderId={OrderId}. Operation continues.", orderId);
         }
     }
 
@@ -156,9 +158,9 @@ public class SignalRRealtimeEntityUpdateSender : IRealtimeEntityUpdateSender
                 .Group($"user-{clientUserId}")
                 .SendAsync("InvoiceGenerated", new { orderId, invoiceId });
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-critical
+            _logger.LogWarning(ex, "SignalR InvoiceGenerated failed: OrderId={OrderId}. Operation continues.", orderId);
         }
     }
 }
