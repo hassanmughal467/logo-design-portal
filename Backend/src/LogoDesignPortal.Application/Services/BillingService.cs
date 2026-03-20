@@ -73,6 +73,55 @@ public class BillingService : IBillingService
             .ToList();
     }
 
+    public async Task<BillingQueueResultDto> GetBillingQueueAsync(BillingQueueFilterDto filter)
+    {
+        var query = _context.LogoOrders
+            .Where(o => !o.IsDeleted
+                && o.Status == OrderStatus.Completed
+                && o.BillingEligible);
+
+        if (filter.OnlyUninvoiced)
+        {
+            query = query.Where(o => !o.IsInvoiced);
+        }
+
+        if (filter.ClientId.HasValue)
+        {
+            query = query.Where(o => o.ClientId == filter.ClientId.Value);
+        }
+
+        if (filter.FromDate.HasValue)
+        {
+            var from = filter.FromDate.Value.Date;
+            query = query.Where(o => o.CompletedDate.HasValue && o.CompletedDate.Value.Date >= from);
+        }
+
+        if (filter.ToDate.HasValue)
+        {
+            var to = filter.ToDate.Value.Date;
+            query = query.Where(o => o.CompletedDate.HasValue && o.CompletedDate.Value.Date <= to);
+        }
+
+        var orders = await query
+            .OrderBy(o => o.CompletedDate ?? o.UpdatedAt ?? o.CreatedAt)
+            .ToListAsync();
+
+        var mappedOrders = orders.Select(o => new BillingEligibleOrderDto
+        {
+            OrderId = o.Id,
+            OrderNumber = NotificationFormatHelper.GetOrderNumber(o.Id),
+            Title = o.Title ?? "Logo Design",
+            Price = o.ClientChargePrice > 0 ? o.ClientChargePrice : (o.ClientPrice ?? o.Price),
+            CompletedDate = o.CompletedDate
+        }).ToList();
+
+        return new BillingQueueResultDto
+        {
+            Orders = mappedOrders,
+            TotalAmountPreview = mappedOrders.Sum(x => x.Price)
+        };
+    }
+
     public async Task<List<BillingEligibleOrderDto>> GetEligibleOrdersForClientAsync(Guid clientId)
     {
         // API expects ClientProfile.Id; if User.Id is accidentally supplied, resolve to ClientProfile.Id

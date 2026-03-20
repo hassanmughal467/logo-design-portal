@@ -38,12 +38,7 @@ export interface PermissionMatrixCell {
 })
 export class PermissionListComponent implements OnInit, OnDestroy {
   permissions: Permission[] = [];
-  roles: Role[] = [
-    { id: '11111111-1111-1111-1111-111111111111', name: 'SuperAdmin', description: 'Full system access with all permissions' },
-    { id: '22222222-2222-2222-2222-222222222222', name: 'Admin', description: 'Administrative access with restricted client data access' },
-    { id: '33333333-3333-3333-3333-333333333333', name: 'Designer', description: 'Designer access without client identity information' },
-    { id: '44444444-4444-4444-4444-444444444444', name: 'Client', description: 'Client access to their own data' }
-  ];
+  roles: Role[] = [];
   rolePermissions: Map<string, Set<string>> = new Map(); // roleId -> Set of permissionIds
   checkboxStates: Map<string, boolean> = new Map(); // "roleId-permissionId" -> boolean
   loading = false;
@@ -61,7 +56,24 @@ export class PermissionListComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.loadRoles();
     this.loadPermissions();
+  }
+
+  loadRoles(): void {
+    this.apiService.get<Role[]>('permissions/roles')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (roles) => {
+          this.roles = roles || [];
+          if (this.displayMatrix && this.permissions.length > 0) {
+            this.loadRolePermissions();
+          }
+        },
+        error: () => {
+          this.roles = [];
+        }
+      });
   }
 
   ngOnDestroy(): void {
@@ -84,7 +96,7 @@ export class PermissionListComponent implements OnInit, OnDestroy {
               detail: 'No permissions found in the system.',
               life: 3000
             });
-          } else if (this.displayMatrix) {
+          } else if (this.displayMatrix && this.roles.length > 0) {
             this.loadRolePermissions();
           }
         },
@@ -116,7 +128,7 @@ export class PermissionListComponent implements OnInit, OnDestroy {
   }
 
   loadRolePermissions(): void {
-    if (this.permissions.length === 0) return;
+    if (this.permissions.length === 0 || this.roles.length === 0) return;
     
     this.loadingMatrix = true;
     this.rolePermissions.clear();
@@ -127,13 +139,16 @@ export class PermissionListComponent implements OnInit, OnDestroy {
     });
 
     // SuperAdmin has all permissions automatically
-    const superAdminId = '11111111-1111-1111-1111-111111111111';
-    this.permissions.forEach(permission => {
-      this.rolePermissions.get(superAdminId)?.add(permission.id);
-      // Initialize checkbox states for SuperAdmin
-      const key = `${superAdminId}-${permission.id}`;
-      this.checkboxStates.set(key, true);
-    });
+    const superAdminRole = this.roles.find(r => r.name === 'SuperAdmin');
+    const superAdminId = superAdminRole?.id;
+
+    if (superAdminId) {
+      this.permissions.forEach(permission => {
+        this.rolePermissions.get(superAdminId)?.add(permission.id);
+        const key = `${superAdminId}-${permission.id}`;
+        this.checkboxStates.set(key, true);
+      });
+    }
 
     // Load permissions for other roles
     const rolesToLoad = this.roles.filter(r => r.id !== superAdminId);
@@ -212,7 +227,8 @@ export class PermissionListComponent implements OnInit, OnDestroy {
   }
 
   isSuperAdmin(roleId: string): boolean {
-    return roleId === '11111111-1111-1111-1111-111111111111';
+    const role = this.roles.find(r => r.id === roleId);
+    return role?.name === 'SuperAdmin';
   }
 
   togglePermission(roleId: string, permissionId: string, value: boolean): void {

@@ -343,12 +343,12 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
     this.quickFilterChips = chipConfigs
       .filter(c => c.roles.includes(userRole))
-      .map(c => ({
-        label: c.label,
-        status: c.status,
-        icon: c.icon,
-        count: c.status === null ? this.orders.length : this.orders.filter(o => o.status === c.status).length
-      }))
+      .map(c => {
+        const count = c.status === null ? this.orders.length : c.status === OrderStatus.Cancelled
+          ? this.orders.filter(o => [OrderStatus.Cancelled, OrderStatus.CancelledByUser, OrderStatus.CancelledByAdmin].includes(o.status)).length
+          : this.orders.filter(o => o.status === c.status).length;
+        return { label: c.label, status: c.status, icon: c.icon, count };
+      })
       .filter(c => c.status === null || c.count > 0); // hide zero-count chips (except "All")
   }
 
@@ -368,9 +368,14 @@ export class OrderListComponent implements OnInit, OnDestroy {
   applyFilters(): void {
     let filtered = [...this.orders];
 
-    // Apply status filter
+    // Apply status filter (Cancelled includes CancelledByUser and CancelledByAdmin)
     if (this.selectedStatus) {
-      filtered = filtered.filter(order => order.status === this.selectedStatus);
+      if (this.selectedStatus === OrderStatus.Cancelled) {
+        const cancelledStatuses = [OrderStatus.Cancelled, OrderStatus.CancelledByUser, OrderStatus.CancelledByAdmin];
+        filtered = filtered.filter(order => cancelledStatuses.includes(order.status));
+      } else {
+        filtered = filtered.filter(order => order.status === this.selectedStatus);
+      }
     }
 
     // Apply global text search
@@ -478,6 +483,9 @@ export class OrderListComponent implements OnInit, OnDestroy {
       case 'FinalApproved': case 'ClientApproved': case '6': return OrderStatus.ClientApproved;
       case 'Completed': case '7': return OrderStatus.Completed;
       case 'Cancelled': case '8': return OrderStatus.Cancelled;
+      case 'CancelledByUser': case '13': return OrderStatus.CancelledByUser;
+      case 'CancelledByAdmin': case '14': return OrderStatus.CancelledByAdmin;
+      case 'Refunded': case '15': return OrderStatus.Refunded;
       default: return OrderStatus.WaitingForAdminApproval;
     }
   }
@@ -607,9 +615,10 @@ export class OrderListComponent implements OnInit, OnDestroy {
     return checkOrderLocked(status);
   }
 
-  canGenerateInvoice(order: Order): boolean {
-    return (this.isAdmin || this.isSuperAdmin) 
-      && (order.status === OrderStatus.Completed || order.status === OrderStatus.ClientApproved)
+  /** Billable queue / flexible invoice only includes Completed + BillingEligible + uninvoiced orders. */
+  canAddToInvoice(order: Order): boolean {
+    return (this.isAdmin || this.isSuperAdmin)
+      && order.status === OrderStatus.Completed
       && !order.hasInvoice;
   }
 
@@ -921,17 +930,13 @@ export class OrderListComponent implements OnInit, OnDestroy {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   }
 
-  generateInvoice(order: Order): void {
-    this.apiService.post('invoices', { orderId: order.id })
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: () => {
-          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoice generated successfully' });
-          this.loadOrders(); // Refresh to update hasInvoice flag
-        },
-        error: (error) => {
-          this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to generate invoice' });
-        }
-      });
+  addToInvoice(order: Order): void {
+    this.router.navigate(['/invoices/flexible-builder'], {
+      queryParams: {
+        clientId: order.clientId,
+        orderId: order.id,
+        mode: 'manual'
+      }
+    });
   }
 }

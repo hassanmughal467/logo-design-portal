@@ -2,6 +2,7 @@ using LogoDesignPortal.Application;
 using LogoDesignPortal.Application.Configuration;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.API.Middleware;
+using LogoDesignPortal.Domain.Constants;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Infrastructure;
 using LogoDesignPortal.Infrastructure.Persistence;
@@ -228,6 +229,9 @@ using (var scope = app.Services.CreateScope())
             logger.LogInformation("Database is up to date.");
         }
 
+        // Standard roles (fixed GUIDs) — SuperAdmin, Admin, Designer, Client.
+        await EnsureStandardRolesAsync(context, logger);
+
         // Seed payment settings with dummy values if they don't exist
         await SeedPaymentSettingsAsync(context, logger);
 
@@ -266,6 +270,61 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+static async Task EnsureStandardRolesAsync(ApplicationDbContext context, ILogger logger)
+{
+    var standardRoles = new (Guid Id, string Name, string Description)[]
+    {
+        (SeededRoleIds.SuperAdmin, "SuperAdmin", "Full system access with all permissions"),
+        (SeededRoleIds.Admin, "Admin", "Administrative access with restricted client data access"),
+        (SeededRoleIds.Designer, "Designer", "Designer access without client identity information"),
+        (SeededRoleIds.Client, "Client", "Client access to their own data")
+    };
+
+    foreach (var (id, name, description) in standardRoles)
+    {
+        var byId = await context.Roles.FirstOrDefaultAsync(r => r.Id == id);
+        if (byId != null)
+        {
+            if (byId.IsDeleted)
+            {
+                byId.IsDeleted = false;
+                byId.DeletedAt = null;
+                byId.DeletedBy = null;
+                await context.SaveChangesAsync();
+                logger.LogInformation("Restored soft-deleted role {RoleName}.", name);
+            }
+            continue;
+        }
+
+        var byName = await context.Roles.FirstOrDefaultAsync(r => r.Name == name);
+        if (byName != null)
+        {
+            if (byName.IsDeleted)
+            {
+                byName.IsDeleted = false;
+                byName.DeletedAt = null;
+                byName.DeletedBy = null;
+                await context.SaveChangesAsync();
+                logger.LogInformation("Restored soft-deleted role {RoleName} (matched by name).", name);
+            }
+            else
+                logger.LogWarning("Role {RoleName} exists with non-standard Id {RoleId}. Skipping insert by reserved id.", name, byName.Id);
+            continue;
+        }
+
+        context.Roles.Add(new Role
+        {
+            Id = id,
+            Name = name,
+            Description = description,
+            CreatedAt = DateTime.UtcNow,
+            IsDeleted = false
+        });
+        await context.SaveChangesAsync();
+        logger.LogInformation("Seeded standard role {RoleName}.", name);
+    }
+}
 
 // Helper method to seed payment settings
 static async Task SeedPaymentSettingsAsync(ApplicationDbContext context, ILogger logger)

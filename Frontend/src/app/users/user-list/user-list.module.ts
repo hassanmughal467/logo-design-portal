@@ -17,7 +17,6 @@ import { CardModule } from 'primeng/card';
 import { PasswordModule } from 'primeng/password';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextareaModule } from 'primeng/inputtextarea';
-import { MessageService } from 'primeng/api';
 
 @NgModule({
   declarations: [UserListComponent],
@@ -38,7 +37,6 @@ import { MessageService } from 'primeng/api';
     PasswordModule,
     InputNumberModule,
     InputTextareaModule
-  ],
-  providers: [MessageService]
+  ]
 })
 export class UserListModule { }

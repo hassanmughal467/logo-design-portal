@@ -198,23 +198,23 @@ public class InvoicePdfService : IInvoicePdfService
                         // Column definitions
                         table.ColumnsDefinition(columns =>
                         {
-                            columns.ConstantColumn(40);  // #
+                            columns.RelativeColumn(2);   // Order Date
+                            columns.RelativeColumn(3);   // Order Title
                             columns.RelativeColumn(3);   // Description
-                            columns.RelativeColumn(1.5f); // Order
-                            columns.RelativeColumn(1);   // Amount
+                            columns.RelativeColumn(1);   // Price
                         });
 
                         // Header row
                         table.Header(header =>
                         {
                             header.Cell().Background(Colors.Blue.Darken2).Padding(8)
-                                .Text("#").FontColor(Colors.White).SemiBold().FontSize(9);
+                                .Text("Date").FontColor(Colors.White).SemiBold().FontSize(9);
+                            header.Cell().Background(Colors.Blue.Darken2).Padding(8)
+                                .Text("Tile").FontColor(Colors.White).SemiBold().FontSize(9);
                             header.Cell().Background(Colors.Blue.Darken2).Padding(8)
                                 .Text("Description").FontColor(Colors.White).SemiBold().FontSize(9);
-                            header.Cell().Background(Colors.Blue.Darken2).Padding(8)
-                                .Text("Order").FontColor(Colors.White).SemiBold().FontSize(9);
                             header.Cell().Background(Colors.Blue.Darken2).Padding(8).AlignRight()
-                                .Text("Amount").FontColor(Colors.White).SemiBold().FontSize(9);
+                                .Text("Price").FontColor(Colors.White).SemiBold().FontSize(9);
                         });
 
                         // Item rows
@@ -223,12 +223,19 @@ public class InvoicePdfService : IInvoicePdfService
                             var item = invoice.Items[i];
                             var bgColor = i % 2 == 0 ? Colors.White : Colors.Grey.Lighten4;
 
+                            var orderTitle = item.OrderTitle
+                                ?? (item.OrderId.HasValue ? item.OrderId.Value.ToString()[..8] : "Manual Item");
+
+                            var descriptionOrTitle = !string.IsNullOrWhiteSpace(item.Description)
+                                ? item.Description
+                                : orderTitle;
+
                             table.Cell().Background(bgColor).Padding(8)
-                                .Text((i + 1).ToString()).FontSize(9);
+                                .Text(item.OrderDate?.ToString("MMM dd, yyyy") ?? "N/A").FontSize(9);
                             table.Cell().Background(bgColor).Padding(8)
-                                .Text(item.Description).FontSize(9);
+                                .Text(orderTitle).FontSize(9);
                             table.Cell().Background(bgColor).Padding(8)
-                                .Text(item.OrderTitle ?? (item.OrderId.HasValue ? item.OrderId.Value.ToString()[..8] : "—")).FontSize(9);
+                                .Text(descriptionOrTitle).FontSize(9);
                             table.Cell().Background(bgColor).Padding(8).AlignRight()
                                 .Text($"{currencySymbol}{item.Amount:N2}").FontSize(9);
                         }

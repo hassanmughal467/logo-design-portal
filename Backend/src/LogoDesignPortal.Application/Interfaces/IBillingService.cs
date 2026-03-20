@@ -9,6 +9,7 @@ public interface IBillingService
     /// Gets clients with uninvoiced completed orders for the billing dashboard.
     /// </summary>
     Task<List<BillingQueueOverviewDto>> GetBillingQueueOverviewAsync();
+    Task<BillingQueueResultDto> GetBillingQueueAsync(BillingQueueFilterDto filter);
 
     /// <summary>
     /// Gets all eligible (Completed, BillingEligible, not IsInvoiced) orders for a client.

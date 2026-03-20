@@ -74,12 +74,24 @@ export class FileUploadComponent implements OnInit {
     
     const role = user?.role || user?.roleName || '';
     if (role === 'Client') {
+      this.fileTypes = [{ label: 'Reference', value: FileType.Reference }];
       // Clients can only upload reference files
       this.uploadForm.patchValue({ fileType: FileType.Reference });
       this.uploadForm.get('fileType')?.disable();
     } else if (role === 'Designer') {
+      this.fileTypes = [
+        { label: 'Preview', value: FileType.Preview },
+        { label: 'Final', value: FileType.Final }
+      ];
       // Designers can upload preview or final
       this.uploadForm.patchValue({ fileType: FileType.Preview });
+    } else {
+      // Admin/SuperAdmin keep full upload options
+      this.fileTypes = [
+        { label: 'Reference', value: FileType.Reference },
+        { label: 'Preview', value: FileType.Preview },
+        { label: 'Final', value: FileType.Final }
+      ];
     }
 
     this.loadDesignPricingInfo();

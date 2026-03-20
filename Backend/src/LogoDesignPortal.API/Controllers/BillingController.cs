@@ -26,8 +26,20 @@ public class BillingController : ControllerBase
     /// </summary>
     [HttpGet("queue")]
     [ProducesResponseType(typeof(List<BillingQueueOverviewDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetBillingQueue()
+    public async Task<IActionResult> GetBillingQueue([FromQuery] Guid? clientId = null, [FromQuery] DateTime? fromDate = null, [FromQuery] DateTime? toDate = null, [FromQuery] bool onlyUninvoiced = true)
     {
+        if (clientId.HasValue || fromDate.HasValue || toDate.HasValue || !onlyUninvoiced)
+        {
+            var filtered = await _billingService.GetBillingQueueAsync(new BillingQueueFilterDto
+            {
+                ClientId = clientId,
+                FromDate = fromDate,
+                ToDate = toDate,
+                OnlyUninvoiced = onlyUninvoiced
+            });
+            return Ok(filtered);
+        }
+
         var overview = await _billingService.GetBillingQueueOverviewAsync();
         return Ok(overview);
     }

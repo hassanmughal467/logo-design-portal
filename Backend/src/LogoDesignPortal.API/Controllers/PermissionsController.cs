@@ -19,6 +19,14 @@ public class PermissionsController : ControllerBase
         _logger = logger;
     }
 
+    [HttpGet("roles")]
+    [ProducesResponseType(typeof(List<RoleDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllRoles()
+    {
+        var roles = await _permissionService.GetAllRolesAsync();
+        return Ok(roles);
+    }
+
     [HttpGet]
     [ProducesResponseType(typeof(List<PermissionDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllPermissions()

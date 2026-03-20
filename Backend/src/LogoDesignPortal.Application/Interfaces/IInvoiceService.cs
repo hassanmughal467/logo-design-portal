@@ -10,9 +10,11 @@ public interface IInvoiceService
     /// Gets an invoice by ID with access control. Returns null if not found or user lacks access.
     /// </summary>
     Task<InvoiceResponseDto?> GetInvoiceByIdWithAccessAsync(Guid invoiceId, Guid userId, string? userRole);
-    Task<List<InvoiceResponseDto>> GetInvoicesAsync(Guid? userId, string? userRole);
+    Task<List<InvoiceResponseDto>> GetInvoicesAsync(Guid? userId, string? userRole, InvoiceQueryFilterDto? filters = null);
     Task<List<InvoiceResponseDto>> GetInvoicesByClientAsync(Guid clientId);
     Task<InvoiceResponseDto> UpdateInvoiceAsync(Guid invoiceId, UpdateInvoiceRequestDto request, Guid updatedBy);
+    Task<InvoiceResponseDto> GenerateFlexibleInvoiceAsync(GenerateFlexibleInvoiceRequestDto request, Guid createdBy);
+    Task<InvoiceResponseDto> EditInvoiceItemsAsync(Guid invoiceId, EditInvoiceItemsRequestDto request, Guid updatedBy);
     Task<InvoiceResponseDto> MarkInvoiceAsPaidAsync(Guid invoiceId, string? paymentMethod, Guid? performedBy);
     Task<bool> SendInvoiceAsync(Guid invoiceId, Guid? performedBy);
     Task<List<InvoiceLogDto>> GetInvoiceLogsAsync(Guid invoiceId);

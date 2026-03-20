@@ -348,6 +348,13 @@ public class OrderService : IOrderService
             response.AssignedDesignerDisplayName = "Company Design Team";
         }
 
+        // Enrich StandardPrice for Designer/Admin when order has design but price not yet submitted
+        if (response.StandardPrice == null && order.DesignCategory.HasValue && order.DesignType.HasValue &&
+            (userRole == "Designer" || userRole == "Admin" || userRole == "SuperAdmin"))
+        {
+            response.StandardPrice = await GetDisplayStandardPriceAsync(order.DesignCategory.Value, order.DesignType.Value, order.DesignerId);
+        }
+
         return response;
     }
 
@@ -1352,64 +1359,102 @@ public class OrderService : IOrderService
         var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
         var reasonSnippet = request.Reason.Length > 200 ? request.Reason[..200] + "..." : request.Reason;
         var cancelledBy = isCancelledByUser ? "client" : "admin";
+        var adminMessage = $"Order (#{orderNumber}) was cancelled by {cancelledBy}. Reason: {reasonSnippet}";
 
-        // Notify client (with cancellation reason) - always, including confirmation when client cancels
-        if (order.Client != null)
+        // Client cancelled: notify Designer + SuperAdmin only (not Client - they cancelled; not Admin - SuperAdmin only)
+        if (isCancelledByUser)
         {
+            // Notify Designer if assigned
+            if (order.Designer?.UserId != null)
+            {
+                try
+                {
+                    var designerMessage = $"Order (#{orderNumber}) was cancelled by client. Reason: {reasonSnippet}";
+                    await _notificationService.CreateNotificationAsync(
+                        order.Designer.UserId,
+                        "Order Cancelled",
+                        designerMessage,
+                        NotificationType.OrderStatusChange,
+                        orderId,
+                        NotificationReferenceType.Order,
+                        orderId,
+                        userId
+                    );
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to notify designer of order cancellation {OrderId}.", orderId);
+                }
+            }
+
+            // Notify SuperAdmin only (not Admin when client cancels)
             try
             {
-                var clientMessage = isCancelledByUser
-                    ? $"Your order (#{orderNumber}) has been cancelled. Reason: {reasonSnippet}"
-                    : $"Your order (#{orderNumber}) was cancelled. Reason: {reasonSnippet}";
-                await _notificationService.CreateNotificationAsync(
-                    order.Client.UserId,
-                    "Order Cancelled",
-                    clientMessage,
-                    NotificationType.OrderStatusChange,
-                    orderId,
-                    NotificationReferenceType.Order,
-                    orderId,
-                    userId
-                );
+                await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", "Order Cancelled", adminMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, userId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to notify client of order cancellation {OrderId}.", orderId);
+                _logger.LogError(ex, "Failed to notify SuperAdmin of order cancellation {OrderId}.", orderId);
             }
         }
+        else
+        {
+            // Admin or SuperAdmin cancelled: notify Client + Designer (not the canceller)
+            if (order.Client != null && order.Client.UserId != userId)
+            {
+                try
+                {
+                    var clientMessage = $"Your order (#{orderNumber}) was cancelled. Reason: {reasonSnippet}";
+                    await _notificationService.CreateNotificationAsync(
+                        order.Client.UserId,
+                        "Order Cancelled",
+                        clientMessage,
+                        NotificationType.OrderStatusChange,
+                        orderId,
+                        NotificationReferenceType.Order,
+                        orderId,
+                        userId
+                    );
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to notify client of order cancellation {OrderId}.", orderId);
+                }
+            }
 
-        // Notify SuperAdmin and Admin
-        try
-        {
-            var adminMessage = $"Order (#{orderNumber}) was cancelled by {cancelledBy}. Reason: {reasonSnippet}";
-            await _notificationService.CreateNotificationForRoleAsync("Admin", "Order Cancelled", adminMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, userId);
-            await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", "Order Cancelled", adminMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, userId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to notify admins of order cancellation {OrderId}.", orderId);
-        }
+            if (order.Designer?.UserId != null && order.Designer.UserId != userId)
+            {
+                try
+                {
+                    var designerMessage = $"Order (#{orderNumber}) was cancelled. Reason: {reasonSnippet}";
+                    await _notificationService.CreateNotificationAsync(
+                        order.Designer.UserId,
+                        "Order Cancelled",
+                        designerMessage,
+                        NotificationType.OrderStatusChange,
+                        orderId,
+                        NotificationReferenceType.Order,
+                        orderId,
+                        userId
+                    );
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to notify designer of order cancellation {OrderId}.", orderId);
+                }
+            }
 
-        // Notify designer if assigned
-        if (order.Designer?.UserId != null && order.Designer.UserId != userId)
-        {
+            // Notify other admins (Admin when SuperAdmin cancels; SuperAdmin when Admin cancels) - not the canceller
             try
             {
-                var designerMessage = $"Order (#{orderNumber}) was cancelled. Reason: {reasonSnippet}";
-                await _notificationService.CreateNotificationAsync(
-                    order.Designer.UserId,
-                    "Order Cancelled",
-                    designerMessage,
-                    NotificationType.OrderStatusChange,
-                    orderId,
-                    NotificationReferenceType.Order,
-                    orderId,
-                    userId
-                );
+                if (userRole == "SuperAdmin")
+                    await _notificationService.CreateNotificationForRoleAsync("Admin", "Order Cancelled", adminMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, userId);
+                else if (userRole == "Admin")
+                    await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", "Order Cancelled", adminMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, userId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to notify designer of order cancellation {OrderId}.", orderId);
+                _logger.LogError(ex, "Failed to notify admins of order cancellation {OrderId}.", orderId);
             }
         }
 
@@ -1834,5 +1879,26 @@ public class OrderService : IOrderService
             .Where(u => !u.IsDeleted && roleIds.Contains(u.RoleId))
             .Select(u => u.Id)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets the initial fixed price (PKR) for a design from DesignPricing or DesignerLogoPricing.
+    /// Used to show designer the standard price for LeftChest/JacketBack etc. before they submit.
+    /// </summary>
+    private async Task<decimal?> GetDisplayStandardPriceAsync(DesignCategory category, DesignType designType, Guid? designerId)
+    {
+        if (designerId.HasValue)
+        {
+            var designerPricing = await _context.DesignerLogoPricings
+                .FirstOrDefaultAsync(p => p.DesignerId == designerId.Value && p.DesignCategory == category && p.DesignType == designType && p.IsActive && !p.IsDeleted);
+            if (designerPricing != null && designerPricing.DefaultPrice > 0)
+                return designerPricing.DefaultPrice;
+        }
+
+        var pricing = await _context.DesignPricings
+            .FirstOrDefaultAsync(p => p.DesignCategory == category && p.DesignType == designType && p.IsActive && !p.IsDeleted);
+        if (pricing == null || pricing.DefaultPrice <= 0)
+            return null;
+        return pricing.DefaultPrice;
     }
 }

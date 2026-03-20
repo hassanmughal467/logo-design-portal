@@ -11,6 +11,7 @@ export interface InvoiceItem {
   id: string;
   orderId?: string;
   orderTitle?: string;
+  orderDate?: Date | string;
   description: string;
   amount: number;
 }
@@ -81,7 +82,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   editTaxAmount: number = 0;
   editPaymentMethod: string = '';
   editNotes: string = '';
-  editItems: { id: string; description: string; amount: number }[] = [];
+  editItems: { id?: string; orderId?: string; description: string; amount: number; isNew?: boolean }[] = [];
+  removedItemIds: string[] = [];
 
   // Statistics
   invoiceStats = {
@@ -112,10 +114,15 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     private router: Router
   ) {}
 
-  /** Admin/SuperAdmin only: Generate Invoice, Bulk Pay, Pay (mark-paid). */
+  /** Admin/SuperAdmin only: Generate Invoice, Bulk Pay, admin Pay (mark-paid). */
   get canManageInvoices(): boolean {
     const role = this.authService.getCurrentUser()?.role || this.authService.getCurrentUser()?.roleName;
     return role === 'Admin' || role === 'SuperAdmin';
+  }
+
+  /** Matches API: PUT invoice / items allowed for Admin and SuperAdmin (not paid / locked). */
+  get canEditInvoices(): boolean {
+    return this.canManageInvoices;
   }
 
   ngOnInit(): void {
@@ -129,8 +136,16 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (!id) return;
     const invoice = this.invoices.find(inv => inv.id === id || inv.id?.toLowerCase() === id?.toLowerCase());
     if (invoice) {
-      this.openDetailDialog(invoice);
-      this.cdr.markForCheck();
+      this.openDetailDialogFromApi(invoice);
+    } else {
+      this.apiService.get<any>(`invoices/${id}`)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (raw) => {
+            this.openDetailDialog(this.normalizeInvoiceFromApi(raw));
+          },
+          error: () => this.cdr.markForCheck()
+        });
     }
   }
 
@@ -228,6 +243,10 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.showGenerateDialog = true;
   }
 
+  openFlexibleBuilder(): void {
+    this.router.navigate(['/invoices/flexible-builder']);
+  }
+
   loadClientsWithUninvoiced(): void {
     this.loadingClients = true;
     this.billingService.getBillingQueue()
@@ -288,6 +307,62 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   openDetailDialog(invoice: Invoice): void {
     this.selectedInvoice = invoice;
     this.showDetailDialog = true;
+    this.cdr.markForCheck();
+  }
+
+  /** Load latest invoice (line items, totals) then open detail — useful after list is stale. */
+  openDetailDialogFromApi(invoice: Invoice): void {
+    this.apiService.get<any>(`invoices/${invoice.id}`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (raw) => {
+          this.selectedInvoice = this.normalizeInvoiceFromApi(raw);
+          this.showDetailDialog = true;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.openDetailDialog(invoice);
+        }
+      });
+  }
+
+  /** Map API DTO to local Invoice shape (partial/case variants). */
+  private normalizeInvoiceFromApi(raw: any): Invoice {
+    const itemsRaw = raw.items || raw.Items || [];
+    const items: InvoiceItem[] = (Array.isArray(itemsRaw) ? itemsRaw : []).map((it: any) => ({
+      id: it.id || it.Id,
+      orderId: it.orderId ?? it.OrderId,
+      orderTitle: it.orderTitle ?? it.OrderTitle,
+      orderDate: (it.orderDate ?? it.OrderDate)
+        ? new Date(it.orderDate ?? it.OrderDate)
+        : undefined,
+      description: it.description ?? it.Description ?? '',
+      amount: Number(it.amount ?? it.Amount ?? 0)
+    }));
+    return {
+      id: raw.id || raw.Id,
+      invoiceNumber: raw.invoiceNumber ?? raw.InvoiceNumber ?? '',
+      clientId: raw.clientId ?? raw.ClientId ?? '',
+      clientName: raw.clientName ?? raw.ClientName ?? '',
+      orderId: raw.orderId ?? raw.OrderId,
+      orderIds: raw.orderIds ?? raw.OrderIds,
+      amount: Number(raw.amount ?? raw.Amount ?? 0),
+      taxAmount: Number(raw.taxAmount ?? raw.TaxAmount ?? 0),
+      totalAmount: Number(raw.totalAmount ?? raw.TotalAmount ?? raw.amount ?? 0),
+      billingType: raw.billingType ?? raw.BillingType ?? 1,
+      billingTypeDisplay: raw.billingTypeDisplay ?? raw.BillingTypeDisplay ?? '',
+      status: (raw.status ?? raw.Status ?? 'Pending') as Invoice['status'],
+      dueDate: new Date(raw.dueDate ?? raw.DueDate),
+      paidDate: (raw.paidDate ?? raw.PaidDate) ? new Date(raw.paidDate ?? raw.PaidDate) : undefined,
+      paymentMethod: raw.paymentMethod ?? raw.PaymentMethod,
+      notes: raw.notes ?? raw.Notes,
+      items,
+      isLocked:
+        (raw.isLocked ?? raw.IsLocked) === true ||
+        String(raw.status ?? raw.Status ?? '')
+          .toLowerCase() === 'paid',
+      createdAt: new Date(raw.createdAt ?? raw.CreatedAt ?? Date.now())
+    };
   }
 
   generateInvoice(): void {
@@ -363,6 +438,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   openEditDialog(invoice: Invoice): void {
+    this.showDetailDialog = false;
     this.editInvoice = invoice;
     this.editBillingType = invoice.billingType;
     this.editDueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
@@ -371,10 +447,30 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.editNotes = invoice.notes || '';
     this.editItems = (invoice.items || []).map(item => ({
       id: item.id,
+      orderId: item.orderId,
       description: item.description,
       amount: item.amount
     }));
+    this.removedItemIds = [];
     this.showEditDialog = true;
+    this.cdr.markForCheck();
+  }
+
+  addManualEditItem(): void {
+    this.editItems.push({
+      description: 'Manual Item',
+      amount: 0,
+      isNew: true
+    });
+  }
+
+  removeEditItem(index: number): void {
+    const item = this.editItems[index];
+    if (item?.id) {
+      this.removedItemIds.push(item.id);
+    }
+    this.editItems.splice(index, 1);
+    this.editItems = [...this.editItems];
   }
 
   saveInvoice(): void {
@@ -389,18 +485,48 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     };
 
     // Include item updates if any
-    if (this.editItems.length > 0) {
+    if (this.editItems.some(x => !!x.id)) {
       request.items = this.editItems.map(item => ({
         id: item.id,
         description: item.description,
         amount: item.amount
-      }));
+      })).filter(x => !!x.id);
     }
 
     this.apiService.put(`invoices/${this.editInvoice.id}`, request)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
+          const manualItems = this.editItems
+            .filter(x => x.isNew && !x.id)
+            .map(x => ({ description: x.description, amount: x.amount }));
+
+          if (this.removedItemIds.length > 0 || manualItems.length > 0) {
+            this.apiService.put(`invoices/${this.editInvoice!.id}/items`, {
+              removeItemIds: this.removedItemIds,
+              addManualItems: manualItems
+            }).pipe(takeUntil(this.destroy$)).subscribe({
+              next: () => {
+                this.messageService.add({
+                  severity: 'success',
+                  summary: 'Success',
+                  detail: 'Invoice updated successfully'
+                });
+                this.showEditDialog = false;
+                this.loadInvoices();
+                this.loadStatistics();
+              },
+              error: (error) => {
+                this.messageService.add({
+                  severity: 'error',
+                  summary: 'Error',
+                  detail: error.error?.error || 'Failed to update invoice items'
+                });
+              }
+            });
+            return;
+          }
+
           this.messageService.add({
             severity: 'success',
             summary: 'Success',

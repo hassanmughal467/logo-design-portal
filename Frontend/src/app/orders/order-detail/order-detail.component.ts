@@ -2,12 +2,13 @@ import { Component, OnInit, OnDestroy, OnChanges, SimpleChanges, Input, Output, 
 import { Router, ActivatedRoute } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
+import { PermissionsService } from '@core/services/permissions.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus } from '@shared/models/order.model';
 import { isOrderLocked } from '@shared/utils/order-locking';
-import { LogoFile } from '@shared/models/file.model';
+import { LogoFile, FileType } from '@shared/models/file.model';
 import { OrderRevision } from '@shared/models/revision.model';
 import { OrderComment, OrderCommentUnreadCounts } from '@shared/models/comment.model';
 
@@ -45,9 +46,11 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   showArchiveConfirmDialog = false;
   showRefundDialog = false;
   showEditClientPriceDialog = false;
+  showRequestPriceDialog = false;
   
   // Edit client price
   editClientChargePrice = 0;
+  designerRequestedPrice = 0;
   
   // Cancel/Archive data
   cancellationReason = '';
@@ -81,6 +84,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     private route: ActivatedRoute,
     private apiService: ApiService,
     private authService: AuthService,
+    private permissionsService: PermissionsService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService
   ) {}
@@ -200,6 +204,11 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     // Clients don't need to see revision details
     const user = this.authService.getCurrentUser();
     if (user?.role === 'Client') {
+      this.revisions = [];
+      return;
+    }
+    // Avoid expected 404 when order has never had a revision request.
+    if ((this.order?.revisionCount ?? 0) === 0) {
       this.revisions = [];
       return;
     }
@@ -427,7 +436,30 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
 
   /** Files eligible for forwarding to client (excludes client-uploaded files) */
   get filesToForward(): LogoFile[] {
-    return this.files.filter(f => f.uploadedByRole !== 'Client');
+    return this.files.filter(f => f.uploadedByRole !== 'Client' && f.fileType !== FileType.Reference);
+  }
+
+  /** Client-facing preview files only. */
+  get clientPreviewFiles(): LogoFile[] {
+    return this.files.filter(f => f.isVisibleToClient && f.fileType === FileType.Preview);
+  }
+
+  /** Client-facing final files only. */
+  get clientFinalFiles(): LogoFile[] {
+    return this.files.filter(f => f.isVisibleToClient && f.fileType === FileType.Final);
+  }
+
+  /** Client-facing reference files only. */
+  get clientReferenceFiles(): LogoFile[] {
+    return this.files.filter(f => f.isVisibleToClient && f.fileType === FileType.Reference);
+  }
+
+  openPreviewTab(): void {
+    this.activeTab = 0;
+  }
+
+  openMessagesTab(): void {
+    this.activeTab = 2;
   }
 
   selectAllFilesToSend(): void {
@@ -668,6 +700,37 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     return this.isClient && this.order?.status === OrderStatus.PriceApprovalPending;
   }
 
+  /** Designer can request price change when order has design, price not yet approved */
+  canDesignerRequestPrice(): boolean {
+    if (!this.order || !this.isDesigner) return false;
+    if (!this.order.designCategory || !this.order.designType) return false;
+    if (this.order.priceApproved) return false;
+    return true;
+  }
+
+  openRequestPriceDialog(): void {
+    this.designerRequestedPrice = this.order?.standardPrice ?? this.order?.designerProposedPrice ?? this.order?.proposedPrice ?? 0;
+    this.showRequestPriceDialog = true;
+  }
+
+  submitRequestPrice(): void {
+    if (!this.order || this.designerRequestedPrice <= 0) return;
+    this.apiService.post('designer-payout/pricing/propose', {
+      orderId: this.order.id,
+      proposedPrice: this.designerRequestedPrice
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.showRequestPriceDialog = false;
+        this.loadOrder(this.order!.id);
+        this.orderUpdated.emit();
+        this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Price request sent to admin. Admin will review before sending files to client.' });
+      },
+      error: (err) => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err.error?.error || 'Failed to submit price request' });
+      }
+    });
+  }
+
   /** Admin: Designer proposed price differs from standard; needs approval */
   canApproveDesignerPrice(): boolean {
     return (this.isAdmin || this.isSuperAdmin)
@@ -785,6 +848,32 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       return false;
     }
     return true;
+  }
+
+  /** Client Pricing: SuperAdmin always, Admin only if granted permission, Client only after designer sends */
+  shouldShowClientPricing(): boolean {
+    if (this.isSuperAdmin) return true;
+    if (this.isAdmin) return this.permissionsService.hasPermission('ViewAllOrders');
+    if (!this.isClient || !this.order) return false;
+    const statusesWhenPricingVisible: OrderStatus[] = [
+      OrderStatus.PreviewDelivered,
+      OrderStatus.RevisionRequested,
+      OrderStatus.ClientApproved,
+      OrderStatus.Completed
+    ];
+    return statusesWhenPricingVisible.includes(this.order.status);
+  }
+
+  /** Vector/screen-printing orders use style preferences, not stitch type. */
+  isVectorOrder(): boolean {
+    const category = (this.order?.designCategory || '').toString().toLowerCase();
+    return category.includes('vector');
+  }
+
+  /** Embroidery/patch orders use stitch type (stored in stylePreferences field). */
+  isStitchTypeOrder(): boolean {
+    const category = (this.order?.designCategory || '').toString().toLowerCase();
+    return category.includes('embroidery') || category.includes('digitizing') || category.includes('patch');
   }
 
   /** Admin: Designer uploaded preview files not yet sent to client */
@@ -1081,6 +1170,28 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   isOrderLocked = isOrderLocked;
+
+  /** True if order is cancelled (by client or admin) */
+  isOrderCancelled(): boolean {
+    if (!this.order) return false;
+    return this.order.status === OrderStatus.Cancelled ||
+           this.order.status === OrderStatus.CancelledByUser ||
+           this.order.status === OrderStatus.CancelledByAdmin;
+  }
+
+  /** Banner message for cancelled orders */
+  getCancelledBannerMessage(): string {
+    if (!this.order) return 'Order cancelled.';
+    const d = this.order.updatedAt || this.order.createdAt;
+    const dateStr = d ? new Date(d).toLocaleDateString(undefined, { dateStyle: 'long' }) : '';
+    if (this.order.status === OrderStatus.CancelledByUser) {
+      return `Order cancelled by client${dateStr ? ' on ' + dateStr : ''}. This order is now closed.`;
+    }
+    if (this.order.status === OrderStatus.CancelledByAdmin) {
+      return `Order cancelled by admin${dateStr ? ' on ' + dateStr : ''}. This order is now closed.`;
+    }
+    return `Order cancelled${dateStr ? ' on ' + dateStr : ''}. This order is now closed.`;
+  }
 
   canUploadFiles(): boolean {
     if (!this.order) return false;

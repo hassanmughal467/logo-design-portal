@@ -4,6 +4,7 @@ namespace LogoDesignPortal.Application.Interfaces;
 
 public interface IPermissionService
 {
+    Task<List<RoleDto>> GetAllRolesAsync();
     Task<List<PermissionDto>> GetAllPermissionsAsync();
     Task<RolePermissionsResponseDto> GetRolePermissionsAsync(Guid roleId);
     Task AssignPermissionToRoleAsync(Guid roleId, Guid permissionId);

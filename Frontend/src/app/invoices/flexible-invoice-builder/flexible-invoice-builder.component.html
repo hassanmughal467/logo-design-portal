@@ -1,0 +1,85 @@
+<div class="flexible-builder">
+  <app-page-header title="Flexible Invoice Builder" subtitle="Generate invoice by date range or custom order selection">
+  </app-page-header>
+
+  <p-card>
+    <div class="form-grid">
+      <div class="field">
+        <label>Client</label>
+        <p-dropdown
+          [options]="clients"
+          [(ngModel)]="selectedClient"
+          optionLabel="companyName"
+          [filter]="true"
+          filterBy="companyName,clientName"
+          placeholder="Select client"
+          appendTo="body"
+          (onChange)="onClientChanged()">
+          <ng-template let-client pTemplate="item">
+            <span>{{ client.companyName || client.clientName }} ({{ client.uninvoicedOrderCount }} orders)</span>
+          </ng-template>
+        </p-dropdown>
+      </div>
+
+      <div class="field mode-toggle">
+        <p-checkbox [(ngModel)]="useManualSelection" [binary]="true" inputId="manualMode"></p-checkbox>
+        <label for="manualMode">Manual order selection (ignore date range)</label>
+      </div>
+
+      <div class="field" *ngIf="!useManualSelection">
+        <label>From Date</label>
+        <p-calendar [(ngModel)]="fromDate" [showIcon]="true" dateFormat="yy-mm-dd" appendTo="body"></p-calendar>
+      </div>
+
+      <div class="field" *ngIf="!useManualSelection">
+        <label>To Date</label>
+        <p-calendar [(ngModel)]="toDate" [showIcon]="true" dateFormat="yy-mm-dd" appendTo="body"></p-calendar>
+      </div>
+
+      <div class="field full">
+        <label>Notes (optional)</label>
+        <textarea pInputTextarea [(ngModel)]="notes" rows="2" placeholder="Invoice notes..."></textarea>
+      </div>
+    </div>
+
+    <div class="actions">
+      <p-button label="Load Eligible Orders" icon="pi pi-search" (onClick)="loadOrdersPreview()" [disabled]="!selectedClient || loadingOrders"></p-button>
+      <span *ngIf="loadingOrders"><p-progressSpinner [style]="{ width: '24px', height: '24px' }" strokeWidth="6"></p-progressSpinner></span>
+    </div>
+
+    <div class="table-wrap" *ngIf="orders.length > 0">
+      <p-table [value]="orders" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th style="width: 48px"></th>
+            <th>Order ID</th>
+            <th>Item (title)</th>
+            <th>Completed Date</th>
+            <th class="text-right">Price</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-order>
+          <tr>
+            <td>
+              <p-checkbox [binary]="true" [ngModel]="isSelected(order.orderId)" (ngModelChange)="toggleOrder(order.orderId)"></p-checkbox>
+            </td>
+            <td>{{ order.orderNumber }}</td>
+            <td>{{ order.title || '—' }}</td>
+            <td>{{ order.completedDate ? (order.completedDate | date:'yyyy-MM-dd') : '-' }}</td>
+            <td class="text-right">{{ formatCurrency(order.price) }}</td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <div class="totals">
+      <strong>Preview Total:</strong> {{ formatCurrency(previewTotal) }}
+      <strong style="margin-left: 1rem;">Selected Total:</strong> {{ formatCurrency(selectedTotal) }}
+    </div>
+
+    <div class="actions">
+      <p-button label="Back to Invoices" styleClass="p-button-outlined" (onClick)="router.navigate(['/invoices'])"></p-button>
+      <p-button label="Generate Invoice" icon="pi pi-check" [loading]="generating" [disabled]="!selectedClient" (onClick)="generateInvoice()"></p-button>
+    </div>
+  </p-card>
+</div>

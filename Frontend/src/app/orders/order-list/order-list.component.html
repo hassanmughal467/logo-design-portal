@@ -234,13 +234,13 @@
                   pTooltip="Change Status" tooltipPosition="top">
                 </p-button>
 
-                <!-- Admin: Generate Invoice (only for Completed orders without existing invoice) -->
+                <!-- Admin: Add to Invoice (only for billable orders without existing invoice) -->
                 <p-button
-                  *ngIf="canGenerateInvoice(order)"
+                  *ngIf="canAddToInvoice(order)"
                   icon="pi pi-file-pdf"
                   styleClass="p-button-text p-button-rounded p-button-sm"
-                  (onClick)="generateInvoice(order)"
-                  pTooltip="Generate Invoice" tooltipPosition="top">
+                  (onClick)="addToInvoice(order)"
+                  pTooltip="Add to Invoice (Billable)" tooltipPosition="top">
                 </p-button>
               </div>
             </td>

@@ -3,10 +3,12 @@ import { Dropdown } from 'primeng/dropdown';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
+import { PermissionsService } from '@core/services/permissions.service';
 import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { User, UserRole } from '@shared/models/user.model';
+import { User } from '@shared/models/user.model';
+import { RoleOption } from '@shared/models/role.model';
 
 @Component({
   selector: 'app-user-list',
@@ -34,7 +36,8 @@ export class UserListComponent implements OnInit, OnDestroy {
   deletePermanent = false;
   loadingUserDetails = false;
   selectedUsers: User[] = [];
-  roles = Object.values(UserRole);
+  /** Roles from GET /api/roles (standard roles are seeded on the API with fixed IDs). */
+  availableRoles: RoleOption[] = [];
 
   billingTypeOptions = [
     { label: 'Per Logo', value: 1 },
@@ -47,14 +50,6 @@ export class UserListComponent implements OnInit, OnDestroy {
     { label: 'Business', value: 'Business' },
     { label: 'Student', value: 'Student' }
   ];
-  
-  // Role ID mapping
-  private roleIdMap: { [key: string]: string } = {
-    'SuperAdmin': '11111111-1111-1111-1111-111111111111',
-    'Admin': '22222222-2222-2222-2222-222222222222',
-    'Designer': '33333333-3333-3333-3333-333333333333',
-    'Client': '44444444-4444-4444-4444-444444444444'
-  };
   
   @ViewChild('editRoleDropdown') editRoleDropdown?: Dropdown;
   
@@ -71,6 +66,7 @@ export class UserListComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private authService: AuthService,
+    private permissionsService: PermissionsService,
     private messageService: MessageService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef
@@ -80,7 +76,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       firstName: ['', Validators.required],
       lastName: ['', Validators.required],
       password: ['', [Validators.required, Validators.minLength(6)]],
-      role: ['', Validators.required],
+      roleId: ['', Validators.required],
       // Additional user fields
       secondaryEmail: ['', [Validators.email]],
       invoiceEmail: ['', [Validators.email]],
@@ -107,21 +103,19 @@ export class UserListComponent implements OnInit, OnDestroy {
     });
 
     // Update validators when role changes
-    this.createUserForm.get('role')?.valueChanges.subscribe(role => {
-      if (role === 'Client') {
-        // Make Client mandatory fields required
+    this.createUserForm.get('roleId')?.valueChanges.subscribe(() => {
+      const roleName = this.getRoleNameById(this.createUserForm.get('roleId')?.value);
+      if (roleName === 'Client') {
         this.createUserForm.get('invoiceEmail')?.setValidators([Validators.required, Validators.email]);
         this.createUserForm.get('companyName')?.setValidators([Validators.required]);
         this.createUserForm.get('contactName')?.setValidators([Validators.required]);
         this.createUserForm.get('phoneNumber')?.setValidators([Validators.required]);
       } else {
-        // Remove required validators for non-Client roles
         this.createUserForm.get('invoiceEmail')?.setValidators([Validators.email]);
         this.createUserForm.get('companyName')?.clearValidators();
         this.createUserForm.get('contactName')?.clearValidators();
         this.createUserForm.get('phoneNumber')?.clearValidators();
       }
-      // Update validity
       this.createUserForm.get('invoiceEmail')?.updateValueAndValidity({ emitEvent: false });
       this.createUserForm.get('companyName')?.updateValueAndValidity({ emitEvent: false });
       this.createUserForm.get('contactName')?.updateValueAndValidity({ emitEvent: false });
@@ -200,7 +194,30 @@ export class UserListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.loadAvailableRoles();
     this.loadUsers();
+  }
+
+  loadAvailableRoles(): void {
+    this.apiService.get<any[]>('roles')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (rows) => {
+          this.availableRoles = (rows || []).map((r: any) => ({
+            id: String(r.id ?? r.Id),
+            name: String(r.name ?? r.Name ?? ''),
+            description: r.description ?? r.Description ?? undefined
+          })).filter(r => r.name);
+        },
+        error: () => {
+          this.availableRoles = [];
+        }
+      });
+  }
+
+  getRoleNameById(roleId: string | null | undefined): string | null {
+    if (!roleId) return null;
+    return this.availableRoles.find(r => r.id === roleId)?.name ?? null;
   }
 
   ngOnDestroy(): void {
@@ -249,7 +266,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       firstName: '',
       lastName: '',
       password: '',
-      role: '',
+      roleId: '',
       secondaryEmail: '',
       invoiceEmail: '',
       companyName: '',
@@ -286,13 +303,11 @@ export class UserListComponent implements OnInit, OnDestroy {
   }
 
   isClientRole(): boolean {
-    const role = this.createUserForm.get('role')?.value;
-    return role === 'Client';
+    return this.getRoleNameById(this.createUserForm.get('roleId')?.value) === 'Client';
   }
 
   isDesignerRole(): boolean {
-    const role = this.createUserForm.get('role')?.value;
-    return role === 'Designer';
+    return this.getRoleNameById(this.createUserForm.get('roleId')?.value) === 'Designer';
   }
 
   getDesignerHourlyRate(): number | null {
@@ -375,21 +390,17 @@ export class UserListComponent implements OnInit, OnDestroy {
     }
 
     const formValue = this.createUserForm.value;
-    
-    // Convert role name to RoleId (Guid)
-    const roleName = formValue.role;
-    const roleId = this.roleIdMap[roleName];
-    
-    if (!roleId) {
+    const roleId = formValue.roleId;
+    const roleName = this.getRoleNameById(roleId);
+    if (!roleId || !roleName) {
       this.messageService.add({
         severity: 'error',
         summary: 'Error',
-        detail: 'Invalid role selected'
+        detail: 'Select a role. If the list is empty, ensure the API has seeded roles and try refreshing.'
       });
       return;
     }
 
-    // Prepare request with RoleId instead of role
     const createRequest: any = {
       email: formValue.email,
       firstName: formValue.firstName,
@@ -457,7 +468,31 @@ export class UserListComponent implements OnInit, OnDestroy {
   }
 
   canCreateUser(): boolean {
-    return this.authService.hasRole('SuperAdmin');
+    if (this.authService.hasRole('SuperAdmin')) {
+      return true;
+    }
+    return this.authService.hasRole('Admin') && this.permissionsService.hasPermission('CreateUser');
+  }
+
+  /** Dropdown options for create-user (value = role id). */
+  get rolesForCreateDropdown(): { label: string; value: string }[] {
+    const rows = this.availableRoles.filter(r => {
+      if (this.authService.hasRole('SuperAdmin')) return true;
+      if (this.authService.hasRole('Admin') && this.permissionsService.hasPermission('CreateUser')) {
+        return r.name.toLowerCase() !== 'superadmin';
+      }
+      return false;
+    });
+    return rows.map(r => ({ label: r.name, value: r.id })).sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /** Role names allowed when editing (Admin cannot assign SuperAdmin). */
+  get rolesAssignableOnEdit(): string[] {
+    const names = this.availableRoles.map(r => r.name);
+    if (this.authService.hasRole('SuperAdmin')) {
+      return [...names].sort((a, b) => a.localeCompare(b));
+    }
+    return names.filter(n => n.toLowerCase() !== 'superadmin').sort((a, b) => a.localeCompare(b));
   }
 
   getRoleSeverity(role: string): string {
@@ -529,15 +564,14 @@ export class UserListComponent implements OnInit, OnDestroy {
           // Find exact match in roles array
           let selectedRole: string | null = null;
           
+          const pool = this.availableRoles.map(r => r.name);
           if (roleValue) {
-            // Try exact match first
-            selectedRole = this.roles.find(r => String(r) === roleValue) || null;
-            
-            // If no match, try case-insensitive
+            selectedRole = pool.find(r => String(r) === roleValue) || null;
             if (!selectedRole) {
-              selectedRole = this.roles.find(r => 
-                String(r).toLowerCase() === roleValue.toLowerCase()
-              ) || null;
+              selectedRole = pool.find(r => String(r).toLowerCase() === roleValue.toLowerCase()) || null;
+            }
+            if (!selectedRole) {
+              selectedRole = roleValue;
             }
           }
           
@@ -610,9 +644,10 @@ export class UserListComponent implements OnInit, OnDestroy {
       const roleValue = String(this.selectedUserForEdit.roleName || this.selectedUserForEdit.role || '').trim();
       if (!roleValue) return;
       
-      // Find matching role
-      const matchingRole: string | undefined = this.roles.find(r => String(r) === roleValue) || 
-                          this.roles.find(r => String(r).toLowerCase() === roleValue.toLowerCase());
+      const pool = this.availableRoles.map(r => r.name);
+      const matchingRole: string | undefined =
+        pool.find(r => String(r) === roleValue) ||
+        pool.find(r => String(r).toLowerCase() === roleValue.toLowerCase());
       
       if (matchingRole && roleControl.value !== matchingRole) {
         roleControl.setValue(matchingRole, { emitEvent: false });

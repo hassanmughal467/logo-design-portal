@@ -18,12 +18,14 @@ public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
     private readonly IPermissionService _permissionService;
+    private readonly IRoleService _roleService;
     private readonly ILogger<UsersController> _logger;
 
-    public UsersController(IUserService userService, IPermissionService permissionService, ILogger<UsersController> logger)
+    public UsersController(IUserService userService, IPermissionService permissionService, IRoleService roleService, ILogger<UsersController> logger)
     {
         _userService = userService;
         _permissionService = permissionService;
+        _roleService = roleService;
         _logger = logger;
     }
 
@@ -41,13 +43,27 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [RequirePermission("CreateUser")]
     [ProducesResponseType(typeof(UserResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequestDto request)
     {
+        var roleMeta = await _roleService.GetByIdAsync(request.RoleId);
+        if (roleMeta == null)
+        {
+            return BadRequest(new { error = "Invalid role specified." });
+        }
+
+        // Only SuperAdmin may assign the SuperAdmin role. Admins with CreateUser may create other roles.
+        if (!User.IsInRole("SuperAdmin") &&
+            string.Equals(roleMeta.Name, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { error = "Only SuperAdmin can assign the SuperAdmin role." });
+        }
+
         try
         {
             var user = await _userService.CreateUserAsync(request);

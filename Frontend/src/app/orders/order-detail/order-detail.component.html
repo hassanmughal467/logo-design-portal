@@ -38,25 +38,28 @@
   </div>
   
   <div class="order-detail-container" *ngIf="order && shouldShowOrderDetails()">
-  <!-- Locked order banner -->
-  <div class="order-locked-banner" *ngIf="isOrderLocked(order.status)">
-    <i class="pi pi-lock"></i>
-    <span>Order completed on {{ (order.updatedAt || order.createdAt) | date:'longDate' }}. This order is now closed.</span>
-    <p class="banner-subtext">This order is completed and is now read-only.</p>
+  <!-- Locked order banner: completed (green) vs cancelled (danger) -->
+  <div class="order-locked-banner" [class.order-locked-banner--cancelled]="isOrderCancelled()" *ngIf="isOrderLocked(order.status)">
+    <i class="pi" [ngClass]="isOrderCancelled() ? 'pi-times-circle' : 'pi-lock'"></i>
+    <span *ngIf="!isOrderCancelled()">Order completed on {{ (order.updatedAt || order.createdAt) | date:'longDate' }}. This order is now closed.</span>
+    <span *ngIf="isOrderCancelled()">{{ getCancelledBannerMessage() }}</span>
+    <p class="banner-subtext" *ngIf="!isOrderCancelled()">This order is completed and is now read-only.</p>
+    <p class="banner-subtext" *ngIf="isOrderCancelled() && order.cancellationReason">Reason: {{ order.cancellationReason }}</p>
+    <p class="banner-subtext" *ngIf="isOrderCancelled() && !order.cancellationReason">This order is closed and cannot be modified.</p>
   </div>
   <!-- Admin Action Panel: Quick actions for mediated workflow -->
   <div class="admin-action-panel" *ngIf="(isAdmin || isSuperAdmin) && hasPendingPreviewFiles() && !isOrderLocked(order.status)">
     <h3 class="panel-title"><i class="pi pi-bolt"></i> Admin Quick Actions</h3>
     <div class="action-group">
       <span class="action-label">Preview uploaded by designer:</span>
-      <p-button label="View Preview" icon="pi pi-eye" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="activeTab = 0"></p-button>
+      <p-button label="View Preview" icon="pi pi-eye" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="openPreviewTab()"></p-button>
       <p-button label="Forward to Client" icon="pi pi-send" severity="success" [styleClass]="'p-button-sm'" (onClick)="openSendFilesDialog()"></p-button>
       <p-button label="Request Revision" icon="pi pi-refresh" severity="warn" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="openRevisionDialog()"></p-button>
       <p-button label="Reject Preview" icon="pi pi-times" severity="danger" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="openRevisionDialog()"></p-button>
     </div>
     <div class="action-group">
       <span class="action-label">Client feedback / messages:</span>
-      <p-button label="View Messages" icon="pi pi-inbox" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="router.navigate(['/messages'])"></p-button>
+      <p-button label="View Messages" icon="pi pi-inbox" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="openMessagesTab()"></p-button>
     </div>
   </div>
 
@@ -169,9 +172,13 @@
   <div class="order-info-grid">
     <div class="info-card">
       <h3>Order Information</h3>
-      <!-- Client Pricing Section (Admin/Client only, never Designer) -->
-      <div *ngIf="!isDesigner" class="pricing-section">
+      <!-- Client Pricing Section: Admin/SuperAdmin always; Client only after designer files sent (PreviewDelivered+) -->
+      <div *ngIf="!isDesigner && shouldShowClientPricing()" class="pricing-section">
         <h4 class="pricing-section-title">Client Pricing</h4>
+        <div class="pricing-alert-info" *ngIf="isClient">
+          <i class="pi pi-info-circle"></i>
+          <span>If you have questions about this price or need confirmation, please contact support before files are delivered. Admin can adjust the price if needed.</span>
+        </div>
         <div class="info-item">
           <label>Client Base Price:</label>
           <span>{{ (order.currencyCode || 'USD') }} {{ (order.clientBasePrice ?? order.price) | number:'1.2-2' }}</span>
@@ -194,11 +201,11 @@
         </div>
         <p-button *ngIf="(isAdmin || isSuperAdmin) && !isOrderLocked(order.status)" label="Edit Client Price" icon="pi pi-pencil" [styleClass]="'p-button-text p-button-sm'" (onClick)="openEditClientPriceDialog()"></p-button>
       </div>
-      <!-- Designer Pricing Section (Admin + Designer; Designer sees their proposed/approved price and status) -->
+      <!-- Designer Pricing Section (Admin + Designer; Designer sees initial fixed price + proposed/approved) -->
       <div *ngIf="(isAdmin || isSuperAdmin) || isDesigner" class="pricing-section">
         <h4 class="pricing-section-title">Designer Pricing</h4>
-        <div class="info-item" *ngIf="(isAdmin || isSuperAdmin) && order.standardPrice != null">
-          <label>Standard Price (PKR):</label>
+        <div class="info-item" *ngIf="order.standardPrice != null">
+          <label>Initial Fixed Price (PKR):</label>
           <span>PKR {{ order.standardPrice | number:'1.0-0' }}</span>
         </div>
         <div class="info-item" *ngIf="(order.designerProposedPrice ?? order.proposedPrice)">
@@ -213,14 +220,7 @@
           <label>Price Status:</label>
           <span>{{ order.priceApprovalStatus }}</span>
         </div>
-      </div>
-      <div class="info-item" *ngIf="(order.designCategory && order.designType) && !isClient">
-        <label>Design:</label>
-        <span>{{ order.designCategory }} - {{ order.designType }}</span>
-      </div>
-      <div class="info-item" *ngIf="order.stylePreferences && (isAdmin || isSuperAdmin || isDesigner)">
-        <label>Stitch Type:</label>
-        <span>{{ order.stylePreferences }}</span>
+        <p-button *ngIf="(isDesigner) && canDesignerRequestPrice() && !isOrderLocked(order.status)" label="Request Price Change" icon="pi pi-wallet" [styleClass]="'p-button-text p-button-sm'" (onClick)="openRequestPriceDialog()"></p-button>
       </div>
       <div class="info-item">
         <label>Created:</label>
@@ -236,8 +236,12 @@
       </div>
     </div>
 
-    <div class="info-card" *ngIf="order.instructions || order.requiredFormats || order.colorPreferences || order.stylePreferences">
+    <div class="info-card" *ngIf="order.instructions || order.requiredFormats || order.colorPreferences || order.stylePreferences || order.designCategory || order.designType">
       <h3>Requirements</h3>
+      <div class="info-item" *ngIf="order.designCategory || order.designType">
+        <label>Category / Type:</label>
+        <span>{{ order.designCategory || '—' }} - {{ order.designType || '—' }}</span>
+      </div>
       <div class="info-item" *ngIf="order.instructions">
         <label>Instructions:</label>
         <span>{{ order.instructions }}</span>
@@ -250,8 +254,12 @@
         <label>Color Preferences:</label>
         <span>{{ order.colorPreferences }}</span>
       </div>
-      <div class="info-item" *ngIf="order.stylePreferences">
+      <div class="info-item" *ngIf="order.stylePreferences && isVectorOrder()">
         <label>Style Preferences:</label>
+        <span>{{ order.stylePreferences }}</span>
+      </div>
+      <div class="info-item" *ngIf="order.stylePreferences && isStitchTypeOrder()">
+        <label>Stitch Type:</label>
         <span>{{ order.stylePreferences }}</span>
       </div>
     </div>
@@ -311,6 +319,114 @@
           ></p-button>
         </div>
         
+        <ng-container *ngIf="isClient; else internalFilesTable">
+          <div class="files-section">
+            <h4>Preview Files</h4>
+            <p-table [value]="clientPreviewFiles" [loading]="loading" [paginator]="true" [rows]="5">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>File Name</th>
+                  <th>Type</th>
+                  <th>Size</th>
+                  <th>Version</th>
+                  <th>Actions</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-file>
+                <tr>
+                  <td>{{ file.originalFileName }}</td>
+                  <td><p-tag [value]="file.fileType"></p-tag></td>
+                  <td>{{ file.fileSize | number }} bytes</td>
+                  <td>{{ file.versionNumber }}</td>
+                  <td>
+                    <p-button
+                      icon="pi pi-download"
+                      [styleClass]="'p-button-text'"
+                      (onClick)="downloadFile(file)"
+                    ></p-button>
+                  </td>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="emptymessage">
+                <tr>
+                  <td colspan="5">No preview files available</td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </div>
+
+          <div class="files-section" *ngIf="clientFinalFiles.length > 0">
+            <h4>Final Files</h4>
+            <p-table [value]="clientFinalFiles" [loading]="loading" [paginator]="true" [rows]="5">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>File Name</th>
+                  <th>Type</th>
+                  <th>Size</th>
+                  <th>Version</th>
+                  <th>Actions</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-file>
+                <tr>
+                  <td>{{ file.originalFileName }}</td>
+                  <td><p-tag [value]="file.fileType"></p-tag></td>
+                  <td>{{ file.fileSize | number }} bytes</td>
+                  <td>{{ file.versionNumber }}</td>
+                  <td>
+                    <p-button
+                      icon="pi pi-download"
+                      [styleClass]="'p-button-text'"
+                      (onClick)="downloadFile(file)"
+                    ></p-button>
+                  </td>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="emptymessage">
+                <tr>
+                  <td colspan="5">No final files available</td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </div>
+
+          <div class="files-section">
+            <h4>Reference Files</h4>
+            <p-table [value]="clientReferenceFiles" [loading]="loading" [paginator]="true" [rows]="5">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>File Name</th>
+                  <th>Type</th>
+                  <th>Size</th>
+                  <th>Version</th>
+                  <th>Actions</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-file>
+                <tr>
+                  <td>{{ file.originalFileName }}</td>
+                  <td><p-tag [value]="file.fileType"></p-tag></td>
+                  <td>{{ file.fileSize | number }} bytes</td>
+                  <td>{{ file.versionNumber }}</td>
+                  <td>
+                    <p-button
+                      icon="pi pi-download"
+                      [styleClass]="'p-button-text'"
+                      (onClick)="downloadFile(file)"
+                    ></p-button>
+                  </td>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="emptymessage">
+                <tr>
+                  <td colspan="5">No reference files uploaded</td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </div>
+        </ng-container>
+
+        <ng-template #internalFilesTable>
         <p-table [value]="files" [loading]="loading" [paginator]="true" [rows]="10">
           <ng-template pTemplate="header">
             <tr>
@@ -359,6 +475,7 @@
             </tr>
           </ng-template>
         </p-table>
+        </ng-template>
       </div>
     </p-tabPanel>
 
@@ -664,6 +781,35 @@
   <ng-template pTemplate="footer">
     <p-button label="Cancel" icon="pi pi-times" (onClick)="showEditClientPriceDialog = false" [styleClass]="'p-button-text'"></p-button>
     <p-button label="Save" icon="pi pi-check" (onClick)="saveClientChargePrice()" [disabled]="editClientChargePrice < 0"></p-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Designer Request Price Dialog -->
+<p-dialog 
+  [(visible)]="showRequestPriceDialog"
+  [modal]="true"
+  [style]="{width: '400px'}"
+  [closable]="true"
+  [draggable]="false"
+  [resizable]="false"
+  header="Request Price Change"
+  styleClass="request-price-dialog">
+  <div class="dialog-content" *ngIf="order">
+    <p class="p-help" style="margin-bottom: 1rem;">If the initial fixed price does not cover the complexity of this design, you can request a different price. Admin will review and approve before files are sent to the client.</p>
+    <div class="form-group">
+      <label>Proposed Price (PKR) <span class="required">*</span></label>
+      <p-inputNumber 
+        [(ngModel)]="designerRequestedPrice"
+        [min]="1"
+        [maxFractionDigits]="0"
+        styleClass="w-full"
+      ></p-inputNumber>
+      <small class="p-help" *ngIf="order.standardPrice != null">Initial fixed price: PKR {{ order.standardPrice | number:'1.0-0' }}</small>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" icon="pi pi-times" (onClick)="showRequestPriceDialog = false" [styleClass]="'p-button-text'"></p-button>
+    <p-button label="Submit Request" icon="pi pi-send" (onClick)="submitRequestPrice()" [disabled]="designerRequestedPrice <= 0"></p-button>
   </ng-template>
 </p-dialog>
 

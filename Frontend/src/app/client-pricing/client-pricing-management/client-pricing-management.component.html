@@ -127,7 +127,9 @@
         [options]="designCategoryOptions"
         optionLabel="label"
         optionValue="value"
-        placeholder="Select category">
+        placeholder="Select category"
+        appendTo="body"
+        [overlayOptions]="pricingDialogDropdownOverlay">
       </p-dropdown>
     </div>
     <div class="form-field">
@@ -137,7 +139,9 @@
         [options]="filteredDesignTypeOptions"
         optionLabel="label"
         optionValue="value"
-        placeholder="Select type">
+        placeholder="Select type"
+        appendTo="body"
+        [overlayOptions]="pricingDialogDropdownOverlay">
       </p-dropdown>
     </div>
     <div class="form-field">
@@ -155,7 +159,10 @@
         formControlName="currencyCode"
         [options]="currencyOptions"
         optionLabel="label"
-        optionValue="value">
+        optionValue="value"
+        appendTo="body"
+        [overlayOptions]="pricingDialogDropdownOverlay"
+        placeholder="Select currency">
       </p-dropdown>
     </div>
     <div class="form-field">
@@ -197,7 +204,10 @@
         formControlName="currencyCode"
         [options]="currencyOptions"
         optionLabel="label"
-        optionValue="value">
+        optionValue="value"
+        appendTo="body"
+        [overlayOptions]="pricingDialogDropdownOverlay"
+        placeholder="Select currency">
       </p-dropdown>
     </div>
     <div class="form-field">

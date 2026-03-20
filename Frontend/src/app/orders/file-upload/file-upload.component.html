@@ -43,12 +43,6 @@
             appendTo="body"
             (onChange)="onFileTypeChange()"
           ></p-dropdown>
-          <small class="p-help">
-            <i class="pi pi-info-circle"></i>
-            <strong>Reference:</strong> Client reference files (auto-visible)<br>
-            <strong>Preview:</strong> Designer preview files (first batch requires proposed price; category/type from order when client selected)<br>
-            <strong>Final:</strong> Final approved files (requires proposed price; category/type from order when client selected)
-          </small>
         </div>
 
         <!-- Designer: hint when Preview selected and order already has pricing - select Final to enter pricing for final files -->
@@ -63,16 +57,10 @@
           <i class="pi pi-info-circle" style="margin-right: 0.5rem; color: #e65100;"></i>
           <strong>First preview batch:</strong> Enter design category, type, and proposed price below for your payout.
         </div>
-        <div class="form-group design-pricing-hint" *ngIf="isDesignerPreviewNeedsPricing && orderHasDesignFromClient" 
-             style="padding: 0.75rem; background: #e8f5e9; border: 1px solid #4caf50; border-radius: 4px;">
-          <i class="pi pi-info-circle" style="margin-right: 0.5rem; color: #2e7d32;"></i>
-          <strong>First preview batch:</strong> Proposed price defaults to standard rate. Edit if you need to request more.
-        </div>
         <!-- When order has design from client: show read-only, no category/type selection -->
         <div class="form-group design-pricing-group" *ngIf="isDesignerPricingRequired && orderHasDesignFromClient">
           <label><i class="pi pi-briefcase"></i> Design (from order)</label>
           <p class="default-price-display">{{ (order?.designCategory || order?.DesignCategory) }} - {{ (order?.designType || order?.DesignType) }}</p>
-          <small class="p-help">Client selected this at order creation. Proposed price defaults to standard rate; you can request more if needed.</small>
         </div>
         <!-- Designer must select category/type only when order does NOT have them -->
         <div class="form-group design-pricing-group" *ngIf="isDesignerPricingRequired && !orderHasDesignFromClient">
@@ -124,10 +112,9 @@
         </div>
         <div class="form-group design-pricing-group" *ngIf="isDesignerPricingRequired">
           <label><i class="pi pi-comment"></i> Reason (optional)</label>
-          <input pInputText formControlName="reason" placeholder="e.g. Custom complexity, rush job" styleClass="w-full" style="width: 100%;" />
+          <input pInputText formControlName="reason" placeholder="Enter reason" styleClass="w-full" style="width: 100%;" />
           <small class="p-help">Provide a reason if your proposed price differs from the default (for admin review).</small>
         </div>
-
         <div class="form-group">
           <label for="fileUpload">
             <i class="pi pi-file"></i>

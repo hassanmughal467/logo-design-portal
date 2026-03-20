@@ -72,6 +72,15 @@ public class PermissionConfiguration : IEntityTypeConfiguration<Permission>
                 Action = "Delete",
                 CreatedAt = DateTime.UtcNow
             },
+            new Permission
+            {
+                Id = Guid.Parse("10000000-0000-0000-0000-000000000005"),
+                Name = "ManageRoles",
+                Description = "Create and manage application roles (SuperAdmin role is reserved)",
+                Resource = "Role",
+                Action = "Manage",
+                CreatedAt = DateTime.UtcNow
+            },
 
             // Designer Profile Permissions
             new Permission

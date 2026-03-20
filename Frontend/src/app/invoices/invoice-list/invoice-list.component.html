@@ -2,6 +2,7 @@
   <app-page-header title="Invoices Management" subtitle="Track payments and manage invoices">
     <div actions *ngIf="canManageInvoices">
       <p-button label="Generate Invoice" icon="pi pi-plus" (onClick)="openGenerateDialog()" styleClass="p-button-primary"></p-button>
+      <p-button label="Flexible Builder" icon="pi pi-cog" (onClick)="openFlexibleBuilder()" styleClass="p-button-outlined" [style]="{'margin-left':'0.5rem'}"></p-button>
     </div>
   </app-page-header>
 
@@ -59,9 +60,25 @@
               <td>
                 <span [class.overdue]="invoice.status === 'Overdue'">{{ formatDate(invoice.dueDate) }}</span>
               </td>
-              <td><p-button label="Pay" icon="pi pi-money-bill" 
-                [styleClass]="'p-button-sm ' + (invoice.status === 'Overdue' ? 'p-button-danger' : 'p-button-success')"
-                (onClick)="openPaymentDialog(invoice)"></p-button></td>
+              <td>
+                <div class="invoice-row-actions">
+                  <p-button icon="pi pi-eye"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="View invoice" tooltipPosition="top"
+                    (onClick)="openDetailDialogFromApi(invoice)"></p-button>
+                  <p-button *ngIf="canEditInvoices && !invoice.isLocked" icon="pi pi-pencil"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="Edit invoice" tooltipPosition="top"
+                    (onClick)="openEditDialog(invoice)"></p-button>
+                  <p-button icon="pi pi-download"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="Download PDF" tooltipPosition="top"
+                    (onClick)="downloadInvoice(invoice.id)"></p-button>
+                  <p-button label="Pay" icon="pi pi-money-bill"
+                    [styleClass]="'p-button-sm ' + (invoice.status === 'Overdue' ? 'p-button-danger' : 'p-button-success')"
+                    (onClick)="openPaymentDialog(invoice)"></p-button>
+                </div>
+              </td>
             </tr>
           </ng-template>
           <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="canManageInvoices ? 6 : 5">No unpaid invoices</td></tr></ng-template>
@@ -86,8 +103,24 @@
               <td>{{ invoice.invoiceNumber }}</td>
               <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
               <td>{{ formatDate(invoice.dueDate) }}</td>
-              <td><p-button label="Pay" icon="pi pi-money-bill" styleClass="p-button-sm p-button-success"
-                (onClick)="openPaymentDialog(invoice)"></p-button></td>
+              <td>
+                <div class="invoice-row-actions">
+                  <p-button icon="pi pi-eye"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="View invoice" tooltipPosition="top"
+                    (onClick)="openDetailDialogFromApi(invoice)"></p-button>
+                  <p-button *ngIf="canEditInvoices && !invoice.isLocked" icon="pi pi-pencil"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="Edit invoice" tooltipPosition="top"
+                    (onClick)="openEditDialog(invoice)"></p-button>
+                  <p-button icon="pi pi-download"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="Download PDF" tooltipPosition="top"
+                    (onClick)="downloadInvoice(invoice.id)"></p-button>
+                  <p-button label="Pay" icon="pi pi-money-bill" styleClass="p-button-sm p-button-success"
+                    (onClick)="openPaymentDialog(invoice)"></p-button>
+                </div>
+              </td>
             </tr>
           </ng-template>
           <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="canManageInvoices ? 5 : 4">No pending invoices</td></tr></ng-template>
@@ -112,8 +145,24 @@
               <td>{{ invoice.invoiceNumber }}</td>
               <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
               <td><span class="overdue">{{ formatDate(invoice.dueDate) }}</span></td>
-              <td><p-button label="Pay" icon="pi pi-money-bill" styleClass="p-button-sm p-button-danger"
-                (onClick)="openPaymentDialog(invoice)"></p-button></td>
+              <td>
+                <div class="invoice-row-actions">
+                  <p-button icon="pi pi-eye"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="View invoice" tooltipPosition="top"
+                    (onClick)="openDetailDialogFromApi(invoice)"></p-button>
+                  <p-button *ngIf="canEditInvoices && !invoice.isLocked" icon="pi pi-pencil"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="Edit invoice" tooltipPosition="top"
+                    (onClick)="openEditDialog(invoice)"></p-button>
+                  <p-button icon="pi pi-download"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="Download PDF" tooltipPosition="top"
+                    (onClick)="downloadInvoice(invoice.id)"></p-button>
+                  <p-button label="Pay" icon="pi pi-money-bill" styleClass="p-button-sm p-button-danger"
+                    (onClick)="openPaymentDialog(invoice)"></p-button>
+                </div>
+              </td>
             </tr>
           </ng-template>
           <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="canManageInvoices ? 5 : 4">No due invoices</td></tr></ng-template>
@@ -122,7 +171,7 @@
       <p-tabPanel header="Paid" leftIcon="pi pi-check-circle">
         <p-table [value]="getPaidInvoices()" [loading]="loading" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
-            <tr><th>Invoice #</th><th>Amount</th><th>Paid Date</th><th>Payment Method</th></tr>
+            <tr><th>Invoice #</th><th>Amount</th><th>Paid Date</th><th>Payment Method</th><th>Actions</th></tr>
           </ng-template>
           <ng-template pTemplate="body" let-invoice>
             <tr>
@@ -130,9 +179,21 @@
               <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
               <td>{{ formatDate(invoice.paidDate) }}</td>
               <td>{{ invoice.paymentMethod || 'N/A' }}</td>
+              <td>
+                <div class="invoice-row-actions">
+                  <p-button icon="pi pi-eye"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="View invoice" tooltipPosition="top"
+                    (onClick)="openDetailDialogFromApi(invoice)"></p-button>
+                  <p-button icon="pi pi-download"
+                    styleClass="p-button-text p-button-rounded p-button-sm"
+                    pTooltip="Download PDF" tooltipPosition="top"
+                    (onClick)="downloadInvoice(invoice.id)"></p-button>
+                </div>
+              </td>
             </tr>
           </ng-template>
-          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="4">No paid invoices</td></tr></ng-template>
+          <ng-template pTemplate="emptymessage"><tr><td [attr.colspan]="5">No paid invoices</td></tr></ng-template>
         </p-table>
       </p-tabPanel>
     </p-tabView>
@@ -278,32 +339,34 @@
         <p-table [value]="selectedInvoice.items" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
+              <th>Date</th>
+              <th>Tile</th>
               <th>Description</th>
-              <th>Order</th>
-              <th class="text-right">Amount</th>
+              <th class="text-right">Price</th>
             </tr>
           </ng-template>
           <ng-template pTemplate="body" let-item>
             <tr>
-              <td>{{ item.description }}</td>
+              <td>{{ formatDate(item.orderDate) }}</td>
               <td>
                 <span *ngIf="item.orderTitle">{{ item.orderTitle }}</span>
                 <span *ngIf="!item.orderTitle" class="text-muted">Manual Item</span>
               </td>
+              <td>{{ item.description?.trim() ? item.description : (item.orderTitle || 'Manual Item') }}</td>
               <td class="text-right">{{ formatCurrency(item.amount) }}</td>
             </tr>
           </ng-template>
           <ng-template pTemplate="footer">
             <tr>
-              <td colspan="2" class="text-right font-bold">Subtotal:</td>
+              <td colspan="3" class="text-right font-bold">Subtotal:</td>
               <td class="text-right font-bold">{{ formatCurrency(selectedInvoice.amount) }}</td>
             </tr>
             <tr *ngIf="selectedInvoice.taxAmount > 0">
-              <td colspan="2" class="text-right">Tax:</td>
+              <td colspan="3" class="text-right">Tax:</td>
               <td class="text-right">{{ formatCurrency(selectedInvoice.taxAmount) }}</td>
             </tr>
             <tr>
-              <td colspan="2" class="text-right font-bold">Total:</td>
+              <td colspan="3" class="text-right font-bold">Total:</td>
               <td class="text-right font-bold">{{ formatCurrency(selectedInvoice.totalAmount || selectedInvoice.amount) }}</td>
             </tr>
           </ng-template>
@@ -316,6 +379,19 @@
       </div>
     </div>
     <ng-template pTemplate="footer">
+      <p-button
+        *ngIf="canEditInvoices && selectedInvoice && !selectedInvoice.isLocked"
+        label="Edit"
+        icon="pi pi-pencil"
+        (onClick)="openEditDialog(selectedInvoice!)"
+        styleClass="p-button-outlined modal-footer-btn">
+      </p-button>
+      <p-button
+        label="Download PDF"
+        icon="pi pi-download"
+        (onClick)="downloadInvoice(selectedInvoice!.id)"
+        styleClass="p-button-outlined modal-footer-btn">
+      </p-button>
       <p-button 
         label="Close" 
         icon="pi pi-times"
@@ -407,8 +483,14 @@
                 class="full-width">
               </p-inputNumber>
             </div>
+            <div style="display:flex;align-items:flex-end;">
+              <p-button icon="pi pi-trash" styleClass="p-button-text p-button-danger" (onClick)="removeEditItem(i)"></p-button>
+            </div>
           </div>
         </div>
+      </div>
+      <div class="form-group">
+        <p-button label="Add Manual Item" icon="pi pi-plus" styleClass="p-button-outlined p-button-sm" (onClick)="addManualEditItem()"></p-button>
       </div>
     </div>
     <ng-template pTemplate="footer">

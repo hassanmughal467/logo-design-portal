@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '@core/services/api.service';
-import { MessageService } from 'primeng/api';
+import { MessageService, OverlayOptions } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DesignCategory, DesignType } from '@shared/models/design-pricing.model';
@@ -69,6 +69,22 @@ export class ClientPricingManagementComponent implements OnInit, OnDestroy {
   ];
 
   filteredDesignTypeOptions: { label: string; value: number }[] = [];
+
+  /**
+   * Dropdowns inside p-dialog: append panel to body (not clipped by dialog overflow)
+   * and do not close the panel when the dialog content scrolls (PrimeNG scroll listener).
+   */
+  readonly pricingDialogDropdownOverlay: OverlayOptions = {
+    appendTo: 'body',
+    baseZIndex: 12000,
+    autoZIndex: true,
+    listener: (_event, opts) => {
+      if (opts?.type === 'scroll') {
+        return false;
+      }
+      return opts?.valid ?? true;
+    }
+  };
 
   private destroy$ = new Subject<void>();
 

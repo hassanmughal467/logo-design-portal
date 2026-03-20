@@ -495,7 +495,7 @@ public class RevisionService : IRevisionService
 
         if (isClientApproval)
         {
-            // Client approved: notify Admin and SuperAdmin ONLY (so they can mark it completed). No notification to client's own portal.
+            // Client approved: notify Admin/SuperAdmin and assigned Designer.
             var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
             if (string.IsNullOrEmpty(clientName)) clientName = "Client";
             var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
@@ -505,16 +505,47 @@ public class RevisionService : IRevisionService
             {
                 await _notificationService.CreateNotificationForRoleAsync("Admin", approveTitle, approveMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, approvedBy);
                 await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", approveTitle, approveMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, approvedBy);
+                if (order.DesignerId.HasValue)
+                {
+                    var designerUserId = await _context.DesignerProfiles
+                        .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
+                        .Select(d => d.UserId)
+                        .FirstOrDefaultAsync();
+                    if (designerUserId != Guid.Empty)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            designerUserId,
+                            approveTitle,
+                            $"Client approved the logo for order (#{orderNumber}). Admin will finalize completion.",
+                            NotificationType.OrderStatusChange,
+                            orderId,
+                            NotificationReferenceType.Order,
+                            orderId,
+                            approvedBy
+                        );
+                    }
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create client-approved notifications for order {OrderId}.", orderId);
             }
 
-            // Real-time: notify Admin/SuperAdmin only (not client, not designer)
+            // Real-time: notify Admin/SuperAdmin and assigned designer.
             var adminUserIds = await GetAdminAndSuperAdminUserIdsAsync();
-            await _entityUpdateSender.SendPreviewApprovedAsync(orderId, clientName, OrderStatus.ClientApproved.ToString(), adminUserIds);
-            await _entityUpdateSender.SendOrderStatusChangedAsync(orderId, OrderStatus.ClientApproved.ToString(), approvedBy, adminUserIds);
+            var recipients = adminUserIds.ToList();
+            if (order.DesignerId.HasValue)
+            {
+                var designerUserId = await _context.DesignerProfiles
+                    .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
+                    .Select(d => d.UserId)
+                    .FirstOrDefaultAsync();
+                if (designerUserId != Guid.Empty)
+                    recipients.Add(designerUserId);
+            }
+            var distinctRecipients = recipients.Distinct().ToList();
+            await _entityUpdateSender.SendPreviewApprovedAsync(orderId, clientName, OrderStatus.ClientApproved.ToString(), distinctRecipients);
+            await _entityUpdateSender.SendOrderStatusChangedAsync(orderId, OrderStatus.ClientApproved.ToString(), approvedBy, distinctRecipients);
         }
         else
         {

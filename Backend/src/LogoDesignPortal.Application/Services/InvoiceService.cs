@@ -273,35 +273,7 @@ public class InvoiceService : IInvoiceService
         _logger.LogInformation("InvoiceGenerated. InvoiceId={InvoiceId}, OrderIds={OrderIds}, UserId={UserId}, Timestamp={Timestamp}",
             invoice.Id, string.Join(",", orderIds), createdBy, DateTime.UtcNow);
 
-        // Notify client: Invoice created (SignalR failure must not break operation)
-        try
-        {
-            var firstOrderId = invoiceItems.FirstOrDefault(io => io.OrderId.HasValue)?.OrderId;
-            var orderNumber = firstOrderId.HasValue ? NotificationFormatHelper.GetOrderNumber(firstOrderId.Value) : "N/A";
-            var invoiceDisplayNumber = NotificationFormatHelper.GetInvoiceNumber(invoice.InvoiceNumber);
-            var title = "Invoice Generated";
-            var message = $"Invoice (#{invoiceDisplayNumber}) generated for order (#{orderNumber})";
-            await _notificationService.CreateNotificationAsync(
-                client.UserId,
-                title,
-                message,
-                NotificationType.Info,
-                firstOrderId,
-                NotificationReferenceType.Invoice,
-                invoice.Id,
-                createdBy
-            );
-
-            // Real-time entity update: InvoiceGenerated - client order grid HasInvoice flag updates
-            foreach (var item in invoiceItems.Where(io => io.OrderId.HasValue))
-            {
-                await _entityUpdateSender.SendInvoiceGeneratedAsync(item.OrderId!.Value, invoice.Id, client.UserId);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "SignalR/Notification failed for InvoiceGenerated. InvoiceId={InvoiceId}. Operation succeeded.", invoice.Id);
-        }
+        await NotifyClientInvoiceReceivedAsync(client.UserId, invoice, invoiceItems, createdBy);
 
         return await GetInvoiceByIdAsync(invoice.Id) ?? throw new InvalidOperationException("Failed to create invoice.");
     }
@@ -346,7 +318,7 @@ public class InvoiceService : IInvoiceService
         return MapToInvoiceResponseDto(invoice);
     }
 
-    public async Task<List<InvoiceResponseDto>> GetInvoicesAsync(Guid? userId, string? userRole)
+    public async Task<List<InvoiceResponseDto>> GetInvoicesAsync(Guid? userId, string? userRole, InvoiceQueryFilterDto? filters = null)
     {
         var query = _context.Invoices
             .Include(i => i.Client)
@@ -362,12 +334,203 @@ public class InvoiceService : IInvoiceService
             query = query.Where(i => i.Client.UserId == userId.Value);
         }
 
+        if (filters != null)
+        {
+            if (filters.ClientId.HasValue)
+                query = query.Where(i => i.ClientId == filters.ClientId.Value);
+            if (filters.BillingType.HasValue)
+                query = query.Where(i => i.BillingType == filters.BillingType.Value);
+            if (filters.Status.HasValue)
+                query = query.Where(i => i.Status == filters.Status.Value);
+            if (filters.IssueDateFrom.HasValue)
+            {
+                var from = filters.IssueDateFrom.Value.Date;
+                query = query.Where(i => i.IssueDate.Date >= from);
+            }
+            if (filters.IssueDateTo.HasValue)
+            {
+                var to = filters.IssueDateTo.Value.Date;
+                query = query.Where(i => i.IssueDate.Date <= to);
+            }
+        }
+
         var invoices = await query.OrderByDescending(i => i.CreatedAt).ToListAsync();
 
         // Batch update overdue status (single SaveChanges instead of per-invoice)
         await BatchUpdateOverdueInvoicesAsync(invoices);
 
         return invoices.Select(MapToInvoiceResponseDto).ToList();
+    }
+
+    public async Task<InvoiceResponseDto> GenerateFlexibleInvoiceAsync(GenerateFlexibleInvoiceRequestDto request, Guid createdBy)
+    {
+        if (_safetyOptions.DisableBillingGeneration)
+            throw new InvalidOperationException("Billing temporarily disabled by administrator.");
+
+        var hasDateRange = request.FromDate.HasValue && request.ToDate.HasValue;
+        var hasSelection = request.SelectedOrderIds != null && request.SelectedOrderIds.Any();
+        if (!hasDateRange && !hasSelection)
+            throw new InvalidOperationException("Either fromDate/toDate or selectedOrderIds must be provided.");
+        if (hasDateRange && request.FromDate!.Value.Date > request.ToDate!.Value.Date)
+            throw new InvalidOperationException("fromDate cannot be greater than toDate.");
+
+        var baseQuery = _context.LogoOrders
+            .Where(o => !o.IsDeleted
+                && o.ClientId == request.ClientId
+                && o.Status == OrderStatus.Completed
+                && o.BillingEligible
+                && !o.IsInvoiced);
+
+        if (hasSelection)
+        {
+            var selectedIds = request.SelectedOrderIds!.Distinct().ToList();
+            baseQuery = baseQuery.Where(o => selectedIds.Contains(o.Id));
+        }
+        else
+        {
+            var from = request.FromDate!.Value.Date;
+            var to = request.ToDate!.Value.Date;
+            baseQuery = baseQuery.Where(o => o.CompletedDate.HasValue
+                && o.CompletedDate.Value.Date >= from
+                && o.CompletedDate.Value.Date <= to);
+        }
+
+        var orders = await baseQuery.OrderBy(o => o.CompletedDate ?? o.CreatedAt).ToListAsync();
+        if (!orders.Any())
+            throw new InvalidOperationException("No billing eligible uninvoiced orders found for the provided criteria.");
+
+        var invoice = new Invoice
+        {
+            Id = Guid.NewGuid(),
+            ClientId = request.ClientId,
+            InvoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 8).ToUpper()}",
+            BillingType = BillingType.Manual,
+            BillingPeriod = hasDateRange
+                ? $"{request.FromDate:yyyy-MM-dd} to {request.ToDate:yyyy-MM-dd}"
+                : $"Custom Selection ({orders.Count} Orders)",
+            IssueDate = DateTime.UtcNow,
+            DueDate = DateTime.UtcNow.AddDays(7),
+            Status = InvoiceStatus.Pending,
+            Notes = request.Notes,
+            CreatedBy = createdBy,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var items = orders.Select(order =>
+        {
+            var orderNo = NotificationFormatHelper.GetOrderNumber(order.Id);
+            var title = string.IsNullOrWhiteSpace(order.Title) ? "Logo design" : order.Title.Trim();
+            return new InvoiceOrder
+            {
+                Id = Guid.NewGuid(),
+                InvoiceId = invoice.Id,
+                OrderId = order.Id,
+                Description = $"{title} — Order #{orderNo}",
+                Amount = order.ClientChargePrice > 0 ? order.ClientChargePrice : (order.ClientPrice ?? order.Price),
+                CreatedBy = createdBy,
+                CreatedAt = DateTime.UtcNow
+            };
+        }).ToList();
+
+        invoice.Amount = items.Sum(i => i.Amount);
+        invoice.TaxAmount = 0;
+        invoice.TotalAmount = invoice.Amount + invoice.TaxAmount;
+
+        await _context.ExecuteInTransactionAsync(async (ct) =>
+        {
+            _context.Invoices.Add(invoice);
+            _context.InvoiceOrders.AddRange(items);
+
+            foreach (var order in orders)
+            {
+                order.IsInvoiced = true;
+                order.InvoiceId = invoice.Id;
+                order.InvoicedDate = DateTime.UtcNow;
+            }
+
+            await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Created, createdBy, "Flexible manual invoice generated");
+            await _context.SaveChangesAsync(ct);
+        });
+
+        // Notify client after successful invoice generation
+        var clientUserId = await _context.ClientProfiles
+            .Where(c => c.Id == request.ClientId && !c.IsDeleted)
+            .Select(c => c.UserId)
+            .FirstOrDefaultAsync();
+        if (clientUserId != Guid.Empty)
+        {
+            await NotifyClientInvoiceReceivedAsync(clientUserId, invoice, items, createdBy);
+        }
+
+        return await GetInvoiceByIdAsync(invoice.Id) ?? throw new InvalidOperationException("Failed to create flexible invoice.");
+    }
+
+    public async Task<InvoiceResponseDto> EditInvoiceItemsAsync(Guid invoiceId, EditInvoiceItemsRequestDto request, Guid updatedBy)
+    {
+        var invoice = await _context.Invoices
+            .Include(i => i.InvoiceOrders)
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
+
+        if (invoice == null)
+            throw new InvalidOperationException("Invoice not found.");
+        if (invoice.Status == InvoiceStatus.Paid)
+            throw new InvalidOperationException("Cannot edit items of a paid invoice.");
+
+        await _context.ExecuteInTransactionAsync(async (ct) =>
+        {
+            if (request.RemoveItemIds != null && request.RemoveItemIds.Any())
+            {
+                var itemIds = request.RemoveItemIds.Distinct().ToList();
+                var itemsToRemove = invoice.InvoiceOrders.Where(io => itemIds.Contains(io.Id)).ToList();
+
+                foreach (var item in itemsToRemove)
+                {
+                    if (item.OrderId.HasValue)
+                    {
+                        var order = await _context.LogoOrders.FirstOrDefaultAsync(o => o.Id == item.OrderId.Value, ct);
+                        if (order != null)
+                        {
+                            order.IsInvoiced = false;
+                            order.InvoiceId = null;
+                            order.InvoicedDate = null;
+                        }
+                    }
+                }
+
+                _context.InvoiceOrders.RemoveRange(itemsToRemove);
+            }
+
+            if (request.AddManualItems != null && request.AddManualItems.Any())
+            {
+                var newItems = request.AddManualItems.Select(x => new InvoiceOrder
+                {
+                    Id = Guid.NewGuid(),
+                    InvoiceId = invoice.Id,
+                    OrderId = null,
+                    Description = x.Description,
+                    Amount = x.Amount,
+                    CreatedBy = updatedBy,
+                    CreatedAt = DateTime.UtcNow
+                });
+                _context.InvoiceOrders.AddRange(newItems);
+            }
+
+            await _context.SaveChangesAsync(ct);
+
+            var subtotal = await _context.InvoiceOrders
+                .Where(io => io.InvoiceId == invoice.Id && !io.IsDeleted)
+                .SumAsync(io => io.Amount, ct);
+
+            invoice.Amount = subtotal;
+            invoice.TotalAmount = subtotal + invoice.TaxAmount;
+            invoice.UpdatedAt = DateTime.UtcNow;
+            invoice.UpdatedBy = updatedBy;
+
+            await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Updated, updatedBy, "Invoice items edited");
+            await _context.SaveChangesAsync(ct);
+        });
+
+        return await GetInvoiceByIdAsync(invoiceId) ?? throw new InvalidOperationException("Failed to update invoice items.");
     }
 
     public async Task<List<InvoiceResponseDto>> GetInvoicesByClientAsync(Guid clientId)
@@ -670,6 +833,39 @@ public class InvoiceService : IInvoiceService
         _context.InvoiceLogs.Add(log);
     }
 
+    private async Task NotifyClientInvoiceReceivedAsync(Guid clientUserId, Invoice invoice, List<InvoiceOrder> invoiceItems, Guid? createdBy)
+    {
+        // SignalR/notification failures must not block invoice creation.
+        try
+        {
+            var firstOrderId = invoiceItems.FirstOrDefault(io => io.OrderId.HasValue)?.OrderId;
+            var invoiceDisplayNumber = NotificationFormatHelper.GetInvoiceNumber(invoice.InvoiceNumber);
+            var title = "Invoice Received";
+            var message = $"You have received invoice #{invoiceDisplayNumber}.";
+
+            await _notificationService.CreateNotificationAsync(
+                clientUserId,
+                title,
+                message,
+                NotificationType.Info,
+                firstOrderId,
+                NotificationReferenceType.Invoice,
+                invoice.Id,
+                createdBy
+            );
+
+            // Real-time entity update: InvoiceGenerated - client order grid HasInvoice flag updates
+            foreach (var item in invoiceItems.Where(io => io.OrderId.HasValue))
+            {
+                await _entityUpdateSender.SendInvoiceGeneratedAsync(item.OrderId!.Value, invoice.Id, clientUserId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SignalR/Notification failed for InvoiceGenerated. InvoiceId={InvoiceId}. Operation succeeded.", invoice.Id);
+        }
+    }
+
     private InvoiceResponseDto MapToInvoiceResponseDto(Invoice invoice)
     {
         // Get all order IDs
@@ -704,6 +900,7 @@ public class InvoiceService : IInvoiceService
             Id = io.Id,
             OrderId = io.OrderId,
             OrderTitle = io.Order?.Title,
+            OrderDate = io.Order?.CreatedAt,
             Description = io.Description,
             Amount = io.Amount
         }).ToList();

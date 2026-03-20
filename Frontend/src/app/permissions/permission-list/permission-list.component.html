@@ -98,12 +98,12 @@
       <p class="matrix-subtitle">Toggle permissions for each role. SuperAdmin has all permissions automatically.</p>
     </div>
     
-    <div *ngIf="permissions.length === 0 && !loading" class="matrix-empty">
+    <div *ngIf="(permissions.length === 0 || roles.length === 0) && !loading" class="matrix-empty">
       <i class="pi pi-info-circle" style="font-size: 2rem; color: var(--text-color-secondary);"></i>
-      <p>No permissions available. Please load permissions first.</p>
+      <p>{{ roles.length === 0 ? 'Loading roles...' : 'No permissions available. Please load permissions first.' }}</p>
     </div>
     
-    <div class="matrix-container" *ngIf="permissions.length > 0 && !loadingMatrix; else matrixLoading">
+    <div class="matrix-container" *ngIf="permissions.length > 0 && roles.length > 0 && !loadingMatrix; else matrixLoading">
       <div class="matrix-table-wrapper">
         <table class="permission-matrix-table">
           <thead>

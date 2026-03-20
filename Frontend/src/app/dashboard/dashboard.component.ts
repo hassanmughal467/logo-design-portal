@@ -826,25 +826,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadDashboardData();
   }
 
-  canGenerateInvoice(order: Order): boolean {
+  canAddToInvoice(order: Order): boolean {
     const isAdmin = this.user?.role === 'SuperAdmin' || this.user?.role === 'Admin';
     return !!isAdmin
       && (order.status === OrderStatus.Completed || order.status === OrderStatus.ClientApproved)
       && !order.hasInvoice;
   }
 
-  generateInvoice(order: Order): void {
-    this.apiService.post('invoices', { orderId: order.id })
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: () => {
-          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoice generated successfully' });
-          this.loadDashboardData();
-        },
-        error: (error) => {
-          this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to generate invoice' });
-        }
-      });
+  addToInvoice(order: Order): void {
+    this.router.navigate(['/invoices/flexible-builder'], {
+      queryParams: {
+        clientId: order.clientId,
+        orderId: order.id,
+        mode: 'manual'
+      }
+    });
   }
 
   // Order Create Modal

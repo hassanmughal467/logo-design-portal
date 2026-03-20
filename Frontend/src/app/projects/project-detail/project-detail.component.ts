@@ -183,7 +183,49 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   }
 
   onFilesSelected(event: any): void {
-    this.selectedFiles = Array.from(event.target.files);
+    const files: File[] = Array.from(event.target.files || []);
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const vectorExtensions = ['.svg', '.pdf', '.ai', '.eps', '.psd'];
+    const embroiderExtensions = ['.pes', '.dst', '.jef', '.exp', '.vp3', '.xxx', '.hus', '.art', '.vip', '.vip3', '.shv', '.pec', '.jpm', '.sew', '.emb', '.csd', '.pcs', '.phb', '.phc', '.stx', '.s10', '.dsb', '.zsk'];
+    const allowedExtensions = [...imageExtensions, ...vectorExtensions, ...embroiderExtensions];
+    const imageMaxBytes = 10 * 1024 * 1024;  // 10MB
+    const vectorMaxBytes = 25 * 1024 * 1024;  // 25MB
+
+    const getMaxSize = (fileName: string): number => {
+      const ext = '.' + (fileName.split('.').pop() || '').toLowerCase();
+      if (imageExtensions.includes(ext)) return imageMaxBytes;
+      if (vectorExtensions.includes(ext) || embroiderExtensions.includes(ext)) return vectorMaxBytes;
+      return imageMaxBytes;
+    };
+
+    const invalidSize = files.filter(f => f.size > getMaxSize(f.name));
+    const invalidType = files.filter(f => {
+      const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+      return !allowedExtensions.includes(ext) && !f.type.startsWith('image/');
+    });
+
+    if (invalidSize.length > 0) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'File Too Large',
+        detail: `${invalidSize.length} file(s) exceed allowed size (images: 10MB, vector/embroidery: 25MB)`
+      });
+    }
+
+    if (invalidType.length > 0) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Invalid File Type',
+        detail: `${invalidType.length} file(s) have unsupported formats`
+      });
+    }
+
+    const validFiles = files.filter(f => {
+      const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+      return f.size <= getMaxSize(f.name) && (allowedExtensions.includes(ext) || f.type.startsWith('image/'));
+    });
+    this.selectedFiles = validFiles;
+    (event.target as HTMLInputElement).value = '';
   }
 
   uploadFiles(): void {

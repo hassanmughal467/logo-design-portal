@@ -14,6 +14,21 @@ public class PermissionService : IPermissionService
         _context = context;
     }
 
+    public async Task<List<RoleDto>> GetAllRolesAsync()
+    {
+        var roles = await _context.Roles
+            .Where(r => !r.IsDeleted)
+            .OrderBy(r => r.Name)
+            .ToListAsync();
+
+        return roles.Select(r => new RoleDto
+        {
+            Id = r.Id,
+            Name = r.Name,
+            Description = r.Description ?? string.Empty
+        }).ToList();
+    }
+
     public async Task<List<PermissionDto>> GetAllPermissionsAsync()
     {
         var permissions = await _context.Permissions

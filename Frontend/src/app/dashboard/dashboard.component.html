@@ -699,10 +699,10 @@
                   <td style="text-align: center;">
                     <p-button icon="pi pi-eye" styleClass="p-button-text p-button-rounded p-button-sm"
                       (onClick)="navigateToOrder(order.id); $event.stopPropagation()" pTooltip="View Details" tooltipPosition="top"></p-button>
-                    <p-button *ngIf="canGenerateInvoice(order)"
+                    <p-button *ngIf="canAddToInvoice(order)"
                       icon="pi pi-file-pdf" styleClass="p-button-text p-button-rounded p-button-sm"
-                      (onClick)="generateInvoice(order); $event.stopPropagation()"
-                      pTooltip="Generate Invoice" tooltipPosition="top"></p-button>
+                      (onClick)="addToInvoice(order); $event.stopPropagation()"
+                      pTooltip="Add to Invoice (Billable)" tooltipPosition="top"></p-button>
                   </td>
                 </tr>
               </ng-template>
@@ -779,7 +779,7 @@
   <app-order-create [(visible)]="showOrderCreateModal" [prefillData]="reorderData" (orderCreated)="onOrderCreated($event)"></app-order-create>
 
   <!-- Order Detail Modal -->
-  <app-order-detail *ngIf="selectedOrderId" [orderId]="selectedOrderId" [(visible)]="showOrderDetailModal" (orderUpdated)="onOrderUpdated()"></app-order-detail>
+  <app-order-detail *ngIf="selectedOrderId" [orderId]="selectedOrderId" [(visible)]="showOrderDetailModal" (visibleChange)="onOrderDetailClose()" (orderUpdated)="onOrderUpdated()"></app-order-detail>
 
   <!-- Payment Dialog -->
   <p-dialog 

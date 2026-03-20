@@ -1,6 +1,7 @@
 using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.Interfaces;
+using LogoDesignPortal.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -60,12 +61,38 @@ public class InvoicesController : ControllerBase
 
     [HttpGet]
     [ProducesResponseType(typeof(List<InvoiceResponseDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetInvoices()
+    public async Task<IActionResult> GetInvoices([FromQuery] Guid? clientId = null, [FromQuery] DateTime? issueDateFrom = null, [FromQuery] DateTime? issueDateTo = null, [FromQuery] BillingType? billingType = null, [FromQuery] InvoiceStatus? status = null)
     {
         var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
-        var invoices = await _invoiceService.GetInvoicesAsync(userId, userRole);
+        var filters = new InvoiceQueryFilterDto
+        {
+            ClientId = clientId,
+            IssueDateFrom = issueDateFrom,
+            IssueDateTo = issueDateTo,
+            BillingType = billingType,
+            Status = status
+        };
+        var invoices = await _invoiceService.GetInvoicesAsync(userId, userRole, filters);
         return Ok(invoices);
+    }
+
+    [HttpPost("generate-flexible")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(typeof(InvoiceResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GenerateFlexibleInvoice([FromBody] GenerateFlexibleInvoiceRequestDto request)
+    {
+        try
+        {
+            var userId = User.GetUserIdOrThrow();
+            var invoice = await _invoiceService.GenerateFlexibleInvoiceAsync(request, userId);
+            return CreatedAtAction(nameof(GetInvoiceById), new { id = invoice.Id }, invoice);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPut("{id}")]
@@ -78,6 +105,24 @@ public class InvoicesController : ControllerBase
         {
             var userId = User.GetUserIdOrThrow();
             var invoice = await _invoiceService.UpdateInvoiceAsync(id, request, userId);
+            return Ok(invoice);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPut("{id}/items")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(typeof(InvoiceResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> EditInvoiceItems(Guid id, [FromBody] EditInvoiceItemsRequestDto request)
+    {
+        try
+        {
+            var userId = User.GetUserIdOrThrow();
+            var invoice = await _invoiceService.EditInvoiceItemsAsync(id, request, userId);
             return Ok(invoice);
         }
         catch (InvalidOperationException ex)

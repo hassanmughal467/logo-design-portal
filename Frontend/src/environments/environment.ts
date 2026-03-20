@@ -1,5 +1,5 @@
 export const environment = {
   production: false,
-  apiUrl: 'http://api.hawkmerchandising.com',
+  apiUrl: 'https://localhost:44398',
   apiVersion: ''  // Backend uses /api/ not /api/v1/
 };

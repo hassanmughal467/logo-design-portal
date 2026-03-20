@@ -279,24 +279,30 @@
 
           <!-- Role Field (full width) -->
           <div class="form-field full-width">
-            <label for="role">
+            <label for="roleId">
               <i class="pi pi-shield"></i>
               Role <span class="required">*</span>
             </label>
             <p-dropdown 
-              id="role"
-              [options]="roles" 
-              formControlName="role"
+              id="roleId"
+              [options]="rolesForCreateDropdown"
+              optionLabel="label"
+              optionValue="value"
+              formControlName="roleId"
               placeholder="Select Role"
-              [filter]="false"
+              [filter]="true"
+              filterBy="label"
               [showClear]="false"
               appendTo="body"
               [overlayOptions]="{ baseZIndex: 10000, autoZIndex: true }"
-              [class.ng-invalid]="createUserForm.get('role')?.invalid && createUserForm.get('role')?.touched">
+              [class.ng-invalid]="createUserForm.get('roleId')?.invalid && createUserForm.get('roleId')?.touched">
             </p-dropdown>
+            <small class="p-help" *ngIf="canCreateUser() && rolesForCreateDropdown.length === 0">
+              No roles loaded. Restart the API (roles are auto-seeded) or refresh; if this persists, check you can access <strong>/api/roles</strong>.
+            </small>
             <small 
               class="p-error" 
-              *ngIf="createUserForm.get('role')?.invalid && createUserForm.get('role')?.touched">
+              *ngIf="createUserForm.get('roleId')?.invalid && createUserForm.get('roleId')?.touched">
               <i class="pi pi-exclamation-circle"></i>
               Role is required
             </small>
@@ -1284,7 +1290,7 @@
             <p-dropdown 
               #editRoleDropdown
               id="editRole"
-              [options]="roles" 
+              [options]="rolesAssignableOnEdit" 
               formControlName="role"
               placeholder="Select Role"
               [filter]="false"

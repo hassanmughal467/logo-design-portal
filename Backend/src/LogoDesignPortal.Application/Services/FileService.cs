@@ -233,9 +233,13 @@ public class FileService : IFileService
             throw new InvalidOperationException("File storage failed. Please try again or contact support.");
         }
 
-        // Version = delivery round for Designer Preview (batch-based), per-file sequence for others
+        // Version = 0 for client reference files (until designer sends via Super Admin); delivery round for Designer Preview; per-file sequence for others
         int versionNumber;
-        if (parsedFileType == FileType.Preview && userRole == "Designer")
+        if (userRole == "Client" && parsedFileType == FileType.Reference)
+        {
+            versionNumber = 0;
+        }
+        else if (parsedFileType == FileType.Preview && userRole == "Designer")
         {
             var existingBatchCount = await _context.LogoFiles
                 .Where(f => f.OrderId == orderId && f.PreviewBatchId != null && !f.IsDeleted)
@@ -375,7 +379,8 @@ public class FileService : IFileService
 
         var results = new List<LogoFile>();
         var storagePath = _fileStoragePath; // Reference files go to main storage
-        var currentVersion = 0;
+        // Client reference files are version 0 until designer sends files via Super Admin
+        const int clientReferenceVersion = 0;
 
         foreach (var file in files)
         {
@@ -384,7 +389,6 @@ public class FileService : IFileService
             ValidateFile(file, file.FileName);
 
             var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            currentVersion++;
             var fileName = $"{Guid.NewGuid()}{fileExtension}";
             var filePath = Path.Combine(storagePath, fileName);
 
@@ -403,7 +407,7 @@ public class FileService : IFileService
                 ContentType = file.ContentType,
                 FileSize = file.Length,
                 FileType = FileType.Reference,
-                VersionNumber = currentVersion,
+                VersionNumber = clientReferenceVersion,
                 Description = description,
                 IsVisibleToClient = true,
                 IsAdminApproved = true,
