@@ -28,6 +28,18 @@ yarn-error.log
 !.vscode/extensions.json
 .history/*
 
+# Playwright E2E (local secrets + saved browser sessions)
+/e2e/.env
+/e2e/.auth/
+/e2e/test-results/
+/e2e/playwright-report/
+
+# Playwright HTML report (often generated at project root by config)
+/playwright-report/
+
+# Stryker / mutation reports
+/reports/
+
 # Miscellaneous
 /.angular/cache
 .sass-cache/

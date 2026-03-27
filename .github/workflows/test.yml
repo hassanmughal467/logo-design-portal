@@ -1,4 +1,4 @@
-name: Test Suite
+name: CI — Unit, Integration & Build
 
 on:
   pull_request:
@@ -6,9 +6,102 @@ on:
   push:
     branches: [main, develop]
 
+# Fail fast: merge queue should stay red if any job fails (no `continue-on-error`).
+
 jobs:
-  unit-tests:
-    name: Unit Tests
+  backend-tests:
+    name: Backend (${{ matrix.name }}) + line coverage ≥80%
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: domain
+            project: src/LogoDesignPortal.Domain.Tests/LogoDesignPortal.Domain.Tests.csproj
+            settings: coverlet.domain.runsettings
+          - name: application
+            project: src/LogoDesignPortal.Application.Tests/LogoDesignPortal.Application.Tests.csproj
+            settings: coverlet.application.runsettings
+          - name: integration
+            project: src/LogoDesignPortal.API.IntegrationTests/LogoDesignPortal.API.IntegrationTests.csproj
+            settings: coverlet.runsettings
+
+    defaults:
+      run:
+        working-directory: Backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore & Build (Release)
+        run: |
+          dotnet restore "LogoDesignPortal.sln"
+          dotnet build "LogoDesignPortal.sln" -c Release --no-restore
+
+      - name: Test + Cobertura (Coverlet threshold)
+        run: |
+          dotnet test "${{ matrix.project }}" -c Release --no-build --verbosity normal \
+            --settings "${{ matrix.settings }}" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory "${{ runner.temp }}/coverage-${{ matrix.name }}" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+
+      - name: Upload backend coverage (${{ matrix.name }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-${{ matrix.name }}
+          path: ${{ runner.temp }}/coverage-${{ matrix.name }}
+          if-no-files-found: ignore
+
+  frontend-tests:
+    name: Frontend (Angular/Karma + coverage gates)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Setup Chrome (Karma / Angular)
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Install & unit test
+        working-directory: Frontend
+        env:
+          CHROME_BIN: google-chrome-stable
+        run: |
+          npm ci
+          npm run test:ci -- --browsers=ChromeHeadlessCI
+
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: Frontend/coverage/logo-design-portal-frontend
+          if-no-files-found: ignore
+
+      - name: Upload frontend mutation reports (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-mutation-report
+          path: Frontend/reports/mutation
+          if-no-files-found: ignore
+
+  build-app:
+    name: Build verification (API + Angular production)
+    needs: [backend-tests, frontend-tests]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,31 +111,28 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore
-        run: dotnet restore Backend/LogoDesignPortal.sln
-
-      - name: Build
-        run: dotnet build Backend/LogoDesignPortal.sln --no-restore --configuration Release
-
-      - name: Run Unit Tests
-        run: dotnet test Backend/src/LogoDesignPortal.Application.Tests/LogoDesignPortal.Application.Tests.csproj --no-build --configuration Release --verbosity normal
-
-  integration-tests:
-    name: API Integration Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          dotnet-version: '8.0.x'
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
 
-      - name: Restore
-        run: dotnet restore Backend/LogoDesignPortal.sln
+      - name: Publish API (Release)
+        run: |
+          dotnet restore "Backend/LogoDesignPortal.sln"
+          dotnet publish "Backend/src/LogoDesignPortal.API/LogoDesignPortal.API.csproj" -c Release -o "${{ runner.temp }}/publish-api" --no-self-contained
 
-      - name: Build
-        run: dotnet build Backend/LogoDesignPortal.sln --no-restore --configuration Release
+      - name: Build Angular (production)
+        working-directory: Frontend
+        run: |
+          npm ci
+          npx ng build --configuration=production
 
-      - name: Run Integration Tests
-        run: dotnet test Backend/src/LogoDesignPortal.API.IntegrationTests/LogoDesignPortal.API.IntegrationTests.csproj --no-build --configuration Release --verbosity normal
+      - name: Upload backend mutation reports (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-mutation-report
+          path: Backend/StrykerOutput
+          if-no-files-found: ignore

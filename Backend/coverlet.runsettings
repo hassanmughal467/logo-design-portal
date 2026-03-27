@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <!--
+    Gates merge coverage on business logic only (Domain + Application implementation).
+    DTOs / interfaces / AutoMapper profile inflate denominator without adding behavioral signal.
+  -->
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura,opencover</Format>
+          <Include>[LogoDesignPortal.Domain]*,[LogoDesignPortal.Application]*</Include>
+          <ExcludeByFile>
+            **/Migrations/**;
+            **/DTOs/**;
+            **/Interfaces/**;
+            **/Mappings/**;
+            **/obj/**;
+            **/bin/**
+          </ExcludeByFile>
+          <Threshold>80</Threshold>
+          <ThresholdType>line</ThresholdType>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

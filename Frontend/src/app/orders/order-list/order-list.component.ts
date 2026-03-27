@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { RealtimeNotificationService } from '@core/services/realtime-notification.service';
@@ -7,7 +7,7 @@ import { MessageService } from 'primeng/api';
 import { FileUpload } from 'primeng/fileupload';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { Order, OrderStatus, OrderPriority } from '@shared/models/order.model';
+import { Order, OrderStatus, OrderPriority, OrderSource } from '@shared/models/order.model';
 import { isOrderLocked as checkOrderLocked } from '@shared/utils/order-locking';
 
 interface SummaryCard {
@@ -61,8 +61,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
     const statusMap = statusValues.map(status => {
       let formattedLabel = status.replace(/([A-Z])/g, ' $1').trim();
       const labelMap: { [key: string]: string } = {
-        'WaitingForAdminApproval': 'Waiting For Admin Approval',
-        'Waiting For Admin Approval': 'Waiting For Admin Approval',
+        'WaitingForAdminApproval': 'Awaiting Admin',
+        'Waiting For Admin Approval': 'Awaiting Admin',
         'PriceApprovalPending': 'Price Approval Pending',
         'Price Approval Pending': 'Price Approval Pending',
         'InProgress': 'In Progress',
@@ -116,6 +116,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
   selectedOrder: Order | null = null;
 
   @ViewChild('fileUpload') fileUploadComponent!: FileUpload;
+  @ViewChild('quickCompletedFileUpload') private quickCompletedFileUpload?: FileUpload;
   availableDesigners: any[] = [];
   selectedDesignerId: string | null = null;
   newStatus: { label: string; value: OrderStatus } | null = null;
@@ -128,7 +129,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     private realtimeNotification: RealtimeNotificationService,
     private messageService: MessageService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {}
 
   ngOnInit(): void {
@@ -142,6 +144,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
     this.isSuperAdmin = user?.role === 'SuperAdmin';
 
     this.loadOrders();
+    this.handleQuotePrefillFromQuery();
 
     // Real-time order updates: refresh grid when order events arrive
     this.realtimeNotification.orderUpdates$
@@ -466,7 +469,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
         lastName: (backendOrder.designer || backendOrder.Designer)?.lastName || (backendOrder.designer || backendOrder.Designer)?.LastName || '',
         email: (backendOrder.designer || backendOrder.Designer)?.email || (backendOrder.designer || backendOrder.Designer)?.Email
       } : undefined,
-      assignedDesignerDisplayName: backendOrder.assignedDesignerDisplayName || backendOrder.AssignedDesignerDisplayName
+      assignedDesignerDisplayName: backendOrder.assignedDesignerDisplayName || backendOrder.AssignedDesignerDisplayName,
+      orderSource: (backendOrder.orderSource || backendOrder.OrderSource || OrderSource.Portal) as OrderSource
     };
   }
 
@@ -577,13 +581,154 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   // ═══ ORDER CREATE ═══
   showOrderCreateModal = false;
+  quotePrefillData: any = null;
+  quoteConversionId: string | null = null;
+  showQuickCompletedDialog = false;
+  quickCompletedSubmitting = false;
+  quickCompletedFiles: File[] = [];
+  quickCompletedUseNewClient = false;
+  quickCompletedModel: any = {
+    clientUserId: null,
+    designerUserId: null,
+    title: '',
+    description: '',
+    price: null,
+    completedAt: new Date(),
+    notes: '',
+    newClient: {
+      email: '',
+      firstName: '',
+      lastName: '',
+      companyName: ''
+    }
+  };
+  clientOptions: { label: string; value: string }[] = [];
+  designerOptions: { label: string; value: string }[] = [];
 
   canCreateOrder(): boolean {
     return this.authService.hasRole('Client');
   }
 
+  canAddCompletedOrder(): boolean {
+    return this.isAdminOrSuper;
+  }
+
   createOrder(): void {
+    this.quotePrefillData = null;
     this.showOrderCreateModal = true;
+  }
+
+  openQuoteCreateDialog(): void {
+    // Reuse the Quotes page "Get a Quote" flow by opening the client dialog via query param.
+    this.router.navigate(['/quotes'], { queryParams: { openCreate: 'true' } });
+  }
+
+  private handleQuotePrefillFromQuery(): void {
+    this.route.queryParamMap
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(params => {
+        if (params.get('source') !== 'quote') return;
+        this.quotePrefillData = {
+          title: params.get('logoName') ?? '',
+          description: params.get('description') ?? '',
+          price: Number(params.get('price') ?? '0')
+        };
+        this.quoteConversionId = params.get('quoteId');
+        this.showOrderCreateModal = true;
+      });
+  }
+
+  openQuickCompletedOrderDialog(): void {
+    this.quickCompletedSubmitting = false;
+    this.quickCompletedFiles = [];
+    this.quickCompletedUseNewClient = false;
+    this.quickCompletedModel = {
+      clientUserId: null,
+      designerUserId: null,
+      title: '',
+      description: '',
+      price: null,
+      completedAt: new Date(),
+      notes: '',
+      newClient: { email: '', firstName: '', lastName: '', companyName: '' }
+    };
+    this.showQuickCompletedDialog = true;
+    this.loadQuickCompletedUsers();
+  }
+
+  private loadQuickCompletedUsers(): void {
+    this.apiService.get<any>('users?page=1&pageSize=500')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          const users = ApiService.extractItems<any>(response);
+          this.clientOptions = users
+            .filter(u => u.role === 'Client' || u.roleName === 'Client')
+            .map(u => ({ label: `${u.firstName || ''} ${u.lastName || ''} (${u.email || 'No email'})`.trim(), value: u.id }));
+          this.designerOptions = users
+            .filter(u => u.role === 'Designer' || u.roleName === 'Designer')
+            .map(u => ({ label: `${u.firstName || ''} ${u.lastName || ''} (${u.email || 'No email'})`.trim(), value: u.id }));
+        },
+        error: () => {
+          this.clientOptions = [];
+          this.designerOptions = [];
+        }
+      });
+  }
+
+  onQuickCompletedFileSelect(event: any): void {
+    const files: File[] = event.files ? Array.from(event.files) : [];
+    const deduped = files.filter(file => !this.quickCompletedFiles.some(f => f.name === file.name && f.size === file.size));
+    this.quickCompletedFiles = [...this.quickCompletedFiles, ...deduped];
+  }
+
+  removeQuickCompletedFile(index: number): void {
+    this.quickCompletedFiles.splice(index, 1);
+  }
+
+  submitQuickCompletedOrder(): void {
+    const m = this.quickCompletedModel;
+    const missingClient = !this.quickCompletedUseNewClient && !m.clientUserId;
+    const missingNewClient = this.quickCompletedUseNewClient && (!m.newClient?.email || !m.newClient?.firstName || !m.newClient?.lastName || !m.newClient?.companyName);
+    if (missingClient || missingNewClient || !m.designerUserId || !m.title?.trim() || !m.price || !m.completedAt || this.quickCompletedFiles.length === 0) {
+      this.messageService.add({ severity: 'warn', summary: 'Missing Fields', detail: 'Please complete all required fields.' });
+      return;
+    }
+
+    const payload: any = {
+      clientUserId: this.quickCompletedUseNewClient ? null : m.clientUserId,
+      newClient: this.quickCompletedUseNewClient ? m.newClient : null,
+      title: m.title.trim(),
+      description: m.description?.trim() || null,
+      designerUserId: m.designerUserId,
+      price: Number(m.price),
+      completedAt: new Date(m.completedAt).toISOString(),
+      notes: m.notes?.trim() || null
+    };
+
+    const formData = new FormData();
+    formData.append('order', JSON.stringify(payload));
+    this.quickCompletedFiles.forEach(file => formData.append('files', file));
+
+    this.quickCompletedSubmitting = true;
+    this.apiService.post<any>('orders/manual-completed', formData)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (created) => {
+          this.quickCompletedSubmitting = false;
+          this.showQuickCompletedDialog = false;
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Completed order added successfully' });
+          this.loadOrders();
+          if (created?.id) {
+            this.selectedOrderId = created.id;
+            this.showOrderDetailModal = true;
+          }
+        },
+        error: (error) => {
+          this.quickCompletedSubmitting = false;
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: error.error?.error || 'Failed to add completed order' });
+        }
+      });
   }
 
   onOrderCreateClose(): void {
@@ -591,6 +736,13 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   onOrderCreated(order: any): void {
+    if (this.quoteConversionId && order?.id) {
+      this.apiService.post(`quotes/${this.quoteConversionId}/convert-to-order`, { orderId: order.id })
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({ next: () => this.loadOrders() });
+      this.quoteConversionId = null;
+      this.quotePrefillData = null;
+    }
     this.loadOrders();
     if (order && order.id) {
       this.selectedOrderId = order.id;
@@ -832,8 +984,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
     if (validFiles.length > 0) {
       this.selectedFiles = [...this.selectedFiles, ...validFiles];
       this.uploadSuccess = false;
-      if (this.fileUploadComponent) this.fileUploadComponent.clear();
     }
+    this.fileUploadComponent?.clear();
   }
 
   removeFile(index: number): void {

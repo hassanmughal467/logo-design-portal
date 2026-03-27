@@ -192,6 +192,7 @@ public class OrderServiceStatusTransitionTests
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Mock.Of<IFileService>(),
             Mock.Of<IClientLogoPricingService>(),
+            Mock.Of<ICommentService>(),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>());
     }
 }

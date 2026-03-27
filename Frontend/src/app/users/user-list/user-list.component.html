@@ -10,7 +10,8 @@
         label="Create User" 
         icon="pi pi-plus" 
         (onClick)="openCreateDialog()"
-        styleClass="p-button-primary">
+        styleClass="p-button-primary"
+        [attr.data-testid]="'users-open-create'">
       </p-button>
     </div>
   </div>
@@ -167,7 +168,8 @@
     [closable]="true"
     [draggable]="false"
     [resizable]="false"
-    [styleClass]="'create-user-dialog'">
+    [styleClass]="'create-user-dialog'"
+    [attr.data-testid]="'users-create-dialog'">
     
     <div class="create-user-content">
       <!-- Header Section -->
@@ -200,6 +202,7 @@
               type="email" 
               pInputText 
               formControlName="email"
+              data-testid="create-user-email"
               placeholder="Enter email address"
               autocomplete="off"
               [class.ng-invalid]="createUserForm.get('email')?.invalid && createUserForm.get('email')?.touched" />
@@ -222,6 +225,7 @@
               type="text" 
               pInputText 
               formControlName="firstName"
+              data-testid="create-user-first-name"
               placeholder="Enter first name"
               autocomplete="off"
               [class.ng-invalid]="createUserForm.get('firstName')?.invalid && createUserForm.get('firstName')?.touched" />
@@ -243,6 +247,7 @@
               type="text" 
               pInputText 
               formControlName="lastName"
+              data-testid="create-user-last-name"
               placeholder="Enter last name"
               autocomplete="off"
               [class.ng-invalid]="createUserForm.get('lastName')?.invalid && createUserForm.get('lastName')?.touched" />
@@ -262,6 +267,7 @@
             </label>
             <p-password 
               id="password"
+              [attr.data-testid]="'create-user-password'"
               formControlName="password"
               placeholder="Enter password"
               [toggleMask]="true"
@@ -285,6 +291,7 @@
             </label>
             <p-dropdown 
               id="roleId"
+              [attr.data-testid]="'create-user-role'"
               [options]="rolesForCreateDropdown"
               optionLabel="label"
               optionValue="value"
@@ -655,7 +662,8 @@
           icon="pi pi-plus" 
           (onClick)="createUser()"
           [disabled]="createUserForm.invalid"
-          styleClass="p-button-primary modal-footer-btn">
+          styleClass="p-button-primary modal-footer-btn"
+          [attr.data-testid]="'create-user-submit'">
         </p-button>
       </div>
     </ng-template>

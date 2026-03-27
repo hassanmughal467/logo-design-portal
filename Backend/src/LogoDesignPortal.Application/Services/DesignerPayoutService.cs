@@ -4,6 +4,7 @@ using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
+using LogoDesignPortal.Domain;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -16,13 +17,23 @@ public class DesignerPayoutService : IDesignerPayoutService
 {
     private readonly IApplicationDbContext _context;
     private readonly INotificationService _notificationService;
+    private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
+    private readonly ICommentService _commentService;
     private readonly ProductionSafetyOptions _safetyOptions;
     private readonly ILogger<DesignerPayoutService> _logger;
 
-    public DesignerPayoutService(IApplicationDbContext context, INotificationService notificationService, IOptions<ProductionSafetyOptions> safetyOptions, ILogger<DesignerPayoutService> logger)
+    public DesignerPayoutService(
+        IApplicationDbContext context,
+        INotificationService notificationService,
+        IRealtimeEntityUpdateSender entityUpdateSender,
+        ICommentService commentService,
+        IOptions<ProductionSafetyOptions> safetyOptions,
+        ILogger<DesignerPayoutService> logger)
     {
         _context = context;
         _notificationService = notificationService;
+        _entityUpdateSender = entityUpdateSender;
+        _commentService = commentService;
         _safetyOptions = safetyOptions?.Value ?? new ProductionSafetyOptions();
         _logger = logger;
     }
@@ -96,8 +107,7 @@ public class DesignerPayoutService : IDesignerPayoutService
         if (OrderLockingHelper.IsOrderLocked(order.Status))
             throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
 
-        // Designer cannot change price after admin approval
-        if (order.PriceApproved)
+        if (DesignerPayoutPricingRules.HasFinalizedDesignerPayout(order))
             throw new InvalidOperationException("Price has already been approved. You cannot change it.");
 
         if (request.ProposedPrice < 0)
@@ -122,23 +132,31 @@ public class DesignerPayoutService : IDesignerPayoutService
         {
             order.ApprovedPrice = request.ProposedPrice;
             order.DesignerApprovedPrice = request.ProposedPrice;
-            order.PriceApproved = true;
         }
         else
         {
             order.ApprovedPrice = null;
             order.DesignerApprovedPrice = null;
-            order.PriceApproved = false;
         }
 
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = designerUserId;
+
+        if (differs)
+        {
+            TransitionToPriceApprovalPendingForDesignerIfNeeded(order, designerUserId);
+        }
 
         await _context.SaveChangesAsync();
 
         // When price requires admin approval, notify Admin/SuperAdmin
         if (differs)
         {
+            var submitLine = $"Proposed designer payout: PKR {request.ProposedPrice:N0}.";
+            if (!string.IsNullOrWhiteSpace(request.Reason))
+                submitLine += $" Note: {request.Reason.Trim()}";
+            await _commentService.AppendPriceNegotiationNoteAsync(orderId, designerUserId, CommentType.PriceNegotiationDesigner, submitLine);
+
             try
             {
                 var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
@@ -170,7 +188,7 @@ public class DesignerPayoutService : IDesignerPayoutService
         if (OrderLockingHelper.IsOrderLocked(order.Status))
             throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
 
-        if (order.PriceApproved)
+        if (DesignerPayoutPricingRules.HasFinalizedDesignerPayout(order))
             throw new InvalidOperationException("Price has already been approved. You cannot change it.");
 
         if (request.ProposedPrice <= 0)
@@ -180,13 +198,19 @@ public class DesignerPayoutService : IDesignerPayoutService
         order.ProposedPrice = request.ProposedPrice;
         order.RequiresPriceApproval = true;
         order.PriceApprovalStatus = PriceApprovalStatus.PendingApproval;
-        order.PriceApproved = false;
         order.ApprovedPrice = null;
         order.DesignerApprovedPrice = null;
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = designerUserId;
 
+        TransitionToPriceApprovalPendingForDesignerIfNeeded(order, designerUserId);
+
         await _context.SaveChangesAsync();
+
+        var proposeLine = $"Proposed designer payout: PKR {request.ProposedPrice:N0}.";
+        if (!string.IsNullOrWhiteSpace(request.Message))
+            proposeLine += $" {request.Message.Trim()}";
+        await _commentService.AppendPriceNegotiationNoteAsync(orderId, designerUserId, CommentType.PriceNegotiationDesigner, proposeLine);
 
         try
         {
@@ -200,6 +224,37 @@ public class DesignerPayoutService : IDesignerPayoutService
         {
             // Notification failure must not affect pricing submission
         }
+    }
+
+    /// <summary>
+    /// Order stays in PriceApprovalPending (not In Progress) while admin must approve a designer payout price.
+    /// If already PriceApprovalPending (e.g. client price request), status is unchanged.
+    /// </summary>
+    private void TransitionToPriceApprovalPendingForDesignerIfNeeded(LogoOrder order, Guid userId)
+    {
+        if (order.Status == OrderStatus.PriceApprovalPending)
+            return;
+
+        if (order.Status != OrderStatus.InProgress && order.Status != OrderStatus.RevisionRequested)
+            return;
+
+        var previousStatus = order.Status;
+        OrderStatusStateMachine.ValidateTransition(previousStatus, OrderStatus.PriceApprovalPending);
+        var now = DateTime.UtcNow;
+        order.Status = OrderStatus.PriceApprovalPending;
+        order.UpdatedAt = now;
+        order.UpdatedBy = userId;
+
+        _context.OrderStatusHistories.Add(new OrderStatusHistory
+        {
+            Id = Guid.NewGuid(),
+            OrderId = order.Id,
+            PreviousStatus = previousStatus,
+            NewStatus = OrderStatus.PriceApprovalPending,
+            Notes = "Awaiting price approval (designer payout)",
+            ChangedBy = userId,
+            CreatedAt = now
+        });
     }
 
     private async Task<decimal?> GetStandardPriceFromTableAsync(DesignCategory category, DesignType designType, Guid? designerId = null)
@@ -224,6 +279,7 @@ public class DesignerPayoutService : IDesignerPayoutService
     public async Task ApproveDesignerPriceAsync(Guid orderId, ApproveDesignerPriceRequestDto request, Guid adminUserId)
     {
         var order = await _context.LogoOrders
+            .Include(o => o.Client)
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
@@ -231,6 +287,9 @@ public class DesignerPayoutService : IDesignerPayoutService
 
         if (order.PriceApprovalStatus != PriceApprovalStatus.PendingApproval && order.PriceApprovalStatus != PriceApprovalStatus.Modified)
             throw new InvalidOperationException("This order does not have a price pending approval.");
+
+        var previousOrderStatus = order.Status;
+        var previousDesignerPriceStatus = order.PriceApprovalStatus;
 
         var proposedPrice = order.DesignerProposedPrice ?? order.ProposedPrice;
         switch (request.Action)
@@ -241,7 +300,6 @@ public class DesignerPayoutService : IDesignerPayoutService
                 order.ApprovedPrice = proposedPrice.Value;
                 order.DesignerApprovedPrice = proposedPrice.Value;
                 order.PriceApprovalStatus = PriceApprovalStatus.Approved;
-                order.PriceApproved = true;
                 break;
 
             case DesignerPriceApprovalAction.Modify:
@@ -250,7 +308,6 @@ public class DesignerPayoutService : IDesignerPayoutService
                 order.ApprovedPrice = request.ApprovedPrice.Value;
                 order.DesignerApprovedPrice = request.ApprovedPrice.Value;
                 order.PriceApprovalStatus = PriceApprovalStatus.Approved;
-                order.PriceApproved = true;
                 break;
 
             case DesignerPriceApprovalAction.Reject:
@@ -268,7 +325,173 @@ public class DesignerPayoutService : IDesignerPayoutService
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = adminUserId;
 
+        RestoreOrderStatusAfterDesignerPriceDecision(order, request.Action, previousOrderStatus, previousDesignerPriceStatus, adminUserId);
+
         await _context.SaveChangesAsync();
+
+        var payoutLine = request.Action switch
+        {
+            DesignerPriceApprovalAction.Approve when proposedPrice.HasValue =>
+                $"Approved designer payout at PKR {proposedPrice.Value:N0}.",
+            DesignerPriceApprovalAction.Modify when request.ApprovedPrice.HasValue =>
+                $"Set designer payout to PKR {request.ApprovedPrice.Value:N0} (modified).",
+            DesignerPriceApprovalAction.Reject => "Rejected the proposed designer payout.",
+            _ => "Updated designer payout approval."
+        };
+        if (!string.IsNullOrWhiteSpace(request.Message))
+            payoutLine += $" Message: {request.Message.Trim()}";
+        await _commentService.AppendPriceNegotiationNoteAsync(orderId, adminUserId, CommentType.PriceNegotiationDesigner, payoutLine);
+
+        try
+        {
+            if (order.DesignerId.HasValue)
+            {
+                var designerUserId = await _context.DesignerProfiles
+                    .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
+                    .Select(d => d.UserId)
+                    .FirstOrDefaultAsync();
+
+                if (designerUserId != Guid.Empty)
+                {
+                    var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+                    var designerTitle = request.Action switch
+                    {
+                        DesignerPriceApprovalAction.Approve => "Designer Price Approved",
+                        DesignerPriceApprovalAction.Modify => "Designer Price Updated",
+                        DesignerPriceApprovalAction.Reject => "Designer Price Rejected",
+                        _ => "Designer Price Decision"
+                    };
+                    var designerMessage = request.Action switch
+                    {
+                        DesignerPriceApprovalAction.Approve when proposedPrice.HasValue =>
+                            $"Your proposed payout for order (#{orderNumber}) was approved at PKR {proposedPrice.Value:N0}.",
+                        DesignerPriceApprovalAction.Modify when request.ApprovedPrice.HasValue =>
+                            $"Your proposed payout for order (#{orderNumber}) was updated to PKR {request.ApprovedPrice.Value:N0}.",
+                        DesignerPriceApprovalAction.Reject =>
+                            $"Your proposed payout for order (#{orderNumber}) was rejected. Please review and propose again if needed.",
+                        _ => $"A designer payout decision was recorded for order (#{orderNumber})."
+                    };
+                    if (!string.IsNullOrWhiteSpace(request.Message))
+                        designerMessage += $" Note: {request.Message.Trim()}";
+
+                    await _notificationService.CreateNotificationForUserAsync(
+                        designerUserId,
+                        designerTitle,
+                        designerMessage,
+                        NotificationType.Info,
+                        NotificationReferenceType.Order,
+                        orderId,
+                        adminUserId
+                    );
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to notify designer about payout decision for order {OrderId}", orderId);
+        }
+
+        try
+        {
+            var recipientIds = await GetOrderUpdateRecipientIdsAsync(order);
+            await _entityUpdateSender.SendOrderStatusChangedAsync(orderId, order.Status.ToString(), adminUserId, recipientIds);
+            await _entityUpdateSender.SendOrderUpdatedAsync(orderId, order.Status.ToString(), recipientIds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send realtime order updates for designer payout decision on order {OrderId}", orderId);
+        }
+    }
+
+    /// <summary>
+    /// Gets users who should see order grid updates (client, admins/superadmins, assigned designer).
+    /// </summary>
+    private async Task<List<Guid>> GetOrderUpdateRecipientIdsAsync(LogoOrder order)
+    {
+        var userIds = new List<Guid>();
+
+        if (order.Client != null)
+            userIds.Add(order.Client.UserId);
+
+        userIds.AddRange(await GetAdminAndSuperAdminUserIdsAsync());
+
+        if (order.DesignerId.HasValue)
+        {
+            var designerUserId = await _context.DesignerProfiles
+                .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
+                .Select(d => d.UserId)
+                .FirstOrDefaultAsync();
+            if (designerUserId != Guid.Empty)
+                userIds.Add(designerUserId);
+        }
+
+        return userIds.Distinct().ToList();
+    }
+
+    private async Task<List<Guid>> GetAdminAndSuperAdminUserIdsAsync()
+    {
+        var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
+        var superAdminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
+        if (adminRole == null && superAdminRole == null)
+            return new List<Guid>();
+
+        var roleIds = new List<Guid>();
+        if (adminRole != null) roleIds.Add(adminRole.Id);
+        if (superAdminRole != null) roleIds.Add(superAdminRole.Id);
+
+        return await _context.Users
+            .Where(u => !u.IsDeleted && roleIds.Contains(u.RoleId))
+            .Select(u => u.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// After admin resolves designer payout pricing, return to In Progress unless the client still owes approval
+    /// on a different proposed charge (ClientPrice vs ClientChargePrice).
+    /// </summary>
+    private void RestoreOrderStatusAfterDesignerPriceDecision(
+        LogoOrder order,
+        DesignerPriceApprovalAction action,
+        OrderStatus previousOrderStatus,
+        PriceApprovalStatus previousDesignerPriceStatus,
+        Guid adminUserId)
+    {
+        if (previousOrderStatus != OrderStatus.PriceApprovalPending)
+            return;
+        if (previousDesignerPriceStatus != PriceApprovalStatus.PendingApproval &&
+            previousDesignerPriceStatus != PriceApprovalStatus.Modified)
+            return;
+
+        var clientPriceDiffersFromCharge = order.ClientPrice.HasValue &&
+            Math.Abs(order.ClientChargePrice - order.ClientPrice.Value) > 0.01m;
+
+        if (clientPriceDiffersFromCharge)
+            return;
+
+        var now = DateTime.UtcNow;
+        OrderStatusStateMachine.ValidateTransition(OrderStatus.PriceApprovalPending, OrderStatus.InProgress);
+        order.Status = OrderStatus.InProgress;
+        order.UpdatedAt = now;
+        order.UpdatedBy = adminUserId;
+
+        var note = action switch
+        {
+            DesignerPriceApprovalAction.Approve => "Designer payout price approved — work continues",
+            DesignerPriceApprovalAction.Modify => "Designer payout price set by admin — work continues",
+            DesignerPriceApprovalAction.Reject => "Designer payout price rejected — work continues",
+            _ => "Designer price decision recorded"
+        };
+
+        _context.OrderStatusHistories.Add(new OrderStatusHistory
+        {
+            Id = Guid.NewGuid(),
+            OrderId = order.Id,
+            PreviousStatus = OrderStatus.PriceApprovalPending,
+            NewStatus = OrderStatus.InProgress,
+            Notes = note,
+            ChangedBy = adminUserId,
+            CreatedAt = now
+        });
     }
 
     public async Task<List<OrderPricingSummaryDto>> GetOrdersPendingPriceApprovalAsync()
@@ -292,7 +515,7 @@ public class DesignerPayoutService : IDesignerPayoutService
             ProposedPrice = o.ProposedPrice,
             ApprovedPrice = o.ApprovedPrice,
             PriceApprovalStatus = o.PriceApprovalStatus.ToString(),
-            PriceApproved = o.PriceApproved,
+            PriceApproved = DesignerPayoutPricingRules.HasFinalizedDesignerPayout(o),
             CompletedDate = o.CompletedDate
         }).ToList();
     }
@@ -316,12 +539,10 @@ public class DesignerPayoutService : IDesignerPayoutService
             .Where(o => o.DesignerId == designerId &&
                        !o.IsDeleted &&
                        o.Status == OrderStatus.Completed &&
-                       o.PriceApproved &&
-                       o.ApprovedPrice.HasValue &&
-                       o.ApprovedPrice.Value > 0 &&
                        !o.IsDesignerInvoiced &&
                        o.CompletedDate >= startDate &&
                        o.CompletedDate < endDate)
+            .Where(DesignerPayoutPricingRules.EligibleForDesignerInvoiceExpression)
             .OrderBy(o => o.CompletedDate)
             .ToListAsync();
 
@@ -456,10 +677,8 @@ public class DesignerPayoutService : IDesignerPayoutService
             .Where(o => o.DesignerId == designerId &&
                        !o.IsDeleted &&
                        o.Status == OrderStatus.Completed &&
-                       o.PriceApproved &&
-                       o.ApprovedPrice.HasValue &&
-                       o.ApprovedPrice.Value > 0 &&
                        !o.IsDesignerInvoiced)
+            .Where(DesignerPayoutPricingRules.EligibleForDesignerInvoiceExpression)
             .OrderByDescending(o => o.CompletedDate)
             .ToListAsync();
 
@@ -473,7 +692,7 @@ public class DesignerPayoutService : IDesignerPayoutService
             ProposedPrice = o.ProposedPrice,
             ApprovedPrice = o.ApprovedPrice,
             PriceApprovalStatus = o.PriceApprovalStatus.ToString(),
-            PriceApproved = o.PriceApproved,
+            PriceApproved = DesignerPayoutPricingRules.HasFinalizedDesignerPayout(o),
             CompletedDate = o.CompletedDate
         }).ToList();
     }
@@ -486,10 +705,8 @@ public class DesignerPayoutService : IDesignerPayoutService
             .Where(o => o.DesignerId == designerId &&
                        !o.IsDeleted &&
                        o.Status == OrderStatus.Completed &&
-                       o.PriceApproved &&
-                       o.ApprovedPrice.HasValue &&
-                       o.ApprovedPrice.Value > 0 &&
                        !o.IsDesignerInvoiced)
+            .Where(DesignerPayoutPricingRules.EligibleForDesignerInvoiceExpression)
             .OrderBy(o => o.CompletedDate)
             .ToListAsync();
 
@@ -612,9 +829,7 @@ public class DesignerPayoutService : IDesignerPayoutService
                     continue;
 
                 if (order.Status != OrderStatus.Completed ||
-                    !order.PriceApproved ||
-                    !order.ApprovedPrice.HasValue ||
-                    order.ApprovedPrice.Value <= 0 ||
+                    !DesignerPayoutPricingRules.HasFinalizedDesignerPayout(order) ||
                     order.IsDesignerInvoiced ||
                     order.DesignerId != request.DesignerId)
                     continue;
@@ -674,7 +889,7 @@ public class DesignerPayoutService : IDesignerPayoutService
             ProposedPrice = o.ProposedPrice,
             ApprovedPrice = o.ApprovedPrice,
             PriceApprovalStatus = o.PriceApprovalStatus.ToString(),
-            PriceApproved = o.PriceApproved,
+            PriceApproved = DesignerPayoutPricingRules.HasFinalizedDesignerPayout(o),
             CompletedDate = o.CompletedDate
         }).ToList();
     }
@@ -822,11 +1037,9 @@ public class DesignerPayoutService : IDesignerPayoutService
                 .ThenInclude(d => d!.User)
             .Where(o => !o.IsDeleted &&
                        o.Status == OrderStatus.Completed &&
-                       o.PriceApproved &&
-                       o.ApprovedPrice.HasValue &&
-                       o.ApprovedPrice.Value > 0 &&
                        !o.IsDesignerInvoiced &&
                        o.DesignerId != null)
+            .Where(DesignerPayoutPricingRules.EligibleForDesignerInvoiceExpression)
             .ToListAsync();
 
         var grouped = orders
@@ -863,12 +1076,10 @@ public class DesignerPayoutService : IDesignerPayoutService
             .Where(o => o.DesignerId == designerId &&
                        !o.IsDeleted &&
                        o.Status == OrderStatus.Completed &&
-                       o.PriceApproved &&
-                       o.ApprovedPrice.HasValue &&
-                       o.ApprovedPrice.Value > 0 &&
                        !o.IsDesignerInvoiced &&
                        o.CompletedDate >= startDate &&
                        o.CompletedDate < endDate)
+            .Where(DesignerPayoutPricingRules.EligibleForDesignerInvoiceExpression)
             .OrderBy(o => o.CompletedDate)
             .ToListAsync();
 
@@ -882,7 +1093,7 @@ public class DesignerPayoutService : IDesignerPayoutService
             ProposedPrice = o.ProposedPrice,
             ApprovedPrice = o.ApprovedPrice,
             PriceApprovalStatus = o.PriceApprovalStatus.ToString(),
-            PriceApproved = o.PriceApproved,
+            PriceApproved = DesignerPayoutPricingRules.HasFinalizedDesignerPayout(o),
             CompletedDate = o.CompletedDate
         }).ToList();
     }
@@ -892,11 +1103,9 @@ public class DesignerPayoutService : IDesignerPayoutService
         var orders = await _context.LogoOrders
             .Where(o => !o.IsDeleted &&
                        o.Status == OrderStatus.Completed &&
-                       o.PriceApproved &&
-                       o.ApprovedPrice.HasValue &&
-                       o.ApprovedPrice.Value > 0 &&
                        !o.IsDesignerInvoiced &&
                        o.DesignerId != null)
+            .Where(DesignerPayoutPricingRules.EligibleForDesignerInvoiceExpression)
             .ToListAsync();
 
         var designerCount = orders.Select(o => o.DesignerId!.Value).Distinct().Count();

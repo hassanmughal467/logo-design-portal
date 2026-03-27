@@ -1,3 +1,13 @@
+/** Reference uploads attached to a revision request (client). */
+export interface RevisionAttachment {
+  id: string;
+  fileName: string;
+  originalFileName: string;
+  fileSize: number;
+  contentType: string;
+  createdAt: Date;
+}
+
 export interface OrderRevision {
   id: string;
   orderId: string;
@@ -7,7 +17,9 @@ export interface OrderRevision {
   isResolved: boolean;
   resolvedAt?: Date;
   createdAt: Date;
-  fileCount: number;
+  fileCount?: number;
+  /** Populated from API `files` / `Files` */
+  files?: RevisionAttachment[];
 }
 
 export interface CreateRevisionRequest {

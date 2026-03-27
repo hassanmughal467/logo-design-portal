@@ -1,0 +1,17 @@
+.quotes-page {
+  .filters {
+    margin: 0 0 1rem 0;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+}

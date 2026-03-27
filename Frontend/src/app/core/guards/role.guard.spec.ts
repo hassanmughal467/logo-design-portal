@@ -32,6 +32,7 @@ describe('RoleGuard', () => {
     const state = {} as any;
 
     expect(guard.canActivate(route, state)).toBe(true);
+    expect(authService.hasAnyRole).not.toHaveBeenCalled();
   });
 
   it('should redirect to login when not authenticated', () => {
@@ -60,5 +61,14 @@ describe('RoleGuard', () => {
 
     expect(guard.canActivate(route, state)).toBe(false);
     expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
+  });
+
+  it('should allow when roles array is empty', () => {
+    authService.isAuthenticated.and.returnValue(true);
+    const route = { data: { roles: [] } } as any;
+    const state = {} as any;
+
+    expect(guard.canActivate(route, state)).toBe(true);
+    expect(authService.hasAnyRole).not.toHaveBeenCalled();
   });
 });

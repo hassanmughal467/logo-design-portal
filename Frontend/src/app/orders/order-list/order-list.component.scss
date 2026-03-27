@@ -274,6 +274,25 @@
     }
   }
 
+  .status-cell {
+    max-width: 190px;
+  }
+
+  .status-cell ::ng-deep .p-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.9rem;
+    max-width: 100%;
+    padding: 0.35rem 0.75rem !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .client-company {
     font-weight: 600;
     color: var(--text-color);

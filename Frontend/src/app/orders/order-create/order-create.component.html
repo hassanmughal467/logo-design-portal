@@ -23,6 +23,7 @@
             type="text" 
             pInputText 
             formControlName="title"
+            data-testid="order-create-title"
             [class.ng-invalid]="f['title'].invalid && f['title'].touched"
             placeholder="e.g., Modern Logo Design"
           />
@@ -38,6 +39,7 @@
             id="description"
             pInputTextarea 
             formControlName="description"
+            data-testid="order-create-description"
             rows="4"
             [class.ng-invalid]="f['description'].invalid && f['description'].touched"
             placeholder="Describe your logo requirements..."
@@ -227,6 +229,7 @@
           type="submit"
           label="Create Order" 
           icon="pi pi-check" 
+          [attr.data-testid]="'order-create-submit'"
           [loading]="loading || uploadingFiles"
           [disabled]="orderForm.invalid || uploadingFiles"
         ></p-button>

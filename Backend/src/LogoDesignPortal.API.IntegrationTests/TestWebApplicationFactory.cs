@@ -21,7 +21,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     /// <summary>Admin User.Id from seeded test data.</summary>
     public Guid AdminUserId => TestDataIds.AdminUserId;
 
-    private static readonly string DbName = "IntegrationTestDb_" + Guid.NewGuid().ToString("N")[..8];
+    /// <summary>Client profile Id for the seeded client user (LogoOrder.ClientId).</summary>
+    public Guid ClientProfileId => TestDataIds.ClientProfileId;
+
+    /// <summary>Isolated in-memory database per factory instance (serialized via ICollectionFixture).</summary>
+    private readonly string _dbName = "IntegrationTestDb_" + Guid.NewGuid().ToString("N")[..8];
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -39,7 +43,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
             services.AddDbContext<ApplicationDbContext>(options =>
             {
-                options.UseInMemoryDatabase(DbName);
+                options.UseInMemoryDatabase(_dbName);
                 options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning));
                 options.EnableSensitiveDataLogging();
             });

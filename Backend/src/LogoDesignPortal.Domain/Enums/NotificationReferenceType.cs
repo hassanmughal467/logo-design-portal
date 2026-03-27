@@ -8,5 +8,6 @@ public enum NotificationReferenceType
     Order = 1,
     Invoice = 2,
     Message = 3,
-    System = 4
+    System = 4,
+    Quote = 5
 }

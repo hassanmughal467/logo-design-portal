@@ -241,6 +241,10 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
       case 'system':
         this.router.navigate(['/users']);
         break;
+      case 'quote':
+        if (refId) this.router.navigate(['/quotes', refId]);
+        else this.router.navigate(['/quotes']);
+        break;
       default:
         if (orderId || refId) this.router.navigate(['/orders', orderId ?? refId]);
     }
@@ -295,6 +299,7 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
       this.menuItems.push(
         { label: 'Operations', styleClass: 'menu-section-header' },
         { label: 'Orders', icon: 'pi pi-shopping-cart', routerLink: '/orders' },
+        { label: 'Quotes', icon: 'pi pi-file', routerLink: '/quotes' },
         { label: 'Users', icon: 'pi pi-users', routerLink: '/users', badge: userRole === 'SuperAdmin' ? 'Admin' : undefined },
         { label: 'Clients', icon: 'pi pi-user', routerLink: '/clients' },
         { label: 'Projects', icon: 'pi pi-palette', routerLink: '/projects' },
@@ -325,6 +330,7 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
       this.menuItems.push(
         { label: 'Operations', styleClass: 'menu-section-header' },
         { label: 'My Orders', icon: 'pi pi-shopping-cart', routerLink: '/orders' },
+        { label: 'My Quotes', icon: 'pi pi-file', routerLink: '/quotes' },
         { label: 'My Projects', icon: 'pi pi-palette', routerLink: '/projects' },
         { label: 'Messages', icon: 'pi pi-inbox', routerLink: '/messages' },
         { label: 'Files', icon: 'pi pi-file', routerLink: '/files' },

@@ -41,6 +41,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<DesignPricing> DesignPricings { get; set; } = null!;
     public DbSet<ClientLogoPricing> ClientLogoPricings { get; set; } = null!;
     public DbSet<DesignerLogoPricing> DesignerLogoPricings { get; set; } = null!;
+    public DbSet<Quote> Quotes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,6 +62,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<ClientGallery>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<AuditLog>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<DesignerLogoPricing>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Quote>().HasQueryFilter(e => !e.IsDeleted);
 
         // Additional indexes for performance
         modelBuilder.Entity<LogoFile>().HasIndex(e => e.OrderId);

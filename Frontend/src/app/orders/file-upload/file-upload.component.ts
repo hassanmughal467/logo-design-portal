@@ -1,4 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
+import { FileUpload } from 'primeng/fileupload';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '@core/services/api.service';
@@ -14,6 +15,8 @@ import { DesignCategory, DesignType, DesignerPricingInfo } from '@shared/models/
   styleUrls: ['./file-upload.component.scss']
 })
 export class FileUploadComponent implements OnInit {
+  @ViewChild('fileUpload') private primeFileUpload?: FileUpload;
+
   uploadForm: FormGroup;
   orderId: string | null = null;
   loading = false;
@@ -344,6 +347,8 @@ export class FileUploadComponent implements OnInit {
 
     const validFiles = files.filter(file => file.size <= getMaxSize(file.name));
     this.selectedFiles = [...this.selectedFiles, ...validFiles];
+    // PrimeNG basic mode hides the file input when it has internal files; clear so user can add more.
+    this.primeFileUpload?.clear();
   }
 
   removeFile(index: number): void {

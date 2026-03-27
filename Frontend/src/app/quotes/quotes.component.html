@@ -1,0 +1,93 @@
+<div class="quotes-page">
+  <app-page-header title="Quotes" subtitle="Request and manage logo quotes">
+    <div actions>
+      <p-button *ngIf="isClient" label="Get a Quote" icon="pi pi-plus" (onClick)="showCreateDialog = true"></p-button>
+    </div>
+  </app-page-header>
+
+  <div class="filters">
+    <p-dropdown
+      [options]="statusOptions"
+      [(ngModel)]="selectedStatusFilter"
+      placeholder="Filter by status"
+      [showClear]="true"
+      (onChange)="loadQuotes()">
+    </p-dropdown>
+  </div>
+
+  <app-card-container>
+    <app-data-table-wrapper>
+      <p-table [value]="quotes" [loading]="loading" [paginator]="true" [rows]="10">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Logo Name</th>
+            <th>Status</th>
+            <th>Requested Budget</th>
+            <th>Admin Price</th>
+            <th>Notes</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-quote>
+          <tr>
+            <td>
+              <a [routerLink]="['/quotes', quote.id]">{{ quote.logoName }}</a>
+            </td>
+            <td><p-tag [value]="quote.status"></p-tag></td>
+            <td>{{ quote.requestedBudget || '-' }}</td>
+            <td>{{ quote.adminQuotedPrice || '-' }}</td>
+            <td>{{ quote.adminNotes || '-' }}</td>
+            <td>{{ quote.createdAt | date:'mediumDate' }}</td>
+            <td>
+              <p-button *ngIf="isAdmin" icon="pi pi-send" styleClass="p-button-text" (onClick)="openRespondDialog(quote)"></p-button>
+              <p-button *ngIf="isClient && quote.status === 'Responded'" icon="pi pi-check" styleClass="p-button-text p-button-success" (onClick)="proceedWithQuote(quote)"></p-button>
+              <p-button *ngIf="isClient && quote.status === 'Responded'" icon="pi pi-times" styleClass="p-button-text p-button-danger" (onClick)="rejectQuote(quote)"></p-button>
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </app-data-table-wrapper>
+  </app-card-container>
+
+  <p-dialog [(visible)]="showCreateDialog" [modal]="true" header="Get a Quote" [style]="{ width: '700px' }">
+    <form [formGroup]="quoteForm" (ngSubmit)="createQuote()">
+      <div class="field">
+        <label>Logo Name</label>
+        <input pInputText formControlName="logoName" />
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <textarea pInputTextarea rows="4" formControlName="description"></textarea>
+      </div>
+      <div class="field">
+        <label>Budget (optional)</label>
+        <input pInputText type="number" formControlName="requestedBudget" />
+      </div>
+      <div class="field">
+        <label>Attachments</label>
+        <p-fileUpload #quoteFileUpload mode="basic" [multiple]="true" [auto]="false" (onSelect)="onFileSelect($event)"
+          [showUploadButton]="false" [showCancelButton]="false"></p-fileUpload>
+      </div>
+      <div class="dialog-actions">
+        <p-button type="submit" label="Submit Quote" icon="pi pi-check"></p-button>
+      </div>
+    </form>
+  </p-dialog>
+
+  <p-dialog [(visible)]="showRespondDialog" [modal]="true" header="Respond to Quote" [style]="{ width: '600px' }">
+    <form [formGroup]="respondForm" (ngSubmit)="respondToQuote()">
+      <div class="field">
+        <label>Quoted Price</label>
+        <input pInputText type="number" formControlName="adminQuotedPrice" />
+      </div>
+      <div class="field">
+        <label>Notes</label>
+        <textarea pInputTextarea rows="4" formControlName="adminNotes"></textarea>
+      </div>
+      <div class="dialog-actions">
+        <p-button type="submit" label="Send Response" icon="pi pi-send"></p-button>
+      </div>
+    </form>
+  </p-dialog>
+</div>

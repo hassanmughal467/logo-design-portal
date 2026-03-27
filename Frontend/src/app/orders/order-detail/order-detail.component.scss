@@ -41,9 +41,20 @@
   }
 }
 
+.tab-intro {
+  margin: 0 0 1rem 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-color-secondary);
+  background: var(--surface-50);
+  border-radius: 6px;
+  border-left: 3px solid var(--primary-color);
+}
+
 /* Order detail uses full-width content (padding:0) with internal scrolling */
 ::ng-deep .order-detail-dialog {
-  .p-dialog-content {
+  > .p-dialog-content {
     padding: 0 !important;
     overflow-y: auto;
     max-height: calc(90vh - 100px);
@@ -73,37 +84,6 @@
 
   .revision-count {
     font-weight: 500;
-  }
-}
-
-.revision-pending-view {
-  padding: 2rem;
-
-  .revision-pending-message {
-    text-align: center;
-    max-width: 480px;
-    margin: 0 auto;
-
-    i {
-      display: block;
-    }
-
-    h3 {
-      margin: 0 0 1rem 0;
-      font-size: 1.25rem;
-      color: var(--text-color);
-    }
-
-    p {
-      margin: 0 0 0.75rem 0;
-      color: var(--text-color-secondary);
-      line-height: 1.5;
-    }
-
-    p-tag {
-      margin-top: 1rem;
-      display: inline-block;
-    }
   }
 }
 
@@ -197,6 +177,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
     margin-bottom: 2rem;
     padding-bottom: 1rem;
     border-bottom: 2px solid #e0e0e0;
@@ -205,6 +187,8 @@
       display: flex;
       align-items: center;
       gap: 1rem;
+      padding-right: 0.5rem;
+      flex: 1 1 auto;
 
       h2 {
         margin: 0;
@@ -215,6 +199,7 @@
     .header-actions {
       display: flex;
       gap: 0.5rem;
+      flex-wrap: wrap;
     }
   }
 
@@ -255,7 +240,77 @@
       margin-top: 0.1rem;
     }
   }
+
+  .price-client-response {
+    .client-response-notes {
+      margin: 0 0 0.35rem 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .client-response-meta {
+      margin: 0;
+      font-size: 0.85rem;
+      .muted {
+        color: var(--text-color-secondary);
+      }
+    }
+  }
 }
+
+/* Client-only price request block (visible on order page) */
+.price-request-section {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+
+  .price-request-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #6d4c41;
+    margin-bottom: 0.5rem;
+
+    .dot {
+      opacity: 0.7;
+    }
+  }
+
+  .info-item {
+    border-bottom: 1px dashed rgba(0, 0, 0, 0.08);
+  }
+
+  .price-request-hint {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    color: #6d4c41;
+  }
+}
+
+.price-request-section--approved {
+  background: #e8f5e9;
+  border-color: #81c784;
+
+  .pricing-section-title,
+  .price-request-meta,
+  .price-request-hint {
+    color: #1b5e20;
+  }
+}
+
+.price-approval-summary {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface-50);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  color: var(--text-color);
+  line-height: 1.4;
+}
+
+/* Read-only fields inside dialogs now use PrimeNG inputs for consistent layout */
 
 .info-card {
       background: #f8f9fa;
@@ -273,6 +328,24 @@
         justify-content: space-between;
         padding: 0.5rem 0;
         border-bottom: 1px solid #e0e0e0;
+
+        &.info-item--approved {
+          background: #e8f5e9;
+          border: 1px solid #81c784;
+          border-radius: 6px;
+          padding: 0.65rem 0.75rem;
+          margin: 0.35rem 0;
+
+          label {
+            color: #1b5e20;
+            font-weight: 700;
+          }
+
+          span {
+            color: #1b5e20;
+            font-weight: 700;
+          }
+        }
 
         &:last-child {
           border-bottom: none;
@@ -412,6 +485,155 @@
 ::ng-deep .assign-designer-dialog {
   .p-dialog-content {
     overflow: visible !important;
+  }
+}
+
+::ng-deep .price-approval-dialog {
+  .p-dialog-content {
+    padding: 1rem 1.25rem !important;
+  }
+
+  .p-dialog-footer {
+    padding: 0.85rem 1.25rem !important;
+    justify-content: flex-end !important;
+    gap: 0.5rem !important;
+  }
+}
+
+.price-negotiation-tab {
+  .price-negotiation-intro {
+    margin: 0 0 1.25rem;
+    padding: 0.75rem 1rem;
+    background: var(--surface-50);
+    border-radius: 6px;
+    color: var(--text-color-secondary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .price-negotiation-section {
+    margin-bottom: 2rem;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    &--designer {
+      padding-top: 1rem;
+      border-top: 1px solid var(--surface-border);
+    }
+  }
+
+  .price-negotiation-section-header {
+    margin-bottom: 0.75rem;
+
+    h3 {
+      margin: 0;
+    }
+  }
+}
+
+.image-preview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.image-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-weight: 600;
+}
+
+.image-preview-stage {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 50vh;
+  background: var(--surface-50);
+  border-radius: 8px;
+  padding: 0.75rem;
+
+  img {
+    max-width: 100%;
+    max-height: 65vh;
+    object-fit: contain;
+    border-radius: 6px;
+  }
+}
+
+.image-preview-loading {
+  min-height: 50vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-preview-revision-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+  background: var(--orange-50, #fff3e0);
+  border: 1px solid var(--orange-200, #ffcc80);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: var(--text-color-secondary);
+}
+
+.revision-attachments {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--surface-border);
+
+  .revision-attachments-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+  }
+
+  .revision-attachments-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-color);
+  }
+
+  .revision-file-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .revision-file-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0.65rem;
+    background: var(--surface-50);
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+  }
+
+  .revision-file-name {
+    flex: 1 1 140px;
+    font-weight: 500;
+    word-break: break-word;
+  }
+
+  .revision-file-meta {
+    font-size: 0.8rem;
+    color: var(--text-color-secondary);
+  }
+
+  ::ng-deep .revision-ref-chip {
+    font-size: 0.7rem;
   }
 }
 

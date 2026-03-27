@@ -11,6 +11,7 @@ public interface IOrderService
     /// Creates order with reference files atomically. Rolls back if any step fails.
     /// </summary>
     Task<OrderResponseDto> CreateOrderWithFilesAsync(CreateOrderRequestDto request, IFormFile[] files, Guid clientId, string? description = null);
+    Task<OrderResponseDto> CreateManualCompletedOrderAsync(CreateManualCompletedOrderRequestDto request, IFormFile[] finalFiles, Guid createdBy);
     Task<OrderResponseDto?> GetOrderByIdAsync(Guid orderId, Guid? userId, string? userRole);
     Task<List<OrderResponseDto>> GetOrdersByClientAsync(Guid clientId);
     Task<List<OrderResponseDto>> GetOrdersByDesignerAsync(Guid designerId);
@@ -20,6 +21,7 @@ public interface IOrderService
     Task<OrderResponseDto> UpdateOrderStatusAsync(Guid orderId, UpdateOrderStatusRequestDto request, Guid userId, string? userRole = null);
     Task<OrderResponseDto> RequestPriceApprovalAsync(Guid orderId, RequestPriceApprovalDto request, Guid requestedBy);
     Task<OrderResponseDto> ApprovePriceAsync(Guid orderId, ApprovePriceDto request, Guid approvedBy);
+    Task<OrderResponseDto> RespondToPriceApprovalAsync(Guid orderId, RespondPriceApprovalDto request, Guid userId);
     Task<OrderResponseDto> ApproveOrderAsync(Guid orderId, Guid approvedBy);
     Task<OrderResponseDto> SendFilesToClientAsync(Guid orderId, List<Guid> fileIds, Guid sentBy);
     /// <summary>

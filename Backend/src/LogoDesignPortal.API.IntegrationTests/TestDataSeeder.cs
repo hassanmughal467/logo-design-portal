@@ -1,3 +1,4 @@
+using LogoDesignPortal.Domain.Constants;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -31,20 +32,17 @@ public class TestDataSeeder : IHostedService
 
     private static void SeedTestData(ApplicationDbContext context)
     {
-        if (context.Users.Any())
+        // Align with Program.cs / EF seed roles (fixed GUIDs). Do not insert duplicate role rows.
+        if (context.Users.Any(u => u.Email == "client@test.com"))
             return;
-
-        var roles = new[]
-        {
-            new Role { Id = Guid.NewGuid(), Name = "SuperAdmin" },
-            new Role { Id = Guid.NewGuid(), Name = "Admin" },
-            new Role { Id = Guid.NewGuid(), Name = "Client" },
-            new Role { Id = Guid.NewGuid(), Name = "Designer" }
-        };
-        context.Roles.AddRange(roles);
 
         var testPassword = "Test@123";
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(testPassword, BCrypt.Net.BCrypt.GenerateSalt(10));
+
+        var superAdminRole = context.Roles.First(r => r.Id == SeededRoleIds.SuperAdmin);
+        var adminRole = context.Roles.First(r => r.Id == SeededRoleIds.Admin);
+        var clientRole = context.Roles.First(r => r.Id == SeededRoleIds.Client);
+        var designerRole = context.Roles.First(r => r.Id == SeededRoleIds.Designer);
 
         var superAdmin = new User
         {
@@ -53,8 +51,8 @@ public class TestDataSeeder : IHostedService
             FirstName = "Super",
             LastName = "Admin",
             PasswordHash = passwordHash,
-            RoleId = roles[0].Id,
-            Role = roles[0],
+            RoleId = superAdminRole.Id,
+            Role = superAdminRole,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -65,8 +63,8 @@ public class TestDataSeeder : IHostedService
             FirstName = "Admin",
             LastName = "User",
             PasswordHash = passwordHash,
-            RoleId = roles[1].Id,
-            Role = roles[1],
+            RoleId = adminRole.Id,
+            Role = adminRole,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -77,8 +75,8 @@ public class TestDataSeeder : IHostedService
             FirstName = "Test",
             LastName = "Client",
             PasswordHash = passwordHash,
-            RoleId = roles[2].Id,
-            Role = roles[2],
+            RoleId = clientRole.Id,
+            Role = clientRole,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -89,8 +87,8 @@ public class TestDataSeeder : IHostedService
             FirstName = "Test",
             LastName = "Designer",
             PasswordHash = passwordHash,
-            RoleId = roles[3].Id,
-            Role = roles[3],
+            RoleId = designerRole.Id,
+            Role = designerRole,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -118,6 +116,7 @@ public class TestDataSeeder : IHostedService
         TestDataIds.DesignerUserId = designer.Id;
         TestDataIds.ClientUserId = client.Id;
         TestDataIds.AdminUserId = admin.Id;
+        TestDataIds.ClientProfileId = clientProfile.Id;
     }
 }
 
@@ -127,4 +126,5 @@ public static class TestDataIds
     public static Guid DesignerUserId { get; set; }
     public static Guid ClientUserId { get; set; }
     public static Guid AdminUserId { get; set; }
+    public static Guid ClientProfileId { get; set; }
 }

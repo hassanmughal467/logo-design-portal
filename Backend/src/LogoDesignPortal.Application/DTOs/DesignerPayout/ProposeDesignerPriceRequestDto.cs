@@ -13,4 +13,8 @@ public class ProposeDesignerPriceRequestDto
     [Required]
     [Range(0.01, 1000000, ErrorMessage = "Proposed price must be greater than zero.")]
     public decimal ProposedPrice { get; set; }
+
+    /// <summary>Optional note to admin (shown in designer payout negotiation history).</summary>
+    [MaxLength(2000)]
+    public string? Message { get; set; }
 }

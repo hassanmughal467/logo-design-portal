@@ -1,0 +1,28 @@
+<div class="quote-detail-page" *ngIf="quote as q">
+  <app-page-header [title]="'Quote: ' + q.logoName" subtitle="Review response and decide next action">
+    <div actions>
+      <p-button label="Back" icon="pi pi-arrow-left" styleClass="p-button-text" routerLink="/quotes"></p-button>
+    </div>
+  </app-page-header>
+
+  <app-card-container>
+    <div class="detail-grid">
+      <div><strong>Status:</strong> <p-tag [value]="q.status"></p-tag></div>
+      <div><strong>Requested Budget:</strong> {{ q.requestedBudget ?? '-' }}</div>
+      <div><strong>Admin Quoted Price:</strong> {{ q.adminQuotedPrice ?? '-' }}</div>
+      <div><strong>Created:</strong> {{ q.createdAt | date:'medium' }}</div>
+    </div>
+
+    <h4>Request Details</h4>
+    <p>{{ q.description }}</p>
+
+    <h4>Admin Notes</h4>
+    <p>{{ q.adminNotes || 'No notes provided.' }}</p>
+
+    <div class="actions" *ngIf="isClient && q.status === 'Responded'">
+      <p-button label="Proceed" icon="pi pi-check" (onClick)="proceed()"></p-button>
+      <p-button label="Hold" icon="pi pi-pause" styleClass="p-button-secondary"></p-button>
+      <p-button label="Cancel" icon="pi pi-times" styleClass="p-button-danger" (onClick)="cancelQuote()"></p-button>
+    </div>
+  </app-card-container>
+</div>

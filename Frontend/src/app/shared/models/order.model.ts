@@ -7,6 +7,8 @@ export interface Order {
   status: OrderStatus;
   priority?: OrderPriority;
   price: number;
+  /** Proposed client-facing amount when admin requests price approval (before client accepts). */
+  clientPrice?: number;
   clientBasePrice?: number;
   clientChargePrice?: number;
   currencyCode?: string;
@@ -18,10 +20,20 @@ export interface Order {
   priceApprovalStatus?: string;
   requiresPriceApproval: boolean;
   priceApproved: boolean;
+  /** Latest note entered when Admin/SuperAdmin requested client price approval. */
+  priceApprovalRequestNotes?: string;
+  /** Display of who requested client price approval (e.g. "Hawk Merchandising / Admin") */
+  priceApprovalRequestedByDisplay?: string;
+  priceApprovalRequestedAt?: Date;
+  /** Client counter-offer / reject notes (admin sees when status is price pending). */
+  clientPriceResponseNotes?: string;
+  clientPriceResponseAt?: Date;
   /** Role of user who last updated client charge price (Admin, SuperAdmin, Client, Designer) */
   priceUpdatedByRole?: string;
   /** When the client charge price was last updated */
   priceUpdatedAt?: Date;
+  priceUpdatedByUserId?: string;
+  priceUpdatedByName?: string;
   designCategory?: string;
   designType?: string;
   createdAt: Date;
@@ -78,6 +90,13 @@ export interface Order {
   
   // Upload control fields
   allowUploads?: boolean;
+  orderSource?: OrderSource;
+}
+
+export enum OrderSource {
+  Portal = 'Portal',
+  ManualCompleted = 'ManualCompleted',
+  Quote = 'Quote'
 }
 
 /** Order lifecycle: WaitingForAdminApproval → PriceApprovalPending → InProgress →

@@ -11,4 +11,7 @@ public class OrderCommentUnreadCountsDto
     public int UnreadRevisions { get; set; }
     /// <summary>Count of comments not yet read by current user (Client/Designer/Admin).</summary>
     public int UnreadComments { get; set; }
+
+    /// <summary>Unread entries in the price negotiation threads visible to the current user.</summary>
+    public int UnreadPriceNegotiationNotes { get; set; }
 }

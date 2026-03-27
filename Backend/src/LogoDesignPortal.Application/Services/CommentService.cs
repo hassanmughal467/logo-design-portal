@@ -84,7 +84,7 @@ public class CommentService : ICommentService
             : isInternal ? CommentType.Internal
             : CommentType.General;
 
-        var comment = new OrderComment
+        var commentLegacy = new OrderComment
         {
             Id = Guid.NewGuid(),
             OrderId = orderId,
@@ -96,7 +96,7 @@ public class CommentService : ICommentService
             CreatedAt = DateTime.UtcNow
         };
 
-        _context.OrderComments.Add(comment);
+        _context.OrderComments.Add(commentLegacy);
         await _context.SaveChangesAsync();
 
         // Notify Admin and SuperAdmin when Designer or Client adds a comment
@@ -118,8 +118,7 @@ public class CommentService : ICommentService
             }
         }
 
-        var response = MapToResponse(comment, user, userRole);
-        return response;
+        return MapToResponse(commentLegacy, user, userRole);
     }
 
     public async Task<List<CommentResponseDto>> GetOrderCommentsAsync(Guid orderId, Guid? userId, string? userRole)
@@ -131,12 +130,7 @@ public class CommentService : ICommentService
                 .ThenInclude(u => u.Role)
             .Where(c => c.OrderId == orderId && !c.IsDeleted);
 
-        // Client visibility: non-internal AND (VisibleToClient OR created by Client/Admin/SuperAdmin)
-        if (userRole == "Client")
-        {
-            query = query.Where(c => !c.IsInternal && (c.VisibleToClient
-                || (c.CreatedByUser.Role != null && (c.CreatedByUser.Role.Name == "Client" || c.CreatedByUser.Role.Name == "Admin" || c.CreatedByUser.Role.Name == "SuperAdmin"))));
-        }
+        query = ApplyOrderCommentVisibilityFilter(query, userRole);
 
         var comments = await query.OrderBy(c => c.CreatedAt).ToListAsync();
         var dtos = new List<CommentResponseDto>();
@@ -200,6 +194,10 @@ public class CommentService : ICommentService
 
         await EnsureOrderAccessAsync(comment.OrderId, userId, userRole);
 
+        if (comment.CommentType == CommentType.PriceNegotiationClient ||
+            comment.CommentType == CommentType.PriceNegotiationDesigner)
+            throw new InvalidOperationException("Price negotiation notes use fixed visibility and cannot be changed here.");
+
         comment.VisibleToClient = request.VisibleToClient;
         await _context.SaveChangesAsync();
 
@@ -210,8 +208,12 @@ public class CommentService : ICommentService
     {
         await EnsureOrderAccessAsync(orderId, userId, userRole);
 
-        var comments = await _context.OrderComments
-            .Where(c => c.OrderId == orderId && !c.IsDeleted)
+        var comments = await ApplyOrderCommentVisibilityFilter(
+                _context.OrderComments
+                    .Include(c => c.CreatedByUser)
+                    .ThenInclude(u => u.Role)
+                    .Where(c => c.OrderId == orderId && !c.IsDeleted),
+                userRole)
             .ToListAsync();
 
         foreach (var c in comments)
@@ -231,30 +233,93 @@ public class CommentService : ICommentService
     {
         await EnsureOrderAccessAsync(orderId, userId, userRole);
 
-        var query = _context.OrderComments
-            .Include(c => c.CreatedByUser)
+        var visible = ApplyOrderCommentVisibilityFilter(
+            _context.OrderComments
+                .Include(c => c.CreatedByUser)
                 .ThenInclude(u => u.Role)
-            .Where(c => c.OrderId == orderId && !c.IsDeleted);
+                .Where(c => c.OrderId == orderId && !c.IsDeleted),
+            userRole);
 
-        // Client only sees comments visible to them (same filter as GetOrderComments)
+        var generalComments = visible.Where(c =>
+            c.CommentType != CommentType.PriceNegotiationClient && c.CommentType != CommentType.PriceNegotiationDesigner);
+        var priceThreads = visible.Where(c =>
+            c.CommentType == CommentType.PriceNegotiationClient || c.CommentType == CommentType.PriceNegotiationDesigner);
+
+        var unreadGeneral = userRole == "Client"
+            ? await generalComments.CountAsync(c => !c.IsReadByClient)
+            : userRole == "Designer"
+                ? await generalComments.CountAsync(c => !c.IsReadByDesigner)
+                : await generalComments.CountAsync(c => !c.IsReadByAdmin);
+        var unreadPrice = userRole == "Client"
+            ? await priceThreads.CountAsync(c => !c.IsReadByClient)
+            : userRole == "Designer"
+                ? await priceThreads.CountAsync(c => !c.IsReadByDesigner)
+                : await priceThreads.CountAsync(c => !c.IsReadByAdmin);
+
+        return new OrderCommentUnreadCountsDto
+        {
+            UnreadFiles = 0,
+            UnreadRevisions = 0,
+            UnreadComments = unreadGeneral,
+            UnreadPriceNegotiationNotes = unreadPrice
+        };
+    }
+
+    public async Task AppendPriceNegotiationNoteAsync(Guid orderId, Guid createdBy, CommentType channel, string content)
+    {
+        if (channel != CommentType.PriceNegotiationClient && channel != CommentType.PriceNegotiationDesigner)
+            throw new ArgumentException("Channel must be a price negotiation comment type.", nameof(channel));
+
+        if (string.IsNullOrWhiteSpace(content))
+            return;
+
+        var trimmed = content.Trim();
+        if (trimmed.Length > 2000)
+            trimmed = trimmed[..2000];
+
+        var order = await _context.LogoOrders.FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+        if (order == null)
+            throw new InvalidOperationException("Order not found.");
+
+        var user = await _context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == createdBy && !u.IsDeleted);
+        if (user == null)
+            throw new InvalidOperationException("User not found.");
+
+        var comment = new OrderComment
+        {
+            Id = Guid.NewGuid(),
+            OrderId = orderId,
+            Content = trimmed,
+            CreatedBy = createdBy,
+            IsInternal = channel == CommentType.PriceNegotiationDesigner,
+            CommentType = channel,
+            VisibleToClient = channel == CommentType.PriceNegotiationClient,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.OrderComments.Add(comment);
+        await _context.SaveChangesAsync();
+    }
+
+    private static IQueryable<OrderComment> ApplyOrderCommentVisibilityFilter(IQueryable<OrderComment> query, string? userRole)
+    {
+        // Designers do not see client-authored thread comments; Admin/SuperAdmin mediate and relay.
+        if (userRole == "Designer")
+        {
+            query = query.Where(c => c.CommentType != CommentType.PriceNegotiationClient);
+            query = query.Where(c => c.CreatedByUser.Role == null || c.CreatedByUser.Role.Name != "Client");
+        }
+
         if (userRole == "Client")
         {
+            query = query.Where(c => c.CommentType != CommentType.PriceNegotiationDesigner);
             query = query.Where(c => !c.IsInternal && (c.VisibleToClient
                 || (c.CreatedByUser.Role != null && (c.CreatedByUser.Role.Name == "Client" || c.CreatedByUser.Role.Name == "Admin" || c.CreatedByUser.Role.Name == "SuperAdmin"))));
         }
 
-        var unreadByUser = userRole == "Client"
-            ? await query.CountAsync(c => !c.IsReadByClient)
-            : userRole == "Designer"
-                ? await query.CountAsync(c => !c.IsReadByDesigner)
-                : await query.CountAsync(c => !c.IsReadByAdmin);
-
-        return new OrderCommentUnreadCountsDto
-        {
-            UnreadFiles = 0, // Placeholder for future file read tracking
-            UnreadRevisions = 0, // Placeholder for future revision read tracking
-            UnreadComments = unreadByUser
-        };
+        return query;
     }
 
     private static CommentResponseDto MapToResponse(OrderComment comment, User createdByUser, string? viewerRole)

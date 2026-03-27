@@ -83,6 +83,8 @@ public class LogoOrder : BaseEntity
     public DateTime? InvoicedDate { get; set; }
     public bool BillingEligible { get; set; }
     public DateTime? CompletedDate { get; set; }
+    public OrderSource OrderSource { get; set; } = OrderSource.Portal;
+    public Guid? QuoteId { get; set; }
 
     // Revision tracking (Fiverr/Upwork style)
     /// <summary>Number of times the client has requested a revision. Incremented on each RequestRevision.</summary>
@@ -102,4 +104,5 @@ public class LogoOrder : BaseEntity
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
     public ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
     public DesignerInvoice? DesignerInvoice { get; set; }
+    public Quote? Quote { get; set; }
 }

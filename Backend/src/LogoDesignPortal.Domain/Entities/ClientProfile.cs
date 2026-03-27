@@ -24,4 +24,5 @@ public class ClientProfile : BaseEntity
     // Navigation properties
     public User User { get; set; } = null!;
     public ICollection<LogoOrder> Orders { get; set; } = new List<LogoOrder>();
+    public ICollection<Quote> Quotes { get; set; } = new List<Quote>();
 }

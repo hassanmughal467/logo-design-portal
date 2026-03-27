@@ -78,6 +78,43 @@ public class OrdersController : ControllerBase
         }
     }
 
+    [HttpPost("manual-completed")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [RequestSizeLimit(100 * 1024 * 1024)]
+    public async Task<IActionResult> CreateManualCompletedOrder([FromForm] string order, [FromForm] IFormFileCollection files)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(order))
+                return BadRequest(new { error = "Order data is required." });
+            if (files == null || files.Count == 0)
+                return BadRequest(new { error = "At least one final file is required." });
+
+            var request = System.Text.Json.JsonSerializer.Deserialize<CreateManualCompletedOrderRequestDto>(
+                order,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (request == null)
+                return BadRequest(new { error = "Invalid order data." });
+
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
+
+            var created = await _orderService.CreateManualCompletedOrderAsync(request, files.ToArray(), userId);
+            return CreatedAtAction(nameof(GetOrderById), new { id = created.Id }, created);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            return BadRequest(new { error = $"Invalid order JSON: {ex.Message}" });
+        }
+    }
+
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -221,6 +258,25 @@ public class OrdersController : ControllerBase
             if (User.GetUserId() is not { } approvedBy)
                 return Unauthorized(new { error = "User identity could not be determined." });
             var order = await _orderService.ApprovePriceAsync(id, request, approvedBy);
+            return Ok(order);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("{id}/respond-price-approval")]
+    [Authorize(Roles = "Client")]
+    [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RespondPriceApproval(Guid id, [FromBody] RespondPriceApprovalDto request)
+    {
+        try
+        {
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized(new { error = "User identity could not be determined." });
+            var order = await _orderService.RespondToPriceApprovalAsync(id, request, userId);
             return Ok(order);
         }
         catch (InvalidOperationException ex)

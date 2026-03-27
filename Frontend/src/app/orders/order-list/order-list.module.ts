@@ -17,6 +17,8 @@ import { InputTextModule } from 'primeng/inputtext';
 import { DropdownModule } from 'primeng/dropdown';
 import { DialogModule } from 'primeng/dialog';
 import { FileUploadModule } from 'primeng/fileupload';
+import { CalendarModule } from 'primeng/calendar';
+import { InputTextareaModule } from 'primeng/inputtextarea';
 import { MessageService } from 'primeng/api';
 
 @NgModule({
@@ -36,7 +38,9 @@ import { MessageService } from 'primeng/api';
     InputTextModule,
     DropdownModule,
     DialogModule,
-    FileUploadModule
+    FileUploadModule,
+    CalendarModule,
+    InputTextareaModule
   ],
   providers: [MessageService]
 })

@@ -24,6 +24,7 @@ public static class NotificationRedirectHelper
             NotificationReferenceType.Invoice => $"/invoices/{refId}",
             NotificationReferenceType.Message => orderId.HasValue ? $"/orders/{orderId}" : "/messages",
             NotificationReferenceType.System => "/users",
+            NotificationReferenceType.Quote => $"/quotes/{refId}",
             _ => orderId.HasValue ? $"/orders/{orderId}" : null
         };
     }

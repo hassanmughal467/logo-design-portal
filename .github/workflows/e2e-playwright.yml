@@ -1,0 +1,130 @@
+# End-to-end tests: Angular (Playwright) + ASP.NET API + MySQL.
+# This job is heavier than unit/integration runs; tighten connection strings and secrets for your environment.
+#
+# Prerequisites assumed here:
+# - API applies migrations on startup and seeds roles + SuperAdmin (see Program.cs).
+# - MySQL 8 listens on port 3306 with the credentials below (adjust to match your EF provider string).
+
+name: E2E (Playwright)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'Frontend/e2e/**'
+      - 'Frontend/src/**'
+      - 'Backend/src/LogoDesignPortal.API/**'
+      - 'Backend/src/LogoDesignPortal.Application/**'
+      - 'Backend/src/LogoDesignPortal.Infrastructure/**'
+      - 'Backend/src/LogoDesignPortal.Domain/**'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Frontend/e2e/**'
+      - 'Frontend/src/**'
+      - 'Backend/src/LogoDesignPortal.API/**'
+      - 'Backend/src/LogoDesignPortal.Application/**'
+      - 'Backend/src/LogoDesignPortal.Infrastructure/**'
+      - 'Backend/src/LogoDesignPortal.Domain/**'
+
+jobs:
+  playwright-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: e2e_root
+          MYSQL_DATABASE: LogoDesignPortalDb
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -pe2e_root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      E2E_BASE_URL: http://localhost:4200
+      E2E_API_URL: http://localhost:5000
+      E2E_ADMIN_EMAIL: superadmin@logodesign.com
+      E2E_ADMIN_PASSWORD: SuperAdmin@123
+      E2E_RETRIES: '2'
+      CI: 'true'
+      ConnectionStrings__DefaultConnection: >-
+        Server=127.0.0.1;Port=3306;Database=LogoDesignPortalDb;User=root;Password=e2e_root;
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install Frontend dependencies
+        working-directory: Frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: Frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start API (background)
+        working-directory: Backend
+        run: |
+          dotnet build src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release
+          dotnet run --project src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release --no-build &
+          echo $! > /tmp/api.pid
+
+      - name: Wait for API health
+        run: |
+          for i in {1..60}; do
+            curl -fsS "http://localhost:5000/api/system/health" && exit 0
+            sleep 2
+          done
+          echo "API failed to become healthy"; exit 1
+
+      - name: Start Angular (e2e config)
+        working-directory: Frontend
+        run: |
+          npx ng serve --configuration=e2e --port 4200 &
+          echo $! > /tmp/ng.pid
+
+      - name: Wait for Angular
+        run: |
+          for i in {1..60}; do
+            curl -fsS "http://localhost:4200/" && exit 0
+            sleep 2
+          done
+          echo "Angular failed to start"; exit 1
+
+      - name: Run Playwright
+        working-directory: Frontend
+        run: npm run e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: Frontend/e2e/playwright-report
+          if-no-files-found: ignore
+
+      - name: Upload test-results (traces / video / screenshots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: Frontend/e2e/test-results
+          if-no-files-found: ignore

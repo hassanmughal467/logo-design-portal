@@ -15,6 +15,7 @@
       <input 
         pInputText 
         id="email" 
+        data-testid="login-email"
         formControlName="email" 
         type="email" 
         autocomplete="username"
@@ -33,7 +34,8 @@
     <div class="form-group">
       <label for="password">Password</label>
       <p-password 
-        id="password" 
+        id="password"
+        [attr.data-testid]="'login-password'"
         formControlName="password" 
         placeholder="Enter your password"
         [toggleMask]="true"
@@ -59,6 +61,7 @@
       pButton 
       type="submit" 
       label="Login" 
+      data-testid="login-submit"
       [loading]="loading"
       [disabled]="loading"
       class="p-button-primary w-100">

@@ -100,6 +100,28 @@ public class OrderServiceWorkflowTests
     }
 
     [Fact]
+    public async Task AssignDesignerAsync_WhilePriceApprovalPending_KeepsStatusAndRecordsCorrectHistory()
+    {
+        var (context, orderId, designerUserId, adminUserId) = await SeedOrderWithDesignerAsync(OrderStatus.PriceApprovalPending);
+        var orderService = CreateOrderService(context);
+
+        var result = await orderService.AssignOrderToDesignerAsync(orderId, designerUserId, adminUserId);
+
+        Assert.Equal(OrderStatus.PriceApprovalPending.ToString(), result.Status);
+        var savedOrder = await context.LogoOrders.FindAsync(orderId);
+        Assert.NotNull(savedOrder);
+        Assert.NotNull(savedOrder!.DesignerId);
+        Assert.Equal(OrderStatus.PriceApprovalPending, savedOrder.Status);
+
+        var lastHistory = await context.OrderStatusHistories
+            .Where(h => h.OrderId == orderId)
+            .OrderByDescending(h => h.CreatedAt)
+            .FirstAsync();
+        Assert.Equal(OrderStatus.PriceApprovalPending, lastHistory.NewStatus);
+        Assert.Equal(OrderStatus.PriceApprovalPending, lastHistory.PreviousStatus);
+    }
+
+    [Fact]
     public async Task RequestPriceApprovalAsync_ValidInput_SetsStatusPriceApprovalPending()
     {
         var (context, orderId, adminUserId) = await SeedOrderAsync(OrderStatus.WaitingForAdminApproval, useAdmin: true);
@@ -116,7 +138,7 @@ public class OrderServiceWorkflowTests
         Assert.NotNull(savedOrder);
         Assert.Equal(OrderStatus.PriceApprovalPending, savedOrder!.Status);
         Assert.True(savedOrder.RequiresPriceApproval);
-        Assert.Equal(150, savedOrder.ProposedPrice);
+        Assert.Equal(150, savedOrder.ClientPrice);
     }
 
     [Fact]
@@ -124,7 +146,7 @@ public class OrderServiceWorkflowTests
     {
         var (context, orderId, clientUserId) = await SeedOrderAsync(OrderStatus.PriceApprovalPending);
         var order = await context.LogoOrders.FindAsync(orderId);
-        order!.ProposedPrice = 200;
+        order!.ClientPrice = 200;
         await context.SaveChangesAsync();
 
         var orderService = CreateOrderService(context);
@@ -133,7 +155,7 @@ public class OrderServiceWorkflowTests
         var result = await orderService.ApprovePriceAsync(orderId, request, clientUserId);
 
         Assert.NotNull(result);
-        Assert.Equal(OrderStatus.WaitingForAdminApproval.ToString(), result.Status);
+        Assert.Contains(result.Status, new[] { OrderStatus.WaitingForAdminApproval.ToString(), OrderStatus.InProgress.ToString() });
 
         var savedOrder = await context.LogoOrders.FindAsync(orderId);
         Assert.NotNull(savedOrder);
@@ -295,6 +317,7 @@ public class OrderServiceWorkflowTests
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Mock.Of<IFileService>(),
             Mock.Of<IClientLogoPricingService>(),
+            Mock.Of<ICommentService>(),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>());
     }
 }

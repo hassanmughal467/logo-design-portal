@@ -9,7 +9,7 @@ import { takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus } from '@shared/models/order.model';
 import { isOrderLocked } from '@shared/utils/order-locking';
 import { LogoFile, FileType } from '@shared/models/file.model';
-import { OrderRevision } from '@shared/models/revision.model';
+import { OrderRevision, RevisionAttachment } from '@shared/models/revision.model';
 import { OrderComment, OrderCommentUnreadCounts } from '@shared/models/comment.model';
 
 @Component({
@@ -18,6 +18,8 @@ import { OrderComment, OrderCommentUnreadCounts } from '@shared/models/comment.m
   styleUrls: ['./order-detail.component.scss']
 })
 export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
+  private readonly designerClientAliasName = 'Hawk Merchandising';
+  private readonly designerClientAliasRole = 'SuperAdmin';
   @Input() orderId: string | null = null;
   @Input() visible: boolean = false;
   @Output() visibleChange = new EventEmitter<boolean>();
@@ -27,11 +29,13 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   files: LogoFile[] = [];
   revisions: OrderRevision[] = [];
   comments: OrderComment[] = [];
-  unreadCounts: OrderCommentUnreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0 };
+  unreadCounts: OrderCommentUnreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0, unreadPriceNegotiationNotes: 0 };
   loading = false;
   loadFailed = false;
   errorMessage = '';
   activeTab = 0;
+  private commentsLoadedForOrderId: string | null = null;
+  private revisionsLoadedForOrderId: string | null = null;
   
   // Dialogs
   showPriceApprovalDialog = false;
@@ -47,10 +51,20 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   showRefundDialog = false;
   showEditClientPriceDialog = false;
   showRequestPriceDialog = false;
+  showImagePreviewDialog = false;
+  /** 'order' = logo order files; 'revision' = client revision attachments */
+  imagePreviewKind: 'order' | 'revision' = 'order';
+  imagePreviewFiles: LogoFile[] = [];
+  revisionImagePreviewFiles: RevisionAttachment[] = [];
+  imagePreviewIndex = 0;
+  imagePreviewUrl: string | null = null;
+  imagePreviewLoading = false;
   
   // Edit client price
   editClientChargePrice = 0;
   designerRequestedPrice = 0;
+  /** Optional note with designer's price request (saved to payout negotiation history). */
+  designerRequestPriceMessage = '';
   
   // Cancel/Archive data
   cancellationReason = '';
@@ -61,8 +75,13 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   // Form data
   proposedPrice = 0;
   priceApprovalNotes = '';
+  clientPriceApprovalAction: 'Approve' | 'Modify' | 'Reject' = 'Approve';
+  clientCounterPrice = 0;
+  clientApprovedPrice = 0;
   designerPriceApprovalAction: 'Approve' | 'Modify' | 'Reject' = 'Approve';
   designerApprovedPrice = 0;
+  /** Optional note from admin on designer price approval (saved to payout negotiation history). */
+  designerPriceApprovalMessage = '';
   selectedDesignerId: string | null = null;
   availableDesigners: any[] = [];
   selectedFileIds: string[] = [];
@@ -117,10 +136,12 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       this.files = [];
       this.revisions = [];
       this.comments = [];
-      this.unreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0 };
+      this.unreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0, unreadPriceNegotiationNotes: 0 };
       this.activeTab = 0;
       this.loadFailed = false;
       this.errorMessage = '';
+      this.commentsLoadedForOrderId = null;
+      this.revisionsLoadedForOrderId = null;
     }
   }
 
@@ -134,6 +155,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnDestroy(): void {
+    this.cleanupImagePreviewUrl();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -148,9 +170,8 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
         next: (order) => {
           this.order = order;
           this.loadFiles(orderId);
-          this.loadRevisions(orderId);
-          this.loadComments(orderId);
           this.loadUnreadCounts(orderId);
+          this.loadTabDataForCurrentTab();
           this.loading = false;
         },
         error: (error) => {
@@ -200,28 +221,16 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   loadRevisions(orderId: string): void {
-    // Only load revisions for Admin, SuperAdmin, and Designer
-    // Clients don't need to see revision details
-    const user = this.authService.getCurrentUser();
-    if (user?.role === 'Client') {
-      this.revisions = [];
-      return;
-    }
-    // Avoid expected 404 when order has never had a revision request.
-    if ((this.order?.revisionCount ?? 0) === 0) {
-      this.revisions = [];
-      return;
-    }
-
     // Get the latest revision (Admin/Designer can see it)
     this.apiService.get<OrderRevision>(`revisions/orders/${orderId}/latest`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (revision) => {
-          // Convert single revision to array for display
-          this.revisions = revision ? [revision] : [];
+          const normalized = this.normalizeRevisionPayload(revision as unknown as Record<string, unknown>);
+          this.revisions = normalized ? [normalized] : [];
         },
         error: (error) => {
+          this.revisionsLoadedForOrderId = null;
           // 404 is expected when there are no revisions, so handle gracefully
           if (error.status === 404) {
             this.revisions = [];
@@ -233,15 +242,45 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       });
   }
 
+  private normalizeRevisionPayload(raw: Record<string, unknown> | null | undefined): OrderRevision | null {
+    if (!raw) return null;
+    const filesRaw = (raw['files'] ?? raw['Files']) as unknown;
+    const filesList = Array.isArray(filesRaw) ? filesRaw : [];
+    const files: RevisionAttachment[] = filesList.map((f: Record<string, unknown>) => ({
+      id: String(f['id'] ?? f['Id'] ?? ''),
+      fileName: String(f['fileName'] ?? f['FileName'] ?? ''),
+      originalFileName: String(f['originalFileName'] ?? f['OriginalFileName'] ?? ''),
+      fileSize: Number(f['fileSize'] ?? f['FileSize'] ?? 0),
+      contentType: String(f['contentType'] ?? f['ContentType'] ?? ''),
+      createdAt: new Date((f['createdAt'] ?? f['CreatedAt']) as string | number | Date)
+    }));
+    return {
+      id: String(raw['id'] ?? raw['Id'] ?? ''),
+      orderId: String(raw['orderId'] ?? raw['OrderId'] ?? ''),
+      instructions: String(raw['instructions'] ?? raw['Instructions'] ?? ''),
+      requestedBy: String(raw['requestedBy'] ?? raw['RequestedBy'] ?? ''),
+      requestedByName: String(raw['requestedByName'] ?? raw['RequestedByName'] ?? ''),
+      isResolved: Boolean(raw['isResolved'] ?? raw['IsResolved']),
+      resolvedAt: (raw['resolvedAt'] ?? raw['ResolvedAt'])
+        ? new Date(String(raw['resolvedAt'] ?? raw['ResolvedAt']))
+        : undefined,
+      createdAt: new Date((raw['createdAt'] ?? raw['CreatedAt']) as string | number | Date),
+      fileCount: raw['fileCount'] != null ? Number(raw['fileCount']) : (raw['FileCount'] != null ? Number(raw['FileCount']) : undefined),
+      files
+    };
+  }
+
   loadComments(orderId: string): void {
     this.apiService.get<OrderComment[]>(`comments/orders/${orderId}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (comments) => {
           this.comments = comments;
+          this.commentsLoadedForOrderId = orderId;
         },
         error: () => {
           this.comments = [];
+          this.commentsLoadedForOrderId = null;
         }
       });
   }
@@ -251,17 +290,21 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (counts) => {
-          this.unreadCounts = counts;
+          this.unreadCounts = {
+            ...counts,
+            unreadPriceNegotiationNotes: counts.unreadPriceNegotiationNotes ?? 0
+          };
         },
         error: () => {
-          this.unreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0 };
+          this.unreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0, unreadPriceNegotiationNotes: 0 };
         }
       });
   }
 
   onTabChange(index: number): void {
     this.activeTab = index;
-    if (index === 2 && this.order?.id) {
+    this.loadTabDataForCurrentTab();
+    if ((index === 2 || index === 3) && this.order?.id) {
       this.apiService.post(`comments/orders/${this.order.id}/mark-read`, {})
         .pipe(takeUntil(this.destroy$))
         .subscribe({
@@ -269,6 +312,53 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
           error: () => {}
         });
     }
+  }
+
+  private loadTabDataForCurrentTab(): void {
+    const orderId = this.order?.id;
+    if (!orderId) return;
+
+    // Files tab is index 0 and is already loaded with order.
+    if (this.activeTab === 1) {
+      this.loadRevisionsIfNeeded(orderId);
+      return;
+    }
+
+    // Comments tab (2) + Price Negotiating Notes tab (3) both depend on comments.
+    if (this.activeTab === 2 || this.activeTab === 3) {
+      this.loadCommentsIfNeeded(orderId);
+    }
+  }
+
+  private loadRevisionsIfNeeded(orderId: string): void {
+    if (this.revisionsLoadedForOrderId === orderId) return;
+    this.revisionsLoadedForOrderId = orderId;
+    this.loadRevisions(orderId);
+  }
+
+  private loadCommentsIfNeeded(orderId: string): void {
+    if (this.commentsLoadedForOrderId === orderId) return;
+    this.commentsLoadedForOrderId = orderId;
+    this.loadComments(orderId);
+  }
+
+  /** Order comments only (excludes price negotiation threads). */
+  get generalComments(): OrderComment[] {
+    return this.comments.filter(
+      c => c.commentType !== 'PriceNegotiationClient' && c.commentType !== 'PriceNegotiationDesigner'
+    );
+  }
+
+  get priceNegotiationClientNotes(): OrderComment[] {
+    return this.comments.filter(c => c.commentType === 'PriceNegotiationClient');
+  }
+
+  get priceNegotiationDesignerNotes(): OrderComment[] {
+    return this.comments.filter(c => c.commentType === 'PriceNegotiationDesigner');
+  }
+
+  get showPriceNegotiationTab(): boolean {
+    return this.isClient || this.isDesigner || this.isAdmin || this.isSuperAdmin;
   }
 
   approveCommentForClient(comment: OrderComment): void {
@@ -287,11 +377,62 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       });
   }
 
+  /**
+   * Client charge being discussed in Request price approval (admin → client). Not designer payout (PKR).
+   */
+  get clientPriceApprovalProposedAmount(): number {
+    if (!this.order) return 0;
+    return (
+      this.order.clientPrice ??
+      this.order.clientChargePrice ??
+      this.order.clientBasePrice ??
+      this.order.price ??
+      0
+    );
+  }
+
+  /**
+   * True when the client accepted the proposed client charge (separate from designer PKR approval).
+   * Backend sets priceUpdatedByRole to Client in ApprovePrice / respond-price-approval approve.
+   */
+  get clientAcceptedClientCharge(): boolean {
+    return this.order?.priceUpdatedByRole === 'Client';
+  }
+
+  /** Highlight client charge row when the client has formally approved their price. */
+  get clientChargeRowApproved(): boolean {
+    return this.clientAcceptedClientCharge || (!!this.order?.priceApproved && this.isClient);
+  }
+
   // Price Approval
   openPriceApprovalDialog(): void {
-    this.proposedPrice = this.order?.price || 0;
+    // Default admin request to current client charge / base — not designer proposedPrice (legacy PKR field).
+    this.proposedPrice = this.clientPriceApprovalProposedAmount;
+    if (this.proposedPrice <= 0) {
+      this.proposedPrice = this.order?.price ?? 0;
+    }
+    // Client should see admin note separately; this textarea is for the client's response.
     this.priceApprovalNotes = '';
+    this.clientPriceApprovalAction = 'Approve';
+    this.clientCounterPrice = this.clientPriceApprovalProposedAmount;
+    this.clientApprovedPrice = this.clientCounterPrice;
     this.showPriceApprovalDialog = true;
+  }
+
+  onClientPriceApprovalActionChange(): void {
+    // Keep approved price synced with the latest client-facing proposal (not designer proposed).
+    if (this.clientPriceApprovalAction === 'Approve') {
+      this.clientApprovedPrice = this.clientPriceApprovalProposedAmount;
+      this.clientCounterPrice = this.clientApprovedPrice;
+    } else if (this.clientPriceApprovalAction === 'Modify') {
+      if (!this.clientCounterPrice || this.clientCounterPrice <= 0) {
+        this.clientCounterPrice = this.clientPriceApprovalProposedAmount;
+      }
+      this.clientApprovedPrice = this.clientCounterPrice;
+    } else {
+      // Reject: nothing to approve
+      this.clientApprovedPrice = 0;
+    }
   }
 
   requestPriceApproval(): void {
@@ -348,6 +489,39 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     });
   }
 
+  submitClientPriceApproval(): void {
+    if (!this.order) return;
+    if ((this.clientPriceApprovalAction === 'Approve' || this.clientPriceApprovalAction === 'Modify')
+      && (!this.clientApprovedPrice || this.clientApprovedPrice <= 0)) {
+      this.messageService.add({ severity: 'warn', summary: 'Required', detail: 'Approved price is required.' });
+      return;
+    }
+
+    this.apiService.post(`orders/${this.order.id}/respond-price-approval`, {
+      action: this.clientPriceApprovalAction,
+      counterPrice: this.clientPriceApprovalAction === 'Modify' ? this.clientApprovedPrice : null,
+      message: this.priceApprovalNotes
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Response submitted'
+        });
+        this.showPriceApprovalDialog = false;
+        this.loadOrder(this.order!.id);
+        this.orderUpdated.emit();
+      },
+      error: (error) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: error.error?.error || 'Failed to submit response'
+        });
+      }
+    });
+  }
+
   // Order Approval
   approveOrder(): void {
     if (!this.order) return;
@@ -383,17 +557,20 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   loadDesigners(): void {
-    this.apiService.get<any>('users?page=1&pageSize=500')
+    // Use designer profiles so selectedDesignerId matches order.designerId (DesignerProfile.Id)
+    this.apiService.get<any>('users/designer-profiles')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
-          const users = ApiService.extractItems<any>(response);
-          this.availableDesigners = users
-            .filter(u => u.role === 'Designer' || u.roleName === 'Designer')
-            .map(u => {
-              const fullName = [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
-              return { label: fullName || u.email || 'Unknown Designer', value: u.id };
-            });
+          const profiles = Array.isArray(response) ? response : ApiService.extractItems<any>(response);
+          this.availableDesigners = (profiles || []).map((p: any) => {
+            const fullName = [p.userFirstName, p.userLastName].filter(Boolean).join(' ').trim();
+            return {
+              label: fullName || p.userEmail || 'Unknown Designer',
+              value: p.id, // DesignerProfile.Id (matches order.designerId)
+              userId: p.userId // needed for assign API
+            };
+          });
         },
         error: () => {
           this.availableDesigners = [];
@@ -404,8 +581,15 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   assignDesigner(): void {
     if (!this.order || !this.selectedDesignerId) return;
 
+    const selected = this.availableDesigners.find(d => d.value === this.selectedDesignerId);
+    const designerUserId = selected?.userId;
+    if (!designerUserId) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Selected designer is invalid.' });
+      return;
+    }
+
     this.apiService.post(`orders/${this.order.id}/assign`, {
-      designerId: this.selectedDesignerId
+      designerId: designerUserId
     }).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
         this.messageService.add({
@@ -458,8 +642,265 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     this.activeTab = 0;
   }
 
+  private cleanupImagePreviewUrl(): void {
+    if (this.imagePreviewUrl) {
+      window.URL.revokeObjectURL(this.imagePreviewUrl);
+      this.imagePreviewUrl = null;
+    }
+  }
+
+  private hasImageExtension(fileName: string): boolean {
+    return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(fileName);
+  }
+
+  isPreviewableImage(file: LogoFile): boolean {
+    if (!file) return false;
+    return (file.contentType || '').toLowerCase().startsWith('image/') || this.hasImageExtension(file.originalFileName || file.fileName || '');
+  }
+
+  isRevisionAttachmentPreviewable(file: RevisionAttachment): boolean {
+    if (!file) return false;
+    return (file.contentType || '').toLowerCase().startsWith('image/') || this.hasImageExtension(file.originalFileName || file.fileName || '');
+  }
+
+  private getPreviewableImageFiles(baseFiles?: LogoFile[]): LogoFile[] {
+    const source = baseFiles ?? this.files;
+    return source.filter(file => this.isPreviewableImage(file));
+  }
+
+  openImagePreview(file: LogoFile, baseFiles?: LogoFile[]): void {
+    if (!this.order || !this.isPreviewableImage(file)) {
+      return;
+    }
+
+    const imageFiles = this.getPreviewableImageFiles(baseFiles);
+    if (imageFiles.length === 0) {
+      this.messageService.add({ severity: 'warn', summary: 'Preview unavailable', detail: 'No previewable image files found.' });
+      return;
+    }
+
+    const selectedIndex = imageFiles.findIndex(f => f.id === file.id);
+    this.imagePreviewKind = 'order';
+    this.revisionImagePreviewFiles = [];
+    this.imagePreviewFiles = imageFiles;
+    this.imagePreviewIndex = selectedIndex >= 0 ? selectedIndex : 0;
+    this.showImagePreviewDialog = true;
+    this.loadCurrentImagePreview();
+  }
+
+  openRevisionImagePreview(file: RevisionAttachment, baseFiles?: RevisionAttachment[]): void {
+    if (!this.order || !file?.id || !this.isRevisionAttachmentPreviewable(file)) {
+      return;
+    }
+
+    const source = baseFiles?.length ? baseFiles : [];
+    const imageFiles = source.filter(f => this.isRevisionAttachmentPreviewable(f));
+    if (imageFiles.length === 0) {
+      this.messageService.add({ severity: 'warn', summary: 'Preview unavailable', detail: 'No previewable revision images.' });
+      return;
+    }
+
+    const selectedIndex = imageFiles.findIndex(f => f.id === file.id);
+    this.imagePreviewKind = 'revision';
+    this.imagePreviewFiles = [];
+    this.revisionImagePreviewFiles = imageFiles;
+    this.imagePreviewIndex = selectedIndex >= 0 ? selectedIndex : 0;
+    this.showImagePreviewDialog = true;
+    this.loadCurrentImagePreview();
+  }
+
+  closeImagePreview(): void {
+    this.showImagePreviewDialog = false;
+    this.imagePreviewKind = 'order';
+    this.imagePreviewFiles = [];
+    this.revisionImagePreviewFiles = [];
+    this.imagePreviewIndex = 0;
+    this.cleanupImagePreviewUrl();
+  }
+
+  get currentImagePreviewFile(): LogoFile | null {
+    if (!this.imagePreviewFiles.length) return null;
+    return this.imagePreviewFiles[this.imagePreviewIndex] ?? null;
+  }
+
+  get currentRevisionImagePreviewFile(): RevisionAttachment | null {
+    if (!this.revisionImagePreviewFiles.length) return null;
+    return this.revisionImagePreviewFiles[this.imagePreviewIndex] ?? null;
+  }
+
+  get imagePreviewGalleryLength(): number {
+    return this.imagePreviewKind === 'revision'
+      ? this.revisionImagePreviewFiles.length
+      : this.imagePreviewFiles.length;
+  }
+
+  get imagePreviewDialogHeader(): string {
+    const prefix = this.imagePreviewKind === 'revision' ? '[Revision] ' : '';
+    const name = this.imagePreviewKind === 'revision'
+      ? (this.currentRevisionImagePreviewFile?.originalFileName || 'Image preview')
+      : (this.currentImagePreviewFile?.originalFileName || 'Image preview');
+    return prefix + name;
+  }
+
+  get imagePreviewAlt(): string {
+    return this.imagePreviewKind === 'revision'
+      ? (this.currentRevisionImagePreviewFile?.originalFileName || 'Revision preview')
+      : (this.currentImagePreviewFile?.originalFileName || 'Preview image');
+  }
+
+  canGoPreviousImage(): boolean {
+    return this.imagePreviewGalleryLength > 1;
+  }
+
+  canGoNextImage(): boolean {
+    return this.imagePreviewGalleryLength > 1;
+  }
+
+  previousImagePreview(): void {
+    const len = this.imagePreviewGalleryLength;
+    if (len <= 0) return;
+    this.imagePreviewIndex = (this.imagePreviewIndex - 1 + len) % len;
+    this.loadCurrentImagePreview();
+  }
+
+  nextImagePreview(): void {
+    const len = this.imagePreviewGalleryLength;
+    if (len <= 0) return;
+    this.imagePreviewIndex = (this.imagePreviewIndex + 1) % len;
+    this.loadCurrentImagePreview();
+  }
+
+  downloadRevisionAttachment(file: RevisionAttachment): void {
+    if (!file?.id) return;
+    this.apiService.getBlob(`revisions/files/${file.id}/download`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (blob: Blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = file.originalFileName || 'download';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'File downloaded' });
+        },
+        error: () => {
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to download file' });
+        }
+      });
+  }
+
+  downloadCurrentImagePreview(): void {
+    if (this.imagePreviewKind === 'revision') {
+      const f = this.currentRevisionImagePreviewFile;
+      if (f) this.downloadRevisionAttachment(f);
+    } else {
+      const f = this.currentImagePreviewFile;
+      if (f) this.downloadFile(f);
+    }
+  }
+
+  private loadCurrentImagePreview(): void {
+    this.imagePreviewLoading = true;
+    this.cleanupImagePreviewUrl();
+
+    if (this.imagePreviewKind === 'revision') {
+      const currentFile = this.currentRevisionImagePreviewFile;
+      if (!currentFile) {
+        this.imagePreviewLoading = false;
+        return;
+      }
+
+      this.apiService.getBlob(`revisions/files/${currentFile.id}/download`)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (blob: Blob) => {
+            const isImageBlob = (blob.type || '').toLowerCase().startsWith('image/');
+            if (!isImageBlob) {
+              this.imagePreviewLoading = false;
+              this.messageService.add({
+                severity: 'warn',
+                summary: 'Preview unavailable',
+                detail: `${currentFile.originalFileName} is not an image file.`
+              });
+              return;
+            }
+
+            this.imagePreviewUrl = window.URL.createObjectURL(blob);
+            this.imagePreviewLoading = false;
+          },
+          error: () => {
+            this.imagePreviewLoading = false;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'Failed to load image preview'
+            });
+          }
+        });
+      return;
+    }
+
+    const currentFile = this.currentImagePreviewFile;
+    if (!currentFile) {
+      this.imagePreviewLoading = false;
+      return;
+    }
+
+    this.apiService.getBlob(`files/${currentFile.id}/download`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (blob: Blob) => {
+          const isImageBlob = (blob.type || '').toLowerCase().startsWith('image/');
+          if (!isImageBlob) {
+            this.imagePreviewLoading = false;
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'Preview unavailable',
+              detail: `${currentFile.originalFileName} is not an image file.`
+            });
+            return;
+          }
+
+          this.imagePreviewUrl = window.URL.createObjectURL(blob);
+          this.imagePreviewLoading = false;
+        },
+        error: () => {
+          this.imagePreviewLoading = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to load image preview'
+          });
+        }
+      });
+  }
+
   openMessagesTab(): void {
     this.activeTab = 2;
+  }
+
+  getDisplayNameForRole(originalName: string | undefined | null, role: string | undefined | null): string {
+    if (this.isDesigner && role === 'Client') {
+      return this.designerClientAliasName;
+    }
+    return (originalName || '').trim() || role || 'User';
+  }
+
+  getDisplayRole(role: string | undefined | null): string {
+    if (this.isDesigner && role === 'Client') {
+      return this.designerClientAliasRole;
+    }
+    return (role || '').trim();
+  }
+
+  getRevisionRequestedByDisplayName(revision: OrderRevision): string {
+    if (this.isDesigner) {
+      return this.designerClientAliasName;
+    }
+    return (revision.requestedByName || '').trim() || 'Client';
   }
 
   selectAllFilesToSend(): void {
@@ -693,7 +1134,12 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   canRequestPriceApproval(): boolean {
-    return (this.isAdmin || this.isSuperAdmin) && this.order?.status !== OrderStatus.Completed && this.order?.status !== OrderStatus.Cancelled;
+    if (!(this.isAdmin || this.isSuperAdmin) || !this.order) return false;
+    if (isOrderLocked(this.order.status)) return false;
+    if (this.order.status === OrderStatus.Completed || this.order.status === OrderStatus.Cancelled) return false;
+    // Client charge already accepted — use Edit Client Price if admin needs a new amount, then request again if needed
+    if (this.clientAcceptedClientCharge) return false;
+    return true;
   }
 
   canApprovePrice(): boolean {
@@ -704,21 +1150,27 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   canDesignerRequestPrice(): boolean {
     if (!this.order || !this.isDesigner) return false;
     if (!this.order.designCategory || !this.order.designType) return false;
-    if (this.order.priceApproved) return false;
+    const ps = this.order.priceApprovalStatus;
+    if (ps === 'Approved' || ps === 'AutoApproved') return false;
     return true;
   }
 
   openRequestPriceDialog(): void {
     this.designerRequestedPrice = this.order?.standardPrice ?? this.order?.designerProposedPrice ?? this.order?.proposedPrice ?? 0;
+    this.designerRequestPriceMessage = '';
     this.showRequestPriceDialog = true;
   }
 
   submitRequestPrice(): void {
     if (!this.order || this.designerRequestedPrice <= 0) return;
-    this.apiService.post('designer-payout/pricing/propose', {
+    const body: { orderId: string; proposedPrice: number; message?: string } = {
       orderId: this.order.id,
       proposedPrice: this.designerRequestedPrice
-    }).pipe(takeUntil(this.destroy$)).subscribe({
+    };
+    const msg = this.designerRequestPriceMessage?.trim();
+    if (msg) body.message = msg;
+
+    this.apiService.post('designer-payout/pricing/propose', body).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
         this.showRequestPriceDialog = false;
         this.loadOrder(this.order!.id);
@@ -742,6 +1194,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   openDesignerPriceApprovalDialog(): void {
     this.designerApprovedPrice = this.order?.designerProposedPrice ?? this.order?.proposedPrice ?? 0;
     this.designerPriceApprovalAction = 'Approve';
+    this.designerPriceApprovalMessage = '';
     this.showDesignerPriceApprovalDialog = true;
   }
 
@@ -752,10 +1205,14 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       this.messageService.add({ severity: 'warn', summary: 'Required', detail: 'Approved price is required.' });
       return;
     }
-    this.apiService.put(`designer-payout/orders/${this.order.id}/approve-price`, {
+    const approveBody: { action: string; approvedPrice: number | null; message?: string } = {
       action: this.designerPriceApprovalAction,
       approvedPrice: approvedPrice ?? null
-    }).pipe(takeUntil(this.destroy$)).subscribe({
+    };
+    const adminMsg = this.designerPriceApprovalMessage?.trim();
+    if (adminMsg) approveBody.message = adminMsg;
+
+    this.apiService.put(`designer-payout/orders/${this.order.id}/approve-price`, approveBody).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
         this.showDesignerPriceApprovalDialog = false;
         this.loadOrder(this.order!.id);
@@ -769,7 +1226,11 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   canAssignDesigner(): boolean {
-    return (this.isAdmin || this.isSuperAdmin) && !this.order?.designerId;
+    return (this.isAdmin || this.isSuperAdmin) && !isOrderLocked(this.order?.status || '');
+  }
+
+  get assignDesignerButtonLabel(): string {
+    return this.order?.designerId ? 'Change Designer' : 'Assign Designer';
   }
 
   /** Admin can allow extra revisions when client has exceeded package limit */
@@ -840,14 +1301,6 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     return false;
-  }
-
-  shouldShowOrderDetails(): boolean {
-    // Hide order details from client when revision is requested
-    if (this.isClient && this.order?.status === OrderStatus.RevisionRequested) {
-      return false;
-    }
-    return true;
   }
 
   /** Client Pricing: SuperAdmin always, Admin only if granted permission, Client only after designer sends */

@@ -1,0 +1,26 @@
+{
+  "stryker-config": {
+    "solution": "LogoDesignPortal.sln",
+    "test-projects": [
+      "src/LogoDesignPortal.Application.Tests/LogoDesignPortal.Application.Tests.csproj"
+    ],
+    "reporters": [
+      "html",
+      "progress",
+      "cleartext"
+    ],
+    "report-file-name": "StrykerOutput/backend-mutation-report.html",
+    "thresholds": {
+      "high": 80,
+      "low": 65,
+      "break": 60
+    },
+    "mutate": [
+      "src/LogoDesignPortal.Application/**/*.cs",
+      "!src/LogoDesignPortal.Application/**/DependencyInjection.cs",
+      "!src/LogoDesignPortal.Application/**/Migrations/**",
+      "!src/LogoDesignPortal.Application/**/bin/**",
+      "!src/LogoDesignPortal.Application/**/obj/**"
+    ]
+  }
+}

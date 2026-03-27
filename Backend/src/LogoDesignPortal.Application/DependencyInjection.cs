@@ -39,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IDesignerPayoutService, DesignerPayoutService>();
         services.AddScoped<IClientLogoPricingService, ClientLogoPricingService>();
         services.AddScoped<IDesignerLogoPricingService, DesignerLogoPricingService>();
+        services.AddScoped<IQuoteService, QuoteService>();
         
         // Add HttpClient for PaymentService
         services.AddHttpClient();

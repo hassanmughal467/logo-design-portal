@@ -25,6 +25,11 @@ public class MessageService : IMessageService
 
     public async Task<MessageResponseDto> CreateMessageAsync(CreateMessageRequestDto request, Guid senderId)
     {
+        if (string.IsNullOrWhiteSpace(request.Content))
+        {
+            throw new InvalidOperationException("Message content cannot be empty.");
+        }
+
         var sender = await _context.Users
             .Include(u => u.Role)
             .FirstOrDefaultAsync(u => u.Id == senderId);
@@ -42,6 +47,10 @@ public class MessageService : IMessageService
             var recipient = await _context.Users
                 .Include(u => u.Role)
                 .FirstOrDefaultAsync(u => u.Id == request.RecipientId.Value);
+            if (recipient == null)
+            {
+                throw new InvalidOperationException("Recipient not found.");
+            }
             var recipientRole = recipient?.Role?.Name ?? string.Empty;
 
             if (senderRole == "Client" && recipientRole == "Designer")

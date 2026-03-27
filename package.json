@@ -7,7 +7,9 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "mutation:backend": "dotnet stryker --config-file Backend/stryker-config.json",
+    "mutation:frontend": "npm run mutation --prefix Frontend"
   },
   "keywords": [],
   "author": "",

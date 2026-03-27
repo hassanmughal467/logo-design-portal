@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace LogoDesignPortal.Application.DTOs.DesignerPayout;
 
 /// <summary>
@@ -9,6 +11,10 @@ public class ApproveDesignerPriceRequestDto
     public decimal? ApprovedPrice { get; set; }
     /// <summary>Approve, Modify, or Reject.</summary>
     public DesignerPriceApprovalAction Action { get; set; }
+
+    /// <summary>Optional message to the designer (shown in payout negotiation history).</summary>
+    [MaxLength(2000)]
+    public string? Message { get; set; }
 }
 
 public enum DesignerPriceApprovalAction

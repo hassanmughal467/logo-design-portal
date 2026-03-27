@@ -13,4 +13,10 @@ public enum CommentType
     DesignerFeedback = 3,
     /// <summary>Admin relay/mediation message to Client.</summary>
     AdminRelay = 4,
+
+    /// <summary>Price negotiation between Admin/SuperAdmin and Client only (hidden from designers).</summary>
+    PriceNegotiationClient = 5,
+
+    /// <summary>Price negotiation between Admin/SuperAdmin and Designer only (hidden from clients).</summary>
+    PriceNegotiationDesigner = 6,
 }

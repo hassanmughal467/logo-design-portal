@@ -128,6 +128,14 @@ public class LogoOrderConfiguration : IEntityTypeConfiguration<LogoOrder>
             .IsRequired()
             .HasDefaultValue(false);
 
+        builder.Property(e => e.OrderSource)
+            .IsRequired()
+            .HasConversion<int>()
+            .HasDefaultValue(OrderSource.Portal);
+
+        builder.Property(e => e.QuoteId)
+            .IsRequired(false);
+
         builder.Property(e => e.PriceUpdatedByRole)
             .HasMaxLength(50);
 
@@ -160,5 +168,6 @@ public class LogoOrderConfiguration : IEntityTypeConfiguration<LogoOrder>
         builder.HasIndex(e => new { e.ClientId, e.CreatedAt });
         builder.HasIndex(e => new { e.ClientId, e.Status });
         builder.HasIndex(e => new { e.DesignerId, e.Status });
+        builder.HasIndex(e => e.QuoteId).IsUnique();
     }
 }

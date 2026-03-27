@@ -38,6 +38,62 @@ public class DesignerPayoutServiceTests
         Assert.Equal(5000, order!.DesignerProposedPrice);
         Assert.Equal(DesignCategory.EmbroideryDigitizing, order.DesignCategory);
         Assert.Equal(DesignType.LeftChest, order.DesignType);
+        Assert.Equal(OrderStatus.PriceApprovalPending, order.Status);
+    }
+
+    [Fact]
+    public async Task ApproveDesignerPriceAsync_Approve_RestoresInProgress_WhenClientChargeAligned()
+    {
+        var (context, orderId, designerUserId) = await SeedOrderWithDesignerAsync(OrderStatus.InProgress);
+        var designerPayoutService = CreateDesignerPayoutService(context);
+
+        await designerPayoutService.SubmitDesignerPricingAsync(orderId, new SubmitDesignerPricingRequestDto
+        {
+            DesignCategory = DesignCategory.EmbroideryDigitizing,
+            DesignType = DesignType.LeftChest,
+            ProposedPrice = 5000
+        }, designerUserId);
+
+        var orderBefore = await context.LogoOrders.FindAsync(orderId);
+        Assert.Equal(OrderStatus.PriceApprovalPending, orderBefore!.Status);
+
+        var adminUserId = Guid.NewGuid();
+        await designerPayoutService.ApproveDesignerPriceAsync(orderId, new ApproveDesignerPriceRequestDto
+        {
+            Action = DesignerPriceApprovalAction.Approve
+        }, adminUserId);
+
+        var orderAfter = await context.LogoOrders.FindAsync(orderId);
+        Assert.NotNull(orderAfter);
+        Assert.Equal(OrderStatus.InProgress, orderAfter!.Status);
+        Assert.False(orderAfter.PriceApproved);
+        Assert.Equal(PriceApprovalStatus.Approved, orderAfter.PriceApprovalStatus);
+    }
+
+    [Fact]
+    public async Task ApproveDesignerPriceAsync_Approve_KeepsPriceApprovalPending_WhenClientProposedChargeDiffers()
+    {
+        var (context, orderId, designerUserId) = await SeedOrderWithDesignerAsync(OrderStatus.InProgress);
+        var order = await context.LogoOrders.FindAsync(orderId);
+        order!.ClientPrice = 200m;
+        order.ClientChargePrice = 100m;
+        await context.SaveChangesAsync();
+
+        var designerPayoutService = CreateDesignerPayoutService(context);
+        await designerPayoutService.SubmitDesignerPricingAsync(orderId, new SubmitDesignerPricingRequestDto
+        {
+            DesignCategory = DesignCategory.EmbroideryDigitizing,
+            DesignType = DesignType.LeftChest,
+            ProposedPrice = 5000
+        }, designerUserId);
+
+        await designerPayoutService.ApproveDesignerPriceAsync(orderId, new ApproveDesignerPriceRequestDto
+        {
+            Action = DesignerPriceApprovalAction.Approve
+        }, Guid.NewGuid());
+
+        var orderAfter = await context.LogoOrders.FindAsync(orderId);
+        Assert.Equal(OrderStatus.PriceApprovalPending, orderAfter!.Status);
     }
 
     [Fact]
@@ -150,7 +206,7 @@ public class DesignerPayoutServiceTests
 
         order!.Status = OrderStatus.Completed;
         order.BillingEligible = true;
-        order.PriceApproved = true;
+        order.PriceApprovalStatus = PriceApprovalStatus.Approved;
         order.DesignerApprovedPrice = 5000;
         order.ApprovedPrice = 5000;
         order.CompletedDate = DateTime.UtcNow;
@@ -174,6 +230,8 @@ public class DesignerPayoutServiceTests
         return new DesignerPayoutService(
             context,
             Mock.Of<INotificationService>(),
+            Mock.Of<IRealtimeEntityUpdateSender>(),
+            Mock.Of<ICommentService>(),
             Options.Create(safetyOptions),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<DesignerPayoutService>>());
     }

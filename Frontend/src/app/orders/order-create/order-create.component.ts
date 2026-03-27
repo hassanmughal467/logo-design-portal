@@ -24,7 +24,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   loading = false;
   uploadingFiles = false;
   submitError = '';
-  minDate: Date = new Date();
+  minDate: Date = OrderCreateComponent.todayAtMidnight();
   selectedFiles: File[] = [];
   isDragOver = false;
   priorityOptions = [
@@ -54,18 +54,25 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   showPlacementDropdown = false;
   showStylePreferencesDropdown = false;
 
+  private static todayAtMidnight(): Date {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
   constructor(
     private fb: FormBuilder,
     private apiService: ApiService,
     private authService: AuthService,
     private messageService: MessageService
   ) {
+    const today = OrderCreateComponent.todayAtMidnight();
     this.orderForm = this.fb.group({
       title: ['', [Validators.required, Validators.minLength(3)]],
       description: ['', [Validators.required, Validators.maxLength(1000)]],
       price: [0], // Hidden: admin sets price when no client pricing exists
       priority: [2], // Default to Medium (2)
-      deadline: [null],
+      deadline: [today],
       logoCategory: [null],
       placement: [null],
       requiredFormats: [''],
@@ -89,12 +96,14 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   }
 
   private prefillForm(data: any): void {
+    const today = OrderCreateComponent.todayAtMidnight();
+    this.minDate = today;
     this.orderForm.patchValue({
       title: data.title || '',
       description: data.description || '',
       price: data.price || 0,
       priority: data.priority || 2,
-      deadline: null, // Always reset deadline for reorders
+      deadline: today,
       logoCategory: data.logoCategory || null,
       placement: data.placement || null,
       requiredFormats: data.requiredFormats || '',
@@ -108,12 +117,14 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   }
 
   resetForm(): void {
+    const today = OrderCreateComponent.todayAtMidnight();
+    this.minDate = today;
     this.submitError = '';
     this.orderForm.reset({
       title: '',
       description: '',
       price: 0,
-      deadline: null,
+      deadline: today,
       priority: 2, // Default to Medium (2)
       logoCategory: null,
       placement: null,

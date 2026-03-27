@@ -11,7 +11,7 @@ module.exports = function (config) {
     ],
     client: {
       jasmine: {
-        random: false
+        random: true
       },
       clearContext: false
     },
@@ -23,16 +23,33 @@ module.exports = function (config) {
       subdir: '.',
       reporters: [
         { type: 'html' },
-        { type: 'text-summary' }
-      ]
+        { type: 'text-summary' },
+        { type: 'lcovonly' }
+      ],
+      // Watermarks: raise toward 60%+ line coverage as specs grow (CI enforces these minimums).
+      check: {
+        global: {
+          statements: 65,
+          branches: 55,
+          functions: 65,
+          lines: 65
+        }
+      }
     },
-    reporters: ['progress', 'kjhtml'],
+    reporters: ['progress', 'kjhtml', 'coverage'],
     port: 9876,
     colors: true,
     logLevel: config.LOG_INFO,
-    autoWatch: true,
-    browsers: ['Chrome'],
-    singleRun: false,
-    restartOnFileChange: true
+    autoWatch: false,
+    browsers: ['ChromeHeadlessCI'],
+    customLaunchers: {
+      // ChromeHeadlessCI: stable defaults for GitHub Actions / Docker (no sandbox).
+      ChromeHeadlessCI: {
+        base: 'ChromeHeadless',
+        flags: ['--no-sandbox', '--disable-gpu', '--window-size=1280,720']
+      }
+    },
+    singleRun: true,
+    restartOnFileChange: false
   });
 };

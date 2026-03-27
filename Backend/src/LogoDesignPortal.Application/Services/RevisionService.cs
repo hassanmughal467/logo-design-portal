@@ -8,6 +8,7 @@ using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
+using System.IO;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -264,10 +265,22 @@ public class RevisionService : IRevisionService
                 .FirstOrDefaultAsync() ?? "Client";
             if (string.IsNullOrEmpty(clientName)) clientName = "Client";
             var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
-            var title = "Revision Requested";
-            var message = $"{clientName} requested a revision for order (#{orderNumber})";
-            await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId, requestedBy);
-            await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, message, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId, requestedBy);
+            var attachmentCount = request.Files?.Length ?? 0;
+            var attachmentPart = attachmentCount > 0 ? $" [Revision] Includes {attachmentCount} reference file(s)." : string.Empty;
+            var title = "[Revision] Revision requested";
+            var note = (request.Instructions ?? string.Empty).Trim();
+            if (note.Length > 180)
+            {
+                note = note.Substring(0, 180) + "...";
+            }
+            var messageStaff = string.IsNullOrWhiteSpace(note)
+                ? $"[Revision] {clientName} requested a revision for order (#{orderNumber}).{attachmentPart}"
+                : $"[Revision] {clientName} requested a revision for order (#{orderNumber}). Note: {note}{attachmentPart}";
+            var messageDesigner = string.IsNullOrWhiteSpace(note)
+                ? $"[Revision] A revision was requested for order (#{orderNumber}).{attachmentPart}"
+                : $"[Revision] A revision was requested for order (#{orderNumber}). Note: {note}{attachmentPart}";
+            await _notificationService.CreateNotificationForRoleAsync("Admin", title, messageStaff, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId, requestedBy);
+            await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", title, messageStaff, NotificationType.RevisionRequest, NotificationReferenceType.Order, orderId, requestedBy);
             if (order.DesignerId.HasValue)
             {
                 var designerUserId = await _context.DesignerProfiles
@@ -276,7 +289,7 @@ public class RevisionService : IRevisionService
                     .FirstOrDefaultAsync();
                 if (designerUserId != Guid.Empty)
                 {
-                    await _notificationService.CreateNotificationAsync(designerUserId, title, message, NotificationType.RevisionRequest, orderId, NotificationReferenceType.Order, orderId, requestedBy);
+                    await _notificationService.CreateNotificationAsync(designerUserId, title, messageDesigner, NotificationType.RevisionRequest, orderId, NotificationReferenceType.Order, orderId, requestedBy);
                 }
             }
             var adminUserIds = await GetAdminAndSuperAdminUserIdsAsync();
@@ -324,11 +337,12 @@ public class RevisionService : IRevisionService
         if (order == null)
             return null;
 
-        // Authorization
-        if (userRole == "Client" && order.Client.UserId != userId)
-            throw new ForbiddenAccessException("You don't have access to this order's revisions.");
-
-        if (userRole == "Designer")
+        if (userRole == "Client")
+        {
+            if (order.Client?.UserId != userId)
+                throw new ForbiddenAccessException("You don't have access to this order's revisions.");
+        }
+        else if (userRole == "Designer")
         {
             if (order.DesignerId == null)
                 throw new ForbiddenAccessException("You don't have access to this order's revisions.");
@@ -339,11 +353,10 @@ public class RevisionService : IRevisionService
             if (designer == null || order.DesignerId != designer.Id)
                 throw new ForbiddenAccessException("You don't have access to this order's revisions.");
         }
-
-        // Only Admin and SuperAdmin can see revisions
-        // Designers can see the latest revision for their assigned orders
-        if (userRole != "Admin" && userRole != "SuperAdmin" && userRole != "Designer")
-            return null;
+        else if (userRole != "Admin" && userRole != "SuperAdmin")
+        {
+            throw new ForbiddenAccessException("You don't have access to this order's revisions.");
+        }
 
         var latestRevision = await _context.OrderRevisions
             .Include(r => r.Files)
@@ -355,6 +368,54 @@ public class RevisionService : IRevisionService
             return null;
 
         return await GetRevisionResponseAsync(latestRevision.Id);
+    }
+
+    public async Task<(byte[] Content, string FileName, string ContentType)> DownloadRevisionFileAsync(Guid fileId, Guid userId, string? userRole)
+    {
+        var rf = await _context.RevisionFiles
+            .AsNoTracking()
+            .Include(f => f.Revision)
+            .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsDeleted);
+
+        if (rf?.Revision == null)
+            throw new FileNotFoundException("Revision file not found.");
+
+        var order = await _context.LogoOrders
+            .Include(o => o.Client)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(o => o.Id == rf.Revision.OrderId && !o.IsDeleted);
+
+        if (order == null)
+            throw new FileNotFoundException("Order not found.");
+
+        if (userRole == "Client")
+        {
+            if (order.Client?.UserId != userId)
+                throw new ForbiddenAccessException("You don't have access to this file.");
+        }
+        else if (userRole == "Designer")
+        {
+            if (order.DesignerId == null)
+                throw new ForbiddenAccessException("You don't have access to this file.");
+
+            var designer = await _context.DesignerProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.UserId == userId && !d.IsDeleted);
+
+            if (designer == null || order.DesignerId != designer.Id)
+                throw new ForbiddenAccessException("You don't have access to this file.");
+        }
+        else if (userRole != "Admin" && userRole != "SuperAdmin")
+        {
+            throw new ForbiddenAccessException("You don't have access to this file.");
+        }
+
+        if (!System.IO.File.Exists(rf.FilePath))
+            throw new FileNotFoundException("File is no longer available on disk.");
+
+        var content = await System.IO.File.ReadAllBytesAsync(rf.FilePath);
+        var contentType = string.IsNullOrWhiteSpace(rf.ContentType) ? "application/octet-stream" : rf.ContentType;
+        return (content, rf.OriginalFileName, contentType);
     }
 
     public async Task<OrderResponseDto> ApproveLogoAsync(Guid orderId, ApproveLogoDto request, Guid approvedBy)
@@ -391,7 +452,7 @@ public class RevisionService : IRevisionService
 
         // When Preview files are converted to Final: if pricing exists but not yet approved, trigger admin approval flow.
         // Do NOT block approval or completion; payout eligibility waits until price approval.
-        if (order.ProposedPrice.HasValue && !order.PriceApproved)
+        if (order.ProposedPrice.HasValue && !DesignerPayoutPricingRules.HasFinalizedDesignerPayout(order))
         {
             order.PriceApprovalStatus = PriceApprovalStatus.PendingApproval;
             order.RequiresPriceApproval = true;

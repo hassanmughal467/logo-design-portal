@@ -144,7 +144,8 @@
           [label]="user?.firstName + ' ' + user?.lastName" 
           icon="pi pi-user" 
           (click)="userMenu.toggle($event)"
-          class="p-button-text user-menu-btn">
+          class="p-button-text user-menu-btn"
+          [attr.data-testid]="'header-user-menu'">
           <span class="user-role-badge" [class]="'role-' + user?.role?.toLowerCase()">
             {{ user?.role }}
           </span>

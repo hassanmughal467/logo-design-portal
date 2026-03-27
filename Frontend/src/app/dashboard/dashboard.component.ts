@@ -1,4 +1,5 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
+import { FileUpload } from 'primeng/fileupload';
 import { Router } from '@angular/router';
 import { AuthService } from '@core/services/auth.service';
 import { ApiService } from '@core/services/api.service';
@@ -9,6 +10,7 @@ import { RealtimeNotificationService } from '@core/services/realtime-notificatio
 import { User } from '@shared/models/user.model';
 import { Order, OrderStatus } from '@shared/models/order.model';
 import { MessageService } from 'primeng/api';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Observable, Subject, firstValueFrom, forkJoin } from 'rxjs';
 import { takeUntil, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -41,6 +43,8 @@ export interface OrderTimelineEvent {
   styleUrls: ['./dashboard.component.scss']
 })
 export class DashboardComponent implements OnInit, OnDestroy {
+  @ViewChild('getQuoteFileUpload') private getQuoteFileUpload?: FileUpload;
+
   user: User | null = null;
     dashboardData: DashboardData = {
     stats: {
@@ -172,10 +176,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private notificationService: NotificationService,
     private realtimeNotification: RealtimeNotificationService,
     private messageService: MessageService,
+    private fb: FormBuilder,
     private router: Router,
     private apiService: ApiService
   ) {
     this.notificationUnreadCount$ = this.notificationService.unreadCount$;
+
+    // Quote creation dialog form (client-only)
+    this.quoteForm = this.fb.group({
+      logoName: ['', [Validators.required, Validators.minLength(3)]],
+      description: ['', [Validators.required, Validators.maxLength(2000)]],
+      requestedBudget: [null]
+    });
   }
 
   ngOnInit(): void {
@@ -846,8 +858,67 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Order Create Modal
   showOrderCreateModal = false;
 
+  // Get Quote Dialog (client-only, stays on dashboard)
+  showGetQuoteDialog = false;
+  quoteForm!: FormGroup;
+  quoteSubmitting = false;
+  quoteFiles: File[] = [];
+
   navigateToOrders(): void {
     this.router.navigate(['/orders']);
+  }
+
+  openGetQuoteDialog(): void {
+    this.quoteSubmitting = false;
+    this.quoteFiles = [];
+    this.quoteForm.reset({
+      logoName: '',
+      description: '',
+      requestedBudget: null
+    });
+    this.showGetQuoteDialog = true;
+  }
+
+  onGetQuoteFileSelect(event: any): void {
+    const files: File[] = event.files ? Array.from(event.files) : [];
+    const deduped = files.filter(file => !this.quoteFiles.some(f => f.name === file.name && f.size === file.size));
+    this.quoteFiles = [...this.quoteFiles, ...deduped];
+    this.getQuoteFileUpload?.clear();
+  }
+
+  submitGetQuote(): void {
+    if (this.quoteForm.invalid || this.quoteSubmitting) return;
+
+    const payload = this.quoteForm.value;
+    const formData = new FormData();
+    formData.append('quote', JSON.stringify(payload));
+    this.quoteFiles.forEach(f => formData.append('files', f));
+
+    this.quoteSubmitting = true;
+    this.apiService.post<any>('quotes', formData)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.quoteSubmitting = false;
+          this.showGetQuoteDialog = false;
+          this.quoteFiles = [];
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Created',
+            detail: 'Quote submitted successfully'
+          });
+          // Redirect after submit so client can see their quote
+          this.router.navigate(['/quotes']);
+        },
+        error: (error) => {
+          this.quoteSubmitting = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.error?.error || 'Failed to submit quote'
+          });
+        }
+      });
   }
 
   openCreateOrderModal(): void {

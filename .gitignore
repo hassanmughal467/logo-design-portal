@@ -1,0 +1,16 @@
+# Local Coverlet output folders (dotnet test with ad-hoc output paths)
+Backend/cov-*/
+
+# Mutation testing output
+Backend/StrykerOutput/
+
+# .NET test result drops
+Backend/TestResults/
+
+# One-off local SQL exports (EF/schema experiments — not application migrations)
+Backend/migrate.sql
+Backend/migrate_*.sql
+
+# Uploaded files and API stdout logs — never version user content
+Backend/src/LogoDesignPortal.API/Files/
+Backend/src/LogoDesignPortal.API/logs/

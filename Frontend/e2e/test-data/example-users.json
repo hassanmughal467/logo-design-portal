@@ -1,0 +1,29 @@
+{
+  "_comment": "Reference payloads for API-driven setup (see utils/test-data.ts for TypeScript builders).",
+  "seededSuperAdmin": {
+    "email": "superadmin@logodesign.com",
+    "password": "SuperAdmin@123",
+    "note": "Created automatically on first API startup when DB is migrated."
+  },
+  "exampleClientApiPayload": {
+    "email": "client-e2e@example.com",
+    "firstName": "E2E",
+    "lastName": "Client",
+    "password": "Test@123",
+    "roleId": "44444444-4444-4444-4444-444444444444",
+    "companyName": "Example Co",
+    "contactName": "Jane Doe",
+    "phoneNumber": "+10000000000",
+    "invoiceEmail": "client-e2e@example.com",
+    "billingType": 1
+  },
+  "exampleDesignerApiPayload": {
+    "email": "designer-e2e@example.com",
+    "firstName": "E2E",
+    "lastName": "Designer",
+    "password": "Test@123",
+    "roleId": "33333333-3333-3333-3333-333333333333",
+    "specialization": "Embroidery",
+    "isAvailable": true
+  }
+}

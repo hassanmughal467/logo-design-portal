@@ -5,6 +5,8 @@ namespace LogoDesignPortal.Application.DTOs.Orders;
 public class OrderResponseDto
 {
     public Guid Id { get; set; }
+    public Guid ClientId { get; set; }
+    public Guid? DesignerId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
@@ -22,8 +24,18 @@ public class OrderResponseDto
     public string? PriceApprovalStatus { get; set; }
     public bool RequiresPriceApproval { get; set; }
     public bool PriceApproved { get; set; }
+    /// <summary>Latest note entered when Admin/SuperAdmin requested client price approval.</summary>
+    public string? PriceApprovalRequestNotes { get; set; }
+    /// <summary>Display name of who requested client price approval (e.g. "Hawk Merchandising / Admin").</summary>
+    public string? PriceApprovalRequestedByDisplay { get; set; }
+    public DateTime? PriceApprovalRequestedAt { get; set; }
+    /// <summary>Latest client message on price (counter-offer, reject reason) from status history when pending.</summary>
+    public string? ClientPriceResponseNotes { get; set; }
+    public DateTime? ClientPriceResponseAt { get; set; }
     /// <summary>Role of user who last updated client charge price (Admin, SuperAdmin, Client, Designer).</summary>
     public string? PriceUpdatedByRole { get; set; }
+    public Guid? PriceUpdatedByUserId { get; set; }
+    public string? PriceUpdatedByName { get; set; }
     /// <summary>When the client charge price was last updated.</summary>
     public DateTime? PriceUpdatedAt { get; set; }
     public string? DesignCategory { get; set; }
@@ -39,6 +51,8 @@ public class OrderResponseDto
     public DesignerInfoDto? Designer { get; set; }
     /// <summary>For Client view: masked display when designer is assigned (e.g. "Company Design Team"). Admin/SuperAdmin see full Designer.</summary>
     public string? AssignedDesignerDisplayName { get; set; }
+    public string OrderSource { get; set; } = "Portal";
+    public Guid? QuoteId { get; set; }
     public int FileCount { get; set; }
     public int VisibleFileCount { get; set; } // Files visible to current user
     public int RevisionCount { get; set; }

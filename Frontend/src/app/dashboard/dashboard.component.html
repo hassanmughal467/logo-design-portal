@@ -10,6 +10,13 @@
         (onClick)="openCreateOrderModal()"
         styleClass="p-button-primary client-primary-action">
       </p-button>
+      <p-button
+        *ngIf="user?.role === 'Client'"
+        label="Get a Quote"
+        icon="pi pi-file"
+        (onClick)="openGetQuoteDialog()"
+        styleClass="p-button-outlined">
+      </p-button>
       <div class="quick-nav" *ngIf="user?.role !== 'Client'" style="display: flex; gap: 0.5rem; margin-left: 0.75rem;">
         <p-button *ngIf="user?.role === 'SuperAdmin' || user?.role === 'Admin'"
           label="Users" icon="pi pi-users" (onClick)="navigateToRoute('/users')" styleClass="p-button-outlined"></p-button>
@@ -141,14 +148,17 @@
           </div>
         </ng-template>
         <div class="filter-row">
-          <span class="p-input-icon-left order-history-search-wrap">
-            <i class="pi pi-search"></i>
-            <input type="text" pInputText [(ngModel)]="orderSearchFilter" (input)="onOrderSearchFilterChange()" placeholder="Search orders..." class="order-history-search-input" />
-          </span>
-          <p-dropdown [options]="orderStatusOptions" [(ngModel)]="orderStatusFilter" (onChange)="onOrderStatusFilterChange()"
-            placeholder="All Statuses" styleClass="p-input-sm order-history-status-dropdown"></p-dropdown>
-          <span class="filter-row-spacer"></span>
-          <a class="view-all-orders-link view-all-orders" (click)="navigateToOrders()">View All Orders <i class="pi pi-arrow-right"></i></a>
+          <div class="filter-row-left">
+            <span class="p-input-icon-left order-history-search-wrap">
+              <i class="pi pi-search"></i>
+              <input type="text" pInputText [(ngModel)]="orderSearchFilter" (input)="onOrderSearchFilterChange()" placeholder="Search orders..." class="order-history-search-input" />
+            </span>
+            <p-dropdown [options]="orderStatusOptions" [(ngModel)]="orderStatusFilter" (onChange)="onOrderStatusFilterChange()"
+              placeholder="All Statuses" styleClass="p-input-sm order-history-status-dropdown"></p-dropdown>
+          </div>
+          <div class="filter-row-right">
+            <a class="view-all-orders-link view-all-orders" (click)="navigateToOrders()">View All Orders <i class="pi pi-arrow-right"></i></a>
+          </div>
         </div>
         <div *ngIf="filteredOrders.length === 0" class="empty-state">
           <i class="pi pi-inbox empty-icon"></i>
@@ -780,6 +790,55 @@
 
   <!-- Order Detail Modal -->
   <app-order-detail *ngIf="selectedOrderId" [orderId]="selectedOrderId" [(visible)]="showOrderDetailModal" (visibleChange)="onOrderDetailClose()" (orderUpdated)="onOrderUpdated()"></app-order-detail>
+
+  <!-- Get Quote Dialog (client-only, stays on dashboard) -->
+  <p-dialog
+    [(visible)]="showGetQuoteDialog"
+    header="Get a Quote"
+    [modal]="true"
+    [style]="{ width: '700px' }"
+    [draggable]="false"
+    [resizable]="false"
+    *ngIf="user?.role === 'Client'">
+    <form [formGroup]="quoteForm" (ngSubmit)="submitGetQuote()">
+      <div class="field">
+        <label>Logo Name</label>
+        <input pInputText formControlName="logoName" />
+      </div>
+
+      <div class="field">
+        <label>Description</label>
+        <textarea pInputTextarea rows="4" formControlName="description"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Budget (optional)</label>
+        <input pInputText type="number" formControlName="requestedBudget" />
+      </div>
+
+      <div class="field">
+        <label>Attachments</label>
+        <p-fileUpload
+          #getQuoteFileUpload
+          mode="basic"
+          [multiple]="true"
+          [auto]="false"
+          (onSelect)="onGetQuoteFileSelect($event)"
+          [showUploadButton]="false"
+          [showCancelButton]="false">
+        </p-fileUpload>
+      </div>
+
+      <div class="dialog-actions">
+        <p-button
+          type="submit"
+          label="Submit Quote"
+          icon="pi pi-check"
+          [disabled]="quoteSubmitting || quoteForm.invalid">
+        </p-button>
+      </div>
+    </form>
+  </p-dialog>
 
   <!-- Payment Dialog -->
   <p-dialog 

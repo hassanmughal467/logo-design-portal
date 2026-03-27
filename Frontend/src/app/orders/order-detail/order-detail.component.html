@@ -25,19 +25,7 @@
     <p-button label="Close" icon="pi pi-times" (onClick)="closeModal()" styleClass="p-button-outlined"></p-button>
   </div>
   
-  <!-- Client view when revision is requested: show status message instead of empty modal -->
-  <div class="order-detail-container revision-pending-view" *ngIf="order && !shouldShowOrderDetails()">
-    <app-order-progress-timeline [order]="order"></app-order-progress-timeline>
-    <div class="revision-pending-message">
-      <i class="pi pi-refresh" style="font-size: 3rem; color: var(--primary-color); margin-bottom: 1rem;"></i>
-      <h3>Revision in Progress</h3>
-      <p>Your revision has been requested for order <strong>{{ order.title }}</strong>.</p>
-      <p>The designer is currently working on your feedback. You'll be notified when new previews are ready for your review.</p>
-      <p-tag [value]="formatStatus(order.status)" [severity]="getStatusSeverity(order.status)"></p-tag>
-    </div>
-  </div>
-  
-  <div class="order-detail-container" *ngIf="order && shouldShowOrderDetails()">
+  <div class="order-detail-container" *ngIf="order">
   <!-- Locked order banner: completed (green) vs cancelled (danger) -->
   <div class="order-locked-banner" [class.order-locked-banner--cancelled]="isOrderCancelled()" *ngIf="isOrderLocked(order.status)">
     <i class="pi" [ngClass]="isOrderCancelled() ? 'pi-times-circle' : 'pi-lock'"></i>
@@ -85,6 +73,7 @@
         icon="pi pi-check" 
         (onClick)="approveOrder()"
         [styleClass]="'p-button-outlined'"
+        [attr.data-testid]="'order-approve'"
       ></p-button>
       <p-button 
         *ngIf="canRequestPriceApproval() && !isOrderLocked(order.status)"
@@ -93,12 +82,28 @@
         (onClick)="openPriceApprovalDialog()"
         [styleClass]="'p-button-outlined'"
       ></p-button>
+      <p-button
+        *ngIf="(isAdmin || isSuperAdmin) && clientAcceptedClientCharge && !isOrderLocked(order.status)"
+        label="Client price approved"
+        icon="pi pi-check-circle"
+        severity="success"
+        [disabled]="true"
+        [styleClass]="'p-button-success'">
+      </p-button>
       <p-button 
         *ngIf="canApprovePrice() && !isOrderLocked(order.status)"
         label="Approve Price" 
         icon="pi pi-check-circle" 
         (onClick)="openPriceApprovalDialog()"
         severity="success"
+      ></p-button>
+      <p-button 
+        *ngIf="isClient && order?.priceApproved && !isOrderLocked(order.status)"
+        label="Price Approved"
+        icon="pi pi-check-circle"
+        severity="success"
+        [disabled]="true"
+        [styleClass]="'p-button-success'"
       ></p-button>
       <p-button 
         *ngIf="canApproveDesignerPrice()"
@@ -109,7 +114,7 @@
       ></p-button>
       <p-button 
         *ngIf="canAssignDesigner() && !isOrderLocked(order.status)"
-        label="Assign Designer" 
+        [label]="assignDesignerButtonLabel" 
         icon="pi pi-user-plus" 
         (onClick)="openAssignDialog()"
         [styleClass]="'p-button-outlined'"
@@ -172,6 +177,27 @@
   <div class="order-info-grid">
     <div class="info-card">
       <h3>Order Information</h3>
+      <!-- Client-facing: show requested price + admin note directly (not hidden behind dialog) -->
+      <div *ngIf="isClient && (order.status === 'PriceApprovalPending' || order.priceApproved)" class="pricing-section price-request-section" [ngClass]="{ 'price-request-section--approved': order.priceApproved }">
+        <h4 class="pricing-section-title">Price Request</h4>
+        <div class="price-request-meta" *ngIf="order.priceApprovalRequestedByDisplay || order.priceApprovalRequestedAt">
+          <span class="by">{{ order.priceApprovalRequestedByDisplay || 'Admin' }}</span>
+          <span class="dot">•</span>
+          <span class="at">{{ (order.priceApprovalRequestedAt || order.createdAt) | date:'short' }}</span>
+        </div>
+        <div class="info-item">
+          <label>{{ order.priceApproved ? 'Approved Price:' : 'Requested Price:' }}</label>
+          <span>{{ (order.currencyCode || 'USD') }} {{ (order.priceApproved ? (order.clientChargePrice ?? order.clientPrice) : order.clientPrice) | number:'1.2-2' }}</span>
+        </div>
+        <div class="info-item">
+          <label>Admin Note:</label>
+          <span>{{ order.priceApprovalRequestNotes || '—' }}</span>
+        </div>
+        <div class="price-request-hint">
+          <ng-container *ngIf="!order.priceApproved">Review the request, then click <strong>Approve Price</strong> to approve or reject.</ng-container>
+          <ng-container *ngIf="order.priceApproved"><strong>Approved</strong>. This is saved for your records.</ng-container>
+        </div>
+      </div>
       <!-- Client Pricing Section: Admin/SuperAdmin always; Client only after designer files sent (PreviewDelivered+) -->
       <div *ngIf="!isDesigner && shouldShowClientPricing()" class="pricing-section">
         <h4 class="pricing-section-title">Client Pricing</h4>
@@ -183,17 +209,24 @@
           <label>Client Base Price:</label>
           <span>{{ (order.currencyCode || 'USD') }} {{ (order.clientBasePrice ?? order.price) | number:'1.2-2' }}</span>
         </div>
-        <div class="info-item">
-          <label>Client Charge Price:</label>
+        <div class="info-item" [ngClass]="{ 'info-item--approved': clientChargeRowApproved }">
+          <label>{{ clientChargeRowApproved ? 'Client Approved Price:' : 'Client Charge Price:' }}</label>
           <span>{{ (order.currencyCode || 'USD') }} {{ (order.clientChargePrice ?? order.clientBasePrice ?? order.price) | number:'1.2-2' }}</span>
         </div>
         <div class="info-item">
           <label>Currency:</label>
           <span>{{ order.currencyCode || 'USD' }}</span>
         </div>
-        <div class="info-item" *ngIf="order.priceUpdatedByRole || order.priceUpdatedAt">
+        <div class="info-item price-client-response" *ngIf="(isAdmin || isSuperAdmin) && order.status === 'PriceApprovalPending' && (order.clientPriceResponseNotes || order.clientPriceResponseAt)">
+          <label>Client response (price approval)</label>
+          <div class="client-response-body">
+            <p *ngIf="order.clientPriceResponseNotes" class="client-response-notes">{{ order.clientPriceResponseNotes }}</p>
+            <p *ngIf="order.clientPriceResponseAt" class="client-response-meta"><span class="muted">Sent</span> {{ order.clientPriceResponseAt | date:'medium' }}</p>
+          </div>
+        </div>
+        <div class="info-item" *ngIf="order.priceUpdatedByRole || order.priceUpdatedByName || order.priceUpdatedAt">
           <label>Last Updated By:</label>
-          <span>{{ order.priceUpdatedByRole || '—' }}</span>
+          <span>{{ order.priceUpdatedByName || order.priceUpdatedByRole || '—' }}</span>
         </div>
         <div class="info-item" *ngIf="order.priceUpdatedAt">
           <label>Updated At:</label>
@@ -340,6 +373,12 @@
                   <td>{{ file.versionNumber }}</td>
                   <td>
                     <p-button
+                      *ngIf="isPreviewableImage(file)"
+                      icon="pi pi-eye"
+                      [styleClass]="'p-button-text'"
+                      (onClick)="openImagePreview(file, clientPreviewFiles)"
+                    ></p-button>
+                    <p-button
                       icon="pi pi-download"
                       [styleClass]="'p-button-text'"
                       (onClick)="downloadFile(file)"
@@ -375,6 +414,12 @@
                   <td>{{ file.versionNumber }}</td>
                   <td>
                     <p-button
+                      *ngIf="isPreviewableImage(file)"
+                      icon="pi pi-eye"
+                      [styleClass]="'p-button-text'"
+                      (onClick)="openImagePreview(file, clientFinalFiles)"
+                    ></p-button>
+                    <p-button
                       icon="pi pi-download"
                       [styleClass]="'p-button-text'"
                       (onClick)="downloadFile(file)"
@@ -409,6 +454,12 @@
                   <td>{{ file.fileSize | number }} bytes</td>
                   <td>{{ file.versionNumber }}</td>
                   <td>
+                    <p-button
+                      *ngIf="isPreviewableImage(file)"
+                      icon="pi pi-eye"
+                      [styleClass]="'p-button-text'"
+                      (onClick)="openImagePreview(file, clientReferenceFiles)"
+                    ></p-button>
                     <p-button
                       icon="pi pi-download"
                       [styleClass]="'p-button-text'"
@@ -453,6 +504,12 @@
               </td>
               <td *ngIf="!isDesigner">{{ file.uploadedByName }}</td>
               <td>
+                <p-button
+                  *ngIf="isPreviewableImage(file)"
+                  icon="pi pi-eye"
+                  [styleClass]="'p-button-text'"
+                  (onClick)="openImagePreview(file)"
+                ></p-button>
                 <p-button 
                   icon="pi pi-download" 
                   [styleClass]="'p-button-text'"
@@ -503,6 +560,16 @@
             severity="secondary"
           ></p-button>
         </div>
+
+        <p class="tab-intro" *ngIf="isClient">
+          Revision requests go to Admin/SuperAdmin first. They coordinate with the design team. You can add detail in <strong>Comments</strong> for the same team.
+        </p>
+        <p class="tab-intro" *ngIf="isAdmin || isSuperAdmin">
+          Client revision text appears here for staff. Reference files the client attaches to a revision request are listed below with a <strong>Revision</strong> label. Designers do not see the <strong>Comments</strong> thread—relay what they need using staff-visible comments.
+        </p>
+        <p class="tab-intro" *ngIf="isDesigner && !isAdmin && !isSuperAdmin">
+          Reference images or files the client uploaded with their revision request appear below (tagged <strong>Revision</strong>). Download or preview images directly from the list.
+        </p>
         
         <div *ngIf="isClient && order?.revisionLimitExceeded && order?.status === 'PreviewDelivered'" class="revision-limit-message">
           <i class="pi pi-exclamation-triangle"></i>
@@ -517,7 +584,7 @@
           <div class="revision-item" *ngFor="let revision of revisions">
             <div class="revision-header">
               <div>
-                <strong>Requested by:</strong> {{ revision.requestedByName }}
+                <strong>Requested by:</strong> {{ getRevisionRequestedByDisplayName(revision) }}
                 <span class="date">{{ revision.createdAt | date:'short' }}</span>
               </div>
               <p-tag 
@@ -527,6 +594,32 @@
             </div>
             <div class="revision-content">
               <p>{{ revision.instructions }}</p>
+            </div>
+            <div class="revision-attachments" *ngIf="revision.files?.length">
+              <div class="revision-attachments-header">
+                <p-tag value="Revision" severity="warn" [rounded]="true"></p-tag>
+                <span class="revision-attachments-title">Client reference files ({{ revision.files?.length ?? 0 }})</span>
+              </div>
+              <ul class="revision-file-list">
+                <li *ngFor="let rf of revision.files ?? []" class="revision-file-row">
+                  <span class="revision-file-name">{{ rf.originalFileName }}</span>
+                  <span class="revision-file-meta">{{ rf.fileSize | number }} bytes</span>
+                  <p-tag value="Revision ref" severity="secondary" styleClass="revision-ref-chip"></p-tag>
+                  <p-button
+                    *ngIf="isRevisionAttachmentPreviewable(rf)"
+                    icon="pi pi-eye"
+                    [styleClass]="'p-button-text p-button-sm'"
+                    pTooltip="Preview image"
+                    (onClick)="openRevisionImagePreview(rf, revision.files ?? [])"
+                  ></p-button>
+                  <p-button
+                    icon="pi pi-download"
+                    [styleClass]="'p-button-text p-button-sm'"
+                    pTooltip="Download"
+                    (onClick)="downloadRevisionAttachment(rf)"
+                  ></p-button>
+                </li>
+              </ul>
             </div>
           </div>
           <div *ngIf="revisions.length === 0" class="empty-state">
@@ -553,23 +646,33 @@
             (onClick)="openCommentDialog()"
           ></p-button>
         </div>
+
+        <p class="tab-intro" *ngIf="isClient">
+          These messages are visible to Admin/SuperAdmin. They forward what the design team needs; you are not in a direct chat with the designer.
+        </p>
+        <p class="tab-intro" *ngIf="isDesigner && !isAdmin && !isSuperAdmin">
+          Client comments are not shown here. Use internal comments and guidance from Admin/SuperAdmin; they speak with the client on your behalf.
+        </p>
+        <p class="tab-intro" *ngIf="isAdmin || isSuperAdmin">
+          Clients do not see designer notes until you approve visibility. Post general (non-internal) comments to share something with both designer and client when appropriate.
+        </p>
         
         <div class="comment-list">
-          <div class="comment-item" *ngFor="let comment of comments">
+          <div class="comment-item" *ngFor="let comment of generalComments">
             <div class="comment-header">
               <div>
-                <strong>{{ comment.createdByName }}</strong>
-                <span class="role">{{ comment.createdByRole }}</span>
+                <strong>{{ getDisplayNameForRole(comment.createdByName, comment.createdByRole) }}</strong>
+                <span class="role">{{ getDisplayRole(comment.createdByRole) }}</span>
                 <span class="date">{{ comment.createdAt | date:'short' }}</span>
               </div>
               <div class="comment-header-tags">
-                <p-tag 
-                  *ngIf="comment.isInternal"
+                <p-tag
+                  *ngIf="comment.isInternal && comment.commentType !== 'PriceNegotiationDesigner'"
                   value="Internal" 
                   severity="info"
                 ></p-tag>
                 <p-button 
-                  *ngIf="(isAdmin || isSuperAdmin) && comment.createdByRole === 'Designer' && !comment.visibleToClient && !isOrderLocked(order.status)"
+                  *ngIf="(isAdmin || isSuperAdmin) && comment.createdByRole === 'Designer' && !comment.visibleToClient && comment.commentType !== 'PriceNegotiationClient' && comment.commentType !== 'PriceNegotiationDesigner' && !isOrderLocked(order.status)"
                   icon="pi pi-eye" 
                   [styleClass]="'p-button-text p-button-sm'"
                   pTooltip="Approve for client visibility"
@@ -581,32 +684,107 @@
               <p>{{ comment.content }}</p>
             </div>
           </div>
-          <div *ngIf="comments.length === 0" class="empty-state">
+          <div *ngIf="generalComments.length === 0" class="empty-state">
             No comments yet
           </div>
         </div>
       </div>
     </p-tabPanel>
+
+    <!-- Price negotiating notes: separate client vs designer threads (not visible across parties) -->
+    <p-tabPanel *ngIf="showPriceNegotiationTab">
+      <ng-template pTemplate="header">
+        <i class="pi pi-wallet" style="margin-right: 0.5rem;"></i>
+        <span>Price Negotiating Notes</span>
+        <span *ngIf="(unreadCounts.unreadPriceNegotiationNotes ?? 0) > 0" class="tab-badge">{{ unreadCounts.unreadPriceNegotiationNotes }}</span>
+      </ng-template>
+      <div class="tab-content price-negotiation-tab">
+        <p class="price-negotiation-intro" *ngIf="isClient">
+          <strong>Read-only history</strong> from client price actions (request approval, approve price, counter-offer, reject, etc.). Anything you enter in the price dialogs is saved here. Designers cannot see this.
+        </p>
+        <p class="price-negotiation-intro" *ngIf="isDesigner && !isAdmin && !isSuperAdmin">
+          <strong>Read-only history</strong> of your payout requests (including optional notes) and admin responses. Same idea as client pricing on the other thread—clients cannot see this.
+        </p>
+        <p class="price-negotiation-intro" *ngIf="isAdmin || isSuperAdmin">
+          <strong>Read-only history</strong> recorded automatically from price modals and designer payout workflow. Client vs designer threads stay separate.
+        </p>
+
+        <ng-container *ngIf="isClient || isAdmin || isSuperAdmin">
+          <div class="price-negotiation-section">
+            <div class="price-negotiation-section-header">
+              <h3>Client pricing (you &amp; admin)</h3>
+            </div>
+            <div class="comment-list">
+              <div class="comment-item" *ngFor="let comment of priceNegotiationClientNotes">
+                <div class="comment-header">
+                  <div>
+                    <strong>{{ getDisplayNameForRole(comment.createdByName, comment.createdByRole) }}</strong>
+                    <span class="role">{{ getDisplayRole(comment.createdByRole) }}</span>
+                    <span class="date">{{ comment.createdAt | date:'short' }}</span>
+                  </div>
+                  <p-tag value="Client pricing" severity="success"></p-tag>
+                </div>
+                <div class="comment-content">
+                  <p>{{ comment.content }}</p>
+                </div>
+              </div>
+              <div *ngIf="priceNegotiationClientNotes.length === 0" class="empty-state">
+                No client pricing notes yet
+              </div>
+            </div>
+          </div>
+        </ng-container>
+
+        <ng-container *ngIf="isDesigner || isAdmin || isSuperAdmin">
+          <div class="price-negotiation-section price-negotiation-section--designer">
+            <div class="price-negotiation-section-header">
+              <h3>Designer payout (you &amp; admin)</h3>
+            </div>
+            <div class="comment-list">
+              <div class="comment-item" *ngFor="let comment of priceNegotiationDesignerNotes">
+                <div class="comment-header">
+                  <div>
+                    <strong>{{ getDisplayNameForRole(comment.createdByName, comment.createdByRole) }}</strong>
+                    <span class="role">{{ getDisplayRole(comment.createdByRole) }}</span>
+                    <span class="date">{{ comment.createdAt | date:'short' }}</span>
+                  </div>
+                  <p-tag value="Designer payout" severity="warning"></p-tag>
+                </div>
+                <div class="comment-content">
+                  <p>{{ comment.content }}</p>
+                </div>
+              </div>
+              <div *ngIf="priceNegotiationDesignerNotes.length === 0" class="empty-state">
+                No designer payout notes yet
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+    </p-tabPanel>
   </p-tabView>
-  </div>
-  
-  <div *ngIf="!order && loading" class="loading-state">
-    <i class="pi pi-spin pi-spinner"></i>
-    <p>Loading order details...</p>
   </div>
 
 <!-- Dialogs -->
 <p-dialog 
   [(visible)]="showPriceApprovalDialog" 
-  header="Price Approval" 
+  [header]="isClient ? 'Approve Price' : 'Request client price approval'" 
   [modal]="true"
   [style]="{width: '500px'}"
   [draggable]="false"
   [resizable]="false"
+  styleClass="price-approval-dialog"
 >
   <div class="dialog-content">
+    <div *ngIf="isClient" class="price-approval-summary">
+      {{ (order?.priceApprovalRequestedByDisplay || 'Hawk Merchandising') }}
+      proposed
+      <strong>{{ clientPriceApprovalProposedAmount | number:'1.2-2' }} {{ (order?.currencyCode || 'USD') }}</strong>
+      for
+      <strong>{{ order?.title }}</strong>.
+    </div>
     <div class="form-group" *ngIf="isAdmin || isSuperAdmin">
-      <label>Proposed Price (USD)</label>
+      <label>Proposed client charge ({{ order?.currencyCode || 'USD' }})</label>
       <p-inputNumber 
         [(ngModel)]="proposedPrice"
         mode="decimal"
@@ -615,8 +793,46 @@
         styleClass="w-full"
       ></p-inputNumber>
     </div>
+    <div class="form-group" *ngIf="isClient">
+      <label>Action</label>
+      <p-selectButton 
+        [(ngModel)]="clientPriceApprovalAction"
+        (ngModelChange)="onClientPriceApprovalActionChange()"
+        [options]="[
+          { label: 'Approve', value: 'Approve' },
+          { label: 'Modify', value: 'Modify' },
+          { label: 'Reject', value: 'Reject' }
+        ]"
+        optionLabel="label"
+        optionValue="value"
+      ></p-selectButton>
+    </div>
+    <div class="form-group" *ngIf="isClient && clientPriceApprovalAction !== 'Reject'">
+      <label>Approved Price ({{ order?.currencyCode || 'USD' }}) <span class="required">*</span></label>
+      <p-inputNumber
+        [(ngModel)]="clientApprovedPrice"
+        (ngModelChange)="clientCounterPrice = clientApprovedPrice"
+        mode="decimal"
+        [min]="0.01"
+        [maxFractionDigits]="2"
+        styleClass="w-full"
+        [disabled]="clientPriceApprovalAction === 'Approve'"
+      ></p-inputNumber>
+      <small class="p-help" *ngIf="clientPriceApprovalAction === 'Approve'">Uses the proposed price by default.</small>
+      <small class="p-help" *ngIf="clientPriceApprovalAction === 'Modify'">Enter the price you would like to pay. Admin will review your counter offer.</small>
+    </div>
+    <div class="form-group" *ngIf="isClient">
+      <label>Admin Note</label>
+      <textarea
+        pInputTextarea
+        class="w-full"
+        [value]="order?.priceApprovalRequestNotes || '—'"
+        rows="3"
+        readonly
+      ></textarea>
+    </div>
     <div class="form-group">
-      <label>Notes</label>
+      <label>{{ isClient ? 'Your Message (optional)' : 'Notes' }}</label>
       <textarea 
         pInputTextarea 
         [(ngModel)]="priceApprovalNotes"
@@ -634,23 +850,74 @@
     ></p-button>
     <p-button 
       *ngIf="isClient"
-      label="Approve" 
+      label="Submit" 
       icon="pi pi-check" 
       severity="success"
-      (onClick)="approvePrice(true)"
-    ></p-button>
-    <p-button 
-      *ngIf="isClient"
-      label="Reject" 
-      icon="pi pi-times" 
-      severity="danger"
-      (onClick)="approvePrice(false)"
+      (onClick)="submitClientPriceApproval()"
     ></p-button>
     <p-button 
       label="Cancel" 
       icon="pi pi-times" 
       (onClick)="showPriceApprovalDialog = false"
       [styleClass]="'p-button-text'"
+    ></p-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Image Preview Dialog -->
+<p-dialog
+  [(visible)]="showImagePreviewDialog"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: '80vw', maxWidth: '1000px' }"
+  [header]="imagePreviewDialogHeader"
+  styleClass="image-preview-dialog"
+  (onHide)="closeImagePreview()"
+>
+  <div class="image-preview-container">
+    <div class="image-preview-revision-badge" *ngIf="imagePreviewKind === 'revision'">
+      <p-tag value="Revision" severity="warn" [rounded]="true"></p-tag>
+      <span>Client reference — not a delivered preview file</span>
+    </div>
+    <div class="image-preview-toolbar" *ngIf="imagePreviewGalleryLength > 1">
+      <p-button
+        icon="pi pi-chevron-left"
+        [styleClass]="'p-button-text'"
+        (onClick)="previousImagePreview()"
+        [disabled]="!canGoPreviousImage()"
+      ></p-button>
+      <span>{{ imagePreviewIndex + 1 }} / {{ imagePreviewGalleryLength }}</span>
+      <p-button
+        icon="pi pi-chevron-right"
+        [styleClass]="'p-button-text'"
+        (onClick)="nextImagePreview()"
+        [disabled]="!canGoNextImage()"
+      ></p-button>
+    </div>
+
+    <div class="image-preview-stage" *ngIf="!imagePreviewLoading && imagePreviewUrl; else previewLoadingTpl">
+      <img [src]="imagePreviewUrl" [alt]="imagePreviewAlt" />
+    </div>
+    <ng-template #previewLoadingTpl>
+      <div class="image-preview-loading">
+        <p-progressSpinner></p-progressSpinner>
+      </div>
+    </ng-template>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <p-button
+      icon="pi pi-download"
+      label="Download"
+      (onClick)="downloadCurrentImagePreview()"
+      [disabled]="imagePreviewKind === 'order' ? !currentImagePreviewFile : !currentRevisionImagePreviewFile"
+    ></p-button>
+    <p-button
+      label="Close"
+      icon="pi pi-times"
+      [styleClass]="'p-button-text'"
+      (onClick)="closeImagePreview()"
     ></p-button>
   </ng-template>
 </p-dialog>
@@ -690,6 +957,16 @@
       ></p-inputNumber>
       <small *ngIf="designerPriceApprovalAction === 'Approve'">Uses designer proposed price by default.</small>
     </div>
+    <div class="form-group">
+      <label>Message to designer (optional)</label>
+      <textarea
+        pInputTextarea
+        [(ngModel)]="designerPriceApprovalMessage"
+        rows="3"
+        placeholder="Shown in Price Negotiating Notes for you and the designer..."
+        styleClass="w-full"
+      ></textarea>
+    </div>
   </div>
   <ng-template pTemplate="footer">
     <p-button 
@@ -709,7 +986,7 @@
 
 <p-dialog 
   [(visible)]="showAssignDialog" 
-  header="Assign Designer" 
+  [header]="assignDesignerButtonLabel" 
   [modal]="true"
   [style]="{width: '500px'}"
   [closable]="true"
@@ -746,7 +1023,7 @@
       [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'">
     </p-button>
     <p-button 
-      label="Assign" 
+      [label]="order?.designerId ? 'Change' : 'Assign'" 
       icon="pi pi-check" 
       (onClick)="assignDesigner()"
       [disabled]="!selectedDesignerId"
@@ -805,6 +1082,16 @@
         styleClass="w-full"
       ></p-inputNumber>
       <small class="p-help" *ngIf="order.standardPrice != null">Initial fixed price: PKR {{ order.standardPrice | number:'1.0-0' }}</small>
+    </div>
+    <div class="form-group">
+      <label>Note to admin (optional)</label>
+      <textarea
+        pInputTextarea
+        [(ngModel)]="designerRequestPriceMessage"
+        rows="3"
+        placeholder="Explain complexity or context—saved in Price Negotiating Notes..."
+        styleClass="w-full"
+      ></textarea>
     </div>
   </div>
   <ng-template pTemplate="footer">

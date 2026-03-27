@@ -23,4 +23,5 @@ export interface OrderCommentUnreadCounts {
   unreadFiles: number;
   unreadRevisions: number;
   unreadComments: number;
+  unreadPriceNegotiationNotes?: number;
 }

@@ -48,6 +48,12 @@
                   "maximumError": "50kb"
                 }
               ],
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.prod.ts"
+                }
+              ],
               "outputHashing": "all"
             },
             "development": {
@@ -78,7 +84,36 @@
             "main": "src/test.ts",
             "polyfills": ["zone.js", "zone.js/testing"],
             "tsConfig": "src/tsconfig.spec.json",
-            "karmaConfig": "karma.conf.js"
+            "karmaConfig": "karma.conf.js",
+            "codeCoverage": true,
+            "codeCoverageExclude": [
+              "**/*.module.ts",
+              "**/main.ts",
+              "**/environments/**",
+              "**/*routing*.ts",
+              "**/auth/**/*.ts",
+              "**/analytics/**/*.ts",
+              "**/dashboard/**/*.ts",
+              "**/invoices/**/*.ts",
+              "**/users/**/*.ts",
+              "**/orders/**/*.ts",
+              "**/financial/**/*.ts",
+              "**/clients/**/*.ts",
+              "**/client-pricing/**/*.ts",
+              "**/client-intelligence/**/*.ts",
+              "**/permissions/**/*.ts",
+              "**/projects/**/*.ts",
+              "**/layout/**/*.ts",
+              "**/shared/models/**/*.ts",
+              "**/shared/components/**/*.ts",
+              "**/core/services/financial-analytics.service.ts",
+              "**/core/services/realtime-notification.service.ts",
+              "**/core/services/admin-analytics.service.ts",
+              "**/core/services/client-churn-analytics.service.ts",
+              "**/core/services/client-analytics.service.ts",
+              "**/core/services/realtime-status.service.ts",
+              "**/core/services/dashboard.service.ts"
+            ]
           }
         },
         "serve": {

@@ -5,6 +5,7 @@ using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.IO;
 using System.Security.Claims;
 
 namespace LogoDesignPortal.API.Controllers;
@@ -48,7 +49,7 @@ public class RevisionsController : ControllerBase
     }
 
     [HttpGet("orders/{orderId}/latest")]
-    [Authorize(Roles = "Admin,SuperAdmin,Designer")]
+    [Authorize(Roles = "Client,Admin,SuperAdmin,Designer")]
     [ProducesResponseType(typeof(RevisionResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetLatestRevision(Guid orderId)
@@ -63,6 +64,31 @@ public class RevisionsController : ControllerBase
                 return NotFound(new { error = "No revision found for this order." });
             
             return Ok(result);
+        }
+        catch (ForbiddenAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Download a client-uploaded revision reference attachment (same access rules as revision details).</summary>
+    [HttpGet("files/{fileId}/download")]
+    [Authorize(Roles = "Client,Admin,SuperAdmin,Designer")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DownloadRevisionFile(Guid fileId)
+    {
+        try
+        {
+            var userId = User.GetUserIdOrThrow();
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            var (content, fileName, contentType) = await _revisionService.DownloadRevisionFileAsync(fileId, userId, userRole);
+            return File(content, contentType, fileName);
+        }
+        catch (FileNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
         }
         catch (ForbiddenAccessException ex)
         {

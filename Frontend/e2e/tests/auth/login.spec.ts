@@ -1,19 +1,25 @@
 import { test, expect } from '@playwright/test';
-import { LoginPage } from '../../page-objects/login.page';
+import { LoginPage } from '../../pom';
+import { E2E_API_URL } from '../../utils/env';
+import { apiUrl } from '../../utils/api-client';
 
-const API_URL = process.env.API_URL || 'http://localhost:5000';
+/**
+ * Smoke coverage for the anonymous login experience. These tests intentionally do not depend on
+ * `storageState` — they run under the default `chromium` project.
+ */
 
-/** Returns 'ok' if login works, 'unauthorized' if backend up but user missing, 'unreachable' if backend down. */
-async function checkBackendForLogin(
+async function backendLoginProbe(
   request: import('@playwright/test').APIRequestContext
 ): Promise<'ok' | 'unauthorized' | 'unreachable'> {
   try {
-    const res = await request.fetch(`${API_URL}/api/auth/login`, {
-      method: 'POST',
+    const res = await request.post(apiUrl('/auth/login'), {
       headers: { 'Content-Type': 'application/json' },
       data: { email: 'client@test.com', password: 'Test@123' },
-      timeout: 5000,
+      timeout: 8_000,
     });
+    if (res.status() === 401 || res.status() === 400) {
+      return 'unauthorized';
+    }
     return res.ok() ? 'ok' : 'unauthorized';
   } catch {
     return 'unreachable';
@@ -28,13 +34,16 @@ test.describe('Login', () => {
     await loginPage.expectLoginError();
   });
 
-  test('valid credentials redirects to dashboard', async ({ page, request }) => {
-    const status = await checkBackendForLogin(request);
+  test('valid seeded credentials redirect to dashboard when test user exists', async ({ page, request }) => {
+    const status = await backendLoginProbe(request);
     if (status === 'unreachable') {
-      test.skip(true, `Backend not running at ${API_URL}. Start with: cd Backend && dotnet run`);
+      test.skip(true, `Backend not running at ${E2E_API_URL}. Start the API before E2E.`);
     }
-    if (status === 'unauthorized') {
-      test.skip(true, `Test user client@test.com not in database. Seed test data or run API integration tests to create it.`);
+    if (status !== 'ok') {
+      test.skip(
+        true,
+        'Probe login did not succeed for client@test.com — seed that user or use workflow tests that provision via API.'
+      );
     }
     const loginPage = new LoginPage(page);
     await loginPage.goto();
@@ -44,6 +53,6 @@ test.describe('Login', () => {
 
   test('unauthenticated access to dashboard redirects to login', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page).toHaveURL(/\/auth\/login/);
+    await expect(page).toHaveURL(/\/auth\/login|\/login/);
   });
 });

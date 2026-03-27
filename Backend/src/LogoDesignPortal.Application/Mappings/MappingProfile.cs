@@ -26,6 +26,7 @@ public class MappingProfile : Profile
         CreateMap<LogoOrder, OrderResponseDto>()
             .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()))
             .ForMember(dest => dest.Priority, opt => opt.MapFrom(src => src.Priority.ToString()))
+            .ForMember(dest => dest.OrderSource, opt => opt.MapFrom(src => src.OrderSource.ToString()))
             .ForMember(dest => dest.ClientPrice, opt => opt.MapFrom(src => src.ClientPrice))
             .ForMember(dest => dest.ClientBasePrice, opt => opt.MapFrom(src => src.ClientBasePrice))
             .ForMember(dest => dest.ClientChargePrice, opt => opt.MapFrom(src => src.ClientChargePrice))
@@ -39,7 +40,8 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.FileCount, opt => opt.MapFrom(src => src.Files != null ? src.Files.Count : 0))
             .ForMember(dest => dest.VisibleFileCount, opt => opt.MapFrom(src => src.Files != null ? src.Files.Count(f => f.IsVisibleToClient) : 0))
             .ForMember(dest => dest.RevisionCount, opt => opt.MapFrom(src => src.Revisions != null ? src.Revisions.Count : 0))
-            .ForMember(dest => dest.CommentCount, opt => opt.MapFrom(src => src.Comments != null ? src.Comments.Count : 0));
+            .ForMember(dest => dest.CommentCount, opt => opt.MapFrom(src => src.Comments != null ? src.Comments.Count : 0))
+            .ForMember(dest => dest.QuoteId, opt => opt.MapFrom(src => src.QuoteId));
 
         CreateMap<CreateOrderRequestDto, LogoOrder>()
             .ForMember(dest => dest.Id, opt => opt.MapFrom(src => Guid.NewGuid()))

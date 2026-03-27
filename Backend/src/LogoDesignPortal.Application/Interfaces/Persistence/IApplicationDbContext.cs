@@ -35,6 +35,7 @@ public interface IApplicationDbContext
     DbSet<DesignPricing> DesignPricings { get; }
     DbSet<ClientLogoPricing> ClientLogoPricings { get; }
     DbSet<DesignerLogoPricing> DesignerLogoPricings { get; }
+    DbSet<Quote> Quotes { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
 

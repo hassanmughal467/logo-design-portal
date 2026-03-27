@@ -23,9 +23,9 @@ export class OrderProgressTimelineComponent {
 
     const status = (this.order.status as string) || '';
     const revisionCount = this.order.revisionCount ?? 0;
-    const hasRevisionLoop = revisionCount > 0;
+    // Show revision segment whenever a revision was filed or is in progress
+    const hasRevisionLoop = revisionCount > 0 || status === 'RevisionRequested';
 
-    // Build step definitions - insert revision loop after first Preview Delivered when applicable
     const stepDefs: Array<{ id: string; label: string }> = [
       { id: 'order_submitted', label: 'Order Submitted' },
       { id: 'admin_review', label: 'Admin Review' },
@@ -34,39 +34,45 @@ export class OrderProgressTimelineComponent {
     ];
 
     if (hasRevisionLoop) {
+      const revisionLabel =
+        revisionCount > 0
+          ? `Revision requested (${revisionCount})`
+          : 'Revision requested';
       stepDefs.push(
-        { id: 'revision_requested', label: 'Revision Requested' },
-        { id: 'design_updated', label: 'Design Updated' },
-        { id: 'preview_delivered_2', label: 'Preview Delivered' }
+        { id: 'revision_requested', label: revisionLabel },
+        { id: 'design_updated', label: 'Design updated' },
+        { id: 'preview_delivered_2', label: 'Preview delivered' }
       );
     }
 
     stepDefs.push(
-      { id: 'client_approval', label: 'Client Approval' },
+      { id: 'client_approval', label: 'Client approval' },
       { id: 'completed', label: 'Completed' }
     );
 
-    // Determine current step index based on status
+    const lastIndex = stepDefs.length - 1;
+
     const getCurrentIndex = (): number => {
       switch (status) {
+        case 'Completed':
+          // Past the last step so every milestone shows completed (checkmarks)
+          return stepDefs.length;
+        case 'ClientApproved':
+          // Client has approved; order is pending final admin completion
+          return lastIndex;
         case 'WaitingForAdminApproval':
         case 'PriceApprovalPending':
           return 1;
         case 'InProgress':
-          return hasRevisionLoop ? 5 : 2; // design_updated : design_in_progress
+          return hasRevisionLoop ? 5 : 2;
         case 'PreviewDelivered':
-          return hasRevisionLoop ? 6 : 3; // preview_delivered_2 : preview_delivered
+          return hasRevisionLoop ? 6 : 3;
         case 'RevisionRequested':
-          return 4; // revision_requested (only exists when hasRevisionLoop)
-        case 'ClientApproved':
-          return hasRevisionLoop ? 7 : 4;
-        case 'Completed':
-          return hasRevisionLoop ? 8 : 5;
+          return 4;
         case 'Cancelled':
         case 'CancelledByUser':
         case 'CancelledByAdmin':
         case 'Refunded':
-          // For terminal states, show Order Submitted as completed, Admin Review as current
           return 1;
         default:
           return 0;
@@ -80,7 +86,10 @@ export class OrderProgressTimelineComponent {
       if (index < currentIndex) {
         state = 'completed';
       } else if (index === currentIndex) {
-        state = (step.id === 'revision_requested' && status === 'RevisionRequested') ? 'revision' : 'current';
+        state =
+          step.id === 'revision_requested' && status === 'RevisionRequested'
+            ? 'revision'
+            : 'current';
       }
 
       let timestamp: Date | undefined;

@@ -17,7 +17,9 @@ public class RateLimitingMiddleware
     {
         _next = next;
         _logger = logger;
-        _isRateLimitDisabled = env.IsDevelopment() || string.Equals(Environment.GetEnvironmentVariable("DISABLE_RATE_LIMIT"), "true", StringComparison.OrdinalIgnoreCase);
+        _isRateLimitDisabled = env.IsDevelopment()
+            || env.IsEnvironment("Testing")
+            || string.Equals(Environment.GetEnvironmentVariable("DISABLE_RATE_LIMIT"), "true", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task InvokeAsync(HttpContext context)

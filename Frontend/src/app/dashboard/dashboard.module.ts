@@ -19,10 +19,12 @@ import { TooltipModule } from 'primeng/tooltip';
 import { DialogModule } from 'primeng/dialog';
 import { TabViewModule } from 'primeng/tabview';
 import { InputTextModule } from 'primeng/inputtext';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { CheckboxModule } from 'primeng/checkbox';
 import { DropdownModule } from 'primeng/dropdown';
 import { PanelModule } from 'primeng/panel';
+import { InputTextareaModule } from 'primeng/inputtextarea';
+import { FileUploadModule } from 'primeng/fileupload';
 
 @NgModule({
   declarations: [
@@ -31,6 +33,7 @@ import { PanelModule } from 'primeng/panel';
   imports: [
     CommonModule,
     FormsModule,
+    ReactiveFormsModule,
     DashboardRoutingModule,
     LayoutModule,
     SharedModule,
@@ -49,7 +52,9 @@ import { PanelModule } from 'primeng/panel';
     InputTextModule,
     CheckboxModule,
     DropdownModule,
-    PanelModule
+    PanelModule,
+    InputTextareaModule,
+    FileUploadModule
   ]
 })
 export class DashboardModule { }

@@ -152,7 +152,10 @@ builder.Services.AddCors(options =>
             "http://admin.hawkmerchandising.com",
             "https://admin.hawkmerchandising.com",
             "http://localhost:4200",
-            "https://localhost:4200")
+            "https://localhost:4200",
+            // Local dev / Playwright: some environments resolve or open the app as 127.0.0.1 (browser Origin must match exactly).
+            "http://127.0.0.1:4200",
+            "https://127.0.0.1:4200")
         .AllowAnyHeader()
         .AllowAnyMethod()
         .SetPreflightMaxAge(TimeSpan.FromSeconds(86400)) // Cache preflight for 24h
@@ -216,17 +219,25 @@ using (var scope = app.Services.CreateScope())
     {
         logger.LogInformation("Initializing database...");
 
-        // Apply pending migrations (blocking - ensures schema is ready before first request)
-        var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-        if (pendingMigrations.Any())
+        // Relational providers (MySQL / SQL Server): apply EF migrations. InMemory (integration tests) cannot use migration APIs.
+        if (context.Database.IsRelational())
         {
-            logger.LogInformation("Applying pending migrations: {Migrations}", string.Join(", ", pendingMigrations));
-            await context.Database.MigrateAsync();
-            logger.LogInformation("Migrations applied successfully.");
+            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+            if (pendingMigrations.Any())
+            {
+                logger.LogInformation("Applying pending migrations: {Migrations}", string.Join(", ", pendingMigrations));
+                await context.Database.MigrateAsync();
+                logger.LogInformation("Migrations applied successfully.");
+            }
+            else
+            {
+                logger.LogInformation("Database is up to date.");
+            }
         }
         else
         {
-            logger.LogInformation("Database is up to date.");
+            await context.Database.EnsureCreatedAsync();
+            logger.LogInformation("Non-relational provider: schema ensured via EnsureCreated (e.g. integration test host).");
         }
 
         // Standard roles (fixed GUIDs) — SuperAdmin, Admin, Designer, Client.

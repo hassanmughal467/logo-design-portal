@@ -1,11 +1,29 @@
 <div class="orders-page">
   <app-page-header [title]="pageTitle" [subtitle]="pageSubtitle">
-    <div *ngIf="canCreateOrder()" actions>
+    <div actions>
       <p-button
+        *ngIf="canAddCompletedOrder()"
+        label="Add Completed Order"
+        icon="pi pi-check-circle"
+        (onClick)="openQuickCompletedOrderDialog()"
+        styleClass="p-button-success"
+        [attr.data-testid]="'orders-open-quick-completed'">
+      </p-button>
+      <p-button
+        *ngIf="canCreateOrder()"
         label="Create Order"
         icon="pi pi-plus"
         (onClick)="createOrder()"
-        styleClass="p-button-primary">
+        styleClass="p-button-primary"
+        [attr.data-testid]="'orders-open-create'">
+      </p-button>
+      <p-button
+        *ngIf="isClient"
+        label="Get a Quote"
+        icon="pi pi-file"
+        (onClick)="openQuoteCreateDialog()"
+        styleClass="p-button-outlined"
+        [attr.data-testid]="'orders-open-quote-create'">
       </p-button>
     </div>
   </app-page-header>
@@ -99,7 +117,7 @@
             <th pSortableColumn="title" style="min-width: 200px">
               Title <p-sortIcon field="title"></p-sortIcon>
             </th>
-            <th pSortableColumn="status" style="width: 160px">
+            <th pSortableColumn="status" style="width: 190px">
               Status <p-sortIcon field="status"></p-sortIcon>
             </th>
             <th pSortableColumn="priority" style="width: 110px">
@@ -128,10 +146,12 @@
                 <span class="order-title-text" (click)="viewOrder(order.id)">{{ order.title }}</span>
               </div>
             </td>
-            <td>
+            <td class="status-cell">
               <p-tag
                 [value]="getStatusLabel(order.status)"
                 [severity]="getStatusSeverity(order.status)"
+                [pTooltip]="getStatusLabel(order.status)"
+                tooltipPosition="top"
                 [rounded]="true">
               </p-tag>
             </td>
@@ -282,8 +302,96 @@
   <!-- Order Create Modal -->
   <app-order-create
     [(visible)]="showOrderCreateModal"
+    [prefillData]="quotePrefillData"
     (orderCreated)="onOrderCreated($event)">
   </app-order-create>
+
+  <p-dialog
+    [(visible)]="showQuickCompletedDialog"
+    [modal]="true"
+    [style]="{width: '900px'}"
+    header="Add Completed Order"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false">
+    <div class="dialog-content">
+      <div class="form-group">
+        <label>
+          <input type="checkbox" [(ngModel)]="quickCompletedUseNewClient" />
+          Create new client
+        </label>
+      </div>
+
+      <div class="form-group" *ngIf="!quickCompletedUseNewClient">
+        <label>Client <span class="required">*</span></label>
+        <p-dropdown [options]="clientOptions" [(ngModel)]="quickCompletedModel.clientUserId" optionLabel="label" optionValue="value"
+          placeholder="Select client" styleClass="w-full" [filter]="true" appendTo="body"></p-dropdown>
+      </div>
+
+      <div *ngIf="quickCompletedUseNewClient" class="form-grid">
+        <div class="form-group">
+          <label>Client Email <span class="required">*</span></label>
+          <input pInputText [(ngModel)]="quickCompletedModel.newClient.email" />
+        </div>
+        <div class="form-group">
+          <label>First Name <span class="required">*</span></label>
+          <input pInputText [(ngModel)]="quickCompletedModel.newClient.firstName" />
+        </div>
+        <div class="form-group">
+          <label>Last Name <span class="required">*</span></label>
+          <input pInputText [(ngModel)]="quickCompletedModel.newClient.lastName" />
+        </div>
+        <div class="form-group">
+          <label>Company Name <span class="required">*</span></label>
+          <input pInputText [(ngModel)]="quickCompletedModel.newClient.companyName" />
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Logo Name <span class="required">*</span></label>
+          <input pInputText [(ngModel)]="quickCompletedModel.title" />
+        </div>
+        <div class="form-group">
+          <label>Designer <span class="required">*</span></label>
+          <p-dropdown [options]="designerOptions" [(ngModel)]="quickCompletedModel.designerUserId" optionLabel="label" optionValue="value"
+            placeholder="Select designer" styleClass="w-full" [filter]="true" appendTo="body"></p-dropdown>
+        </div>
+        <div class="form-group">
+          <label>Price <span class="required">*</span></label>
+          <input pInputText type="number" min="0.01" step="0.01" [(ngModel)]="quickCompletedModel.price" />
+        </div>
+        <div class="form-group">
+          <label>Date <span class="required">*</span></label>
+          <p-calendar [(ngModel)]="quickCompletedModel.completedAt" [showIcon]="true" dateFormat="yy-mm-dd" appendTo="body" styleClass="w-full"></p-calendar>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Description</label>
+        <textarea pInputTextarea rows="3" [(ngModel)]="quickCompletedModel.description"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea pInputTextarea rows="2" [(ngModel)]="quickCompletedModel.notes"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Upload Final Files <span class="required">*</span></label>
+        <p-fileUpload #quickCompletedFileUpload mode="basic" [multiple]="true" [auto]="false" (onSelect)="onQuickCompletedFileSelect($event)"
+          chooseLabel="Choose Final Files" [showUploadButton]="false" [showCancelButton]="false"></p-fileUpload>
+        <div class="preview-list" *ngIf="quickCompletedFiles.length > 0">
+          <div class="preview-item" *ngFor="let file of quickCompletedFiles; let i = index">
+            <span>{{ file.name }}</span>
+            <button type="button" (click)="removeQuickCompletedFile(i)">Remove</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button label="Cancel" styleClass="p-button-outlined" (onClick)="showQuickCompletedDialog=false" [disabled]="quickCompletedSubmitting"></p-button>
+      <p-button label="Save Completed Order" icon="pi pi-check" (onClick)="submitQuickCompletedOrder()" [loading]="quickCompletedSubmitting"></p-button>
+    </ng-template>
+  </p-dialog>
 
   <!-- Order Detail Modal -->
   <app-order-detail
