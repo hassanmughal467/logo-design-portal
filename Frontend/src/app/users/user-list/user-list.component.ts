@@ -3,6 +3,7 @@ import { Dropdown } from 'primeng/dropdown';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
+import { DashboardService } from '@core/services/dashboard.service';
 import { PermissionsService } from '@core/services/permissions.service';
 import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
@@ -17,7 +18,6 @@ import { RoleOption } from '@shared/models/role.model';
 })
 export class UserListComponent implements OnInit, OnDestroy {
   users: User[] = [];
-  loading = false;
   displayCreateDialog = false;
   displayResetPasswordDialog = false;
   displayViewDialog = false;
@@ -69,7 +69,8 @@ export class UserListComponent implements OnInit, OnDestroy {
     private permissionsService: PermissionsService,
     private messageService: MessageService,
     private fb: FormBuilder,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private dashboardService: DashboardService
   ) {
     this.createUserForm = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
@@ -226,7 +227,6 @@ export class UserListComponent implements OnInit, OnDestroy {
   }
 
   loadUsers(): void {
-    this.loading = true;
     const user = this.authService.getCurrentUser();
     
     this.apiService.get<any>(`users?page=${this.currentPage}&pageSize=${this.rows}`)
@@ -236,7 +236,6 @@ export class UserListComponent implements OnInit, OnDestroy {
           this.users = ApiService.extractItems<User>(response);
           const meta = ApiService.extractPagedMeta(response);
           this.totalUsers = meta.total;
-          this.loading = false;
         },
         error: (error) => {
           let errorMessage = 'Failed to load users';
@@ -253,7 +252,6 @@ export class UserListComponent implements OnInit, OnDestroy {
             summary: 'Error',
             detail: errorMessage
           });
-          this.loading = false;
           this.users = [];
         }
       });
@@ -454,6 +452,7 @@ export class UserListComponent implements OnInit, OnDestroy {
           });
           this.displayCreateDialog = false;
           this.createUserForm.reset();
+          this.dashboardService.invalidateDashboardCache();
           this.loadUsers();
         },
         error: (error) => {
@@ -717,6 +716,7 @@ export class UserListComponent implements OnInit, OnDestroy {
           this.displayEditDialog = false;
           this.selectedUserForEdit = null;
           this.updatingUser = false;
+          this.dashboardService.invalidateDashboardCache();
           this.loadUsers();
         },
         error: (error) => {
@@ -822,6 +822,7 @@ export class UserListComponent implements OnInit, OnDestroy {
           this.deletingUser = false;
           this.deletePermanent = false;
 
+          this.dashboardService.invalidateDashboardCache();
           if (permanent) {
             this.users = this.users.filter(u => u.id !== deletedUserId);
             this.cdr.detectChanges();
@@ -853,6 +854,7 @@ export class UserListComponent implements OnInit, OnDestroy {
             summary: 'Success',
             detail: `User ${user.email} has been reactivated`
           });
+          this.dashboardService.invalidateDashboardCache();
           this.loadUsers();
         },
         error: (error) => {

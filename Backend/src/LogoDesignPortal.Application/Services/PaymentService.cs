@@ -1,4 +1,5 @@
 using AutoMapper;
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.DTOs.Payments;
 using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
@@ -19,6 +20,7 @@ public class PaymentService : IPaymentService
     private readonly IMapper _mapper;
     private readonly ISettingsService _settingsService;
     private readonly INotificationService _notificationService;
+    private readonly IReadModelCacheVersions _readModelCache;
     private readonly ILogger<PaymentService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
 
@@ -27,6 +29,7 @@ public class PaymentService : IPaymentService
         IMapper mapper,
         ISettingsService settingsService,
         INotificationService notificationService,
+        IReadModelCacheVersions readModelCache,
         ILogger<PaymentService> logger,
         IHttpClientFactory httpClientFactory)
     {
@@ -34,8 +37,15 @@ public class PaymentService : IPaymentService
         _mapper = mapper;
         _settingsService = settingsService;
         _notificationService = notificationService;
+        _readModelCache = readModelCache;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+    }
+
+    private void InvalidateFinancialReadModels()
+    {
+        _readModelCache.BumpOrders();
+        _readModelCache.BumpAnalytics();
     }
 
     public async Task<PaymentResponseDto> CreatePaymentAsync(CreatePaymentRequestDto request, Guid userId)
@@ -246,6 +256,9 @@ public class PaymentService : IPaymentService
         payment.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+
+        if (payment.Status == PaymentStatus.Completed)
+            InvalidateFinancialReadModels();
 
         return _mapper.Map<PaymentResponseDto>(payment);
     }
@@ -483,6 +496,9 @@ public class PaymentService : IPaymentService
 
         payment.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        if (payment.Status == PaymentStatus.Completed)
+            InvalidateFinancialReadModels();
 
         return _mapper.Map<PaymentResponseDto>(payment);
     }

@@ -3,6 +3,8 @@ namespace LogoDesignPortal.API.Models;
 public class ApiResponse<T>
 {
     public T Data { get; set; } = default!;
+    /// <summary>Optional human-readable summary for clients (success envelope).</summary>
+    public string? Message { get; set; }
     public ApiMeta? Meta { get; set; }
 }
 
@@ -17,7 +19,10 @@ public class ApiMeta
 
 public class ApiErrorResponse
 {
-    public string Error { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string CorrelationId { get; set; } = string.Empty;
+    /// <summary>Legacy alias; prefer <see cref="Message"/>.</summary>
+    public string? Error { get; set; }
     public string? Code { get; set; }
     public object? Details { get; set; }
 }

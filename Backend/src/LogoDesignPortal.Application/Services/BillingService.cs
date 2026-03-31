@@ -102,11 +102,26 @@ public class BillingService : IBillingService
             query = query.Where(o => o.CompletedDate.HasValue && o.CompletedDate.Value.Date <= to);
         }
 
-        var orders = await query
+        var page = Math.Max(1, filter.Page);
+        var pageSize = Math.Clamp(filter.PageSize, 1, 250);
+        var totalCount = await query.CountAsync();
+
+        var rows = await query
             .OrderBy(o => o.CompletedDate ?? o.UpdatedAt ?? o.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(o => new
+            {
+                o.Id,
+                o.Title,
+                o.ClientChargePrice,
+                o.ClientPrice,
+                o.Price,
+                o.CompletedDate
+            })
             .ToListAsync();
 
-        var mappedOrders = orders.Select(o => new BillingEligibleOrderDto
+        var orders = rows.Select(o => new BillingEligibleOrderDto
         {
             OrderId = o.Id,
             OrderNumber = NotificationFormatHelper.GetOrderNumber(o.Id),
@@ -115,10 +130,16 @@ public class BillingService : IBillingService
             CompletedDate = o.CompletedDate
         }).ToList();
 
+        var totalAmountPreview = await query.SumAsync(o =>
+            o.ClientChargePrice > 0 ? o.ClientChargePrice : (o.ClientPrice ?? o.Price));
+
         return new BillingQueueResultDto
         {
-            Orders = mappedOrders,
-            TotalAmountPreview = mappedOrders.Sum(x => x.Price)
+            Orders = orders,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+            TotalAmountPreview = totalAmountPreview
         };
     }
 

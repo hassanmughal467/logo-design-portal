@@ -36,12 +36,12 @@ public class AuthController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Unauthorized(new { error = ex.Message });
+            return Unauthorized(this.StandardError(ex.Message));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Login failed for email: {Email}. Error: {Message}", request?.Email, ex.Message);
-            return StatusCode(500, new { error = "An error occurred while processing your request. Please ensure the database is running and migrations have been applied." });
+            return StatusCode(500, this.StandardError("An error occurred while processing your request. Please ensure the database is running and migrations have been applied."));
         }
     }
 
@@ -54,7 +54,7 @@ public class AuthController : ControllerBase
     {
         if (request == null)
         {
-            return BadRequest(new { error = "Request body is required." });
+            return BadRequest(this.StandardError("Request body is required."));
         }
 
         if (!ModelState.IsValid)
@@ -63,7 +63,7 @@ public class AuthController : ControllerBase
                 .Where(x => x.Value?.Errors.Count > 0)
                 .SelectMany(x => x.Value!.Errors.Select(e => e.ErrorMessage))
                 .ToList();
-            return BadRequest(new { error = string.Join(" ", errors) });
+            return BadRequest(this.StandardError(string.Join(" ", errors)));
         }
 
         try
@@ -73,24 +73,21 @@ public class AuthController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(this.StandardError(ex.Message));
         }
         catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
         {
             _logger.LogError(ex, "Registration database error for email: {Email}. Inner: {Inner}", request.Email, ex.InnerException?.Message);
             var innerMsg = ex.InnerException?.Message ?? ex.Message;
             var isConstraintOrSchema = innerMsg.Contains("Duplicate") || innerMsg.Contains("column") || innerMsg.Contains("migration");
-            return StatusCode(500, new
-            {
-                error = isConstraintOrSchema
-                    ? "Registration failed. The email may already exist, or the database may need migrations applied."
-                    : "Registration failed. Please try again."
-            });
+            return StatusCode(500, this.StandardError(isConstraintOrSchema
+                ? "Registration failed. The email may already exist, or the database may need migrations applied."
+                : "Registration failed. Please try again."));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Registration failed for email: {Email}. Error: {Message}", request.Email, ex.Message);
-            return StatusCode(500, new { error = "Registration failed. Please try again." });
+            return StatusCode(500, this.StandardError("Registration failed. Please try again."));
         }
     }
 
@@ -107,7 +104,7 @@ public class AuthController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Unauthorized(new { error = ex.Message });
+            return Unauthorized(this.StandardError(ex.Message));
         }
     }
 

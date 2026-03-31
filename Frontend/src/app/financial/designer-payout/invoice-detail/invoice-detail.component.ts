@@ -15,7 +15,6 @@ import {
 })
 export class InvoiceDetailComponent implements OnInit {
   invoice: DesignerInvoice | null = null;
-  loading = true;
   isAdmin = false;
 
   constructor(
@@ -32,18 +31,14 @@ export class InvoiceDetailComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.loadInvoice(id);
-    } else {
-      this.loading = false;
     }
   }
 
   loadInvoice(id: string): void {
-    this.loading = true;
     const endpoint = this.isAdmin ? `designer-invoice/${id}` : `designer-payout/me/invoices/${id}`;
     this.apiService.get<DesignerInvoice>(endpoint).subscribe({
       next: (data) => {
         this.invoice = data;
-        this.loading = false;
       },
       error: () => {
         this.messageService.add({
@@ -51,7 +46,6 @@ export class InvoiceDetailComponent implements OnInit {
           summary: 'Error',
           detail: 'Invoice not found.'
         });
-        this.loading = false;
         this.router.navigate(['/financial/designer-payout']);
       }
     });

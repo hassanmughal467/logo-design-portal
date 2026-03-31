@@ -8,7 +8,6 @@ import { RevenueForecastItem } from '@core/services/financial-analytics.service'
 })
 export class RevenueForecastChartComponent implements OnChanges {
   @Input() items: RevenueForecastItem[] = [];
-  @Input() loading = false;
 
   chartOptions: any = null;
 

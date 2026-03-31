@@ -3,10 +3,12 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { RealtimeNotificationService } from '@core/services/realtime-notification.service';
+import { SharedListDataService, UserTypeaheadItem } from '@core/services/shared-list-data.service';
+import { DashboardService } from '@core/services/dashboard.service';
 import { MessageService } from 'primeng/api';
 import { FileUpload } from 'primeng/fileupload';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Observable, Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, finalize, map, switchMap, takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus, OrderPriority, OrderSource } from '@shared/models/order.model';
 import { isOrderLocked as checkOrderLocked } from '@shared/utils/order-locking';
 
@@ -25,6 +27,11 @@ interface QuickFilterChip {
   count: number;
 }
 
+interface UserPickOption {
+  id: string;
+  label: string;
+}
+
 @Component({
   selector: 'app-order-list',
   templateUrl: './order-list.component.html',
@@ -33,7 +40,6 @@ interface QuickFilterChip {
 export class OrderListComponent implements OnInit, OnDestroy {
   orders: Order[] = [];
   filteredOrders: Order[] = [];
-  loading = false;
   selectedStatus: OrderStatus | null = null;
   globalFilter = '';
   first = 0;
@@ -117,12 +123,25 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   @ViewChild('fileUpload') fileUploadComponent!: FileUpload;
   @ViewChild('quickCompletedFileUpload') private quickCompletedFileUpload?: FileUpload;
-  availableDesigners: any[] = [];
-  selectedDesignerId: string | null = null;
+  /** Debounced user search for autocomplete (shared pipeline). */
+  private readonly userSearch$ = new Subject<{ scope: 'qc' | 'qd' | 'ad'; query: string }>();
+  quickClientSuggestions: UserPickOption[] = [];
+  quickDesignerSuggestions: UserPickOption[] = [];
+  assignDesignerSuggestions: UserPickOption[] = [];
+  selectedQuickClient: UserPickOption | null = null;
+  selectedQuickDesigner: UserPickOption | null = null;
+  selectedAssignDesigner: UserPickOption | null = null;
   newStatus: { label: string; value: OrderStatus } | null = null;
   availableStatuses: { label: string; value: OrderStatus }[] = [];
 
   private destroy$ = new Subject<void>();
+
+  isOrdersLoading = false;
+  hasOrdersLoadedOnce = false;
+
+  get showOrdersSkeleton(): boolean {
+    return this.isOrdersLoading && !this.hasOrdersLoadedOnce;
+  }
 
   constructor(
     private apiService: ApiService,
@@ -130,11 +149,38 @@ export class OrderListComponent implements OnInit, OnDestroy {
     private realtimeNotification: RealtimeNotificationService,
     private messageService: MessageService,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private sharedListData: SharedListDataService,
+    private dashboardService: DashboardService
   ) {}
 
   ngOnInit(): void {
     this.filteredOrders = [];
+
+    this.userSearch$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged((a, b) => a.scope === b.scope && a.query === b.query),
+        switchMap(({ scope, query }) => {
+          const role = scope === 'qc' ? 'Client' : 'Designer';
+          return this.sharedListData.searchUsers(query, role, 15).pipe(
+            map((items: UserTypeaheadItem[]) => ({
+              scope,
+              items: items.map((u) => ({ id: u.id, label: u.label }))
+            }))
+          );
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe(({ scope, items }) => {
+        if (scope === 'qc') {
+          this.quickClientSuggestions = items;
+        } else if (scope === 'qd') {
+          this.quickDesignerSuggestions = items;
+        } else {
+          this.assignDesignerSuggestions = items;
+        }
+      });
 
     // Check user role
     const user = this.authService.getCurrentUser();
@@ -155,6 +201,9 @@ export class OrderListComponent implements OnInit, OnDestroy {
   private handleOrderUpdate(data: { orderId: string; status?: string; invoiceId?: string }): void {
     const orderId = data.orderId?.toLowerCase?.() ?? data.orderId;
     if (orderId === '**reconnect**') {
+      if (this.isAdminOrSuper) {
+        this.sharedListData.clearOrdersAdminCache();
+      }
       this.loadOrders();
       return;
     }
@@ -171,6 +220,9 @@ export class OrderListComponent implements OnInit, OnDestroy {
       this.applyFilters();
     } else {
       // Order not in current view (e.g. new order for admin) - full refresh
+      if (this.isAdminOrSuper) {
+        this.sharedListData.clearOrdersAdminCache();
+      }
       this.loadOrders();
     }
   }
@@ -199,61 +251,86 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   // ═══ DATA LOADING ═══
   loadOrders(): void {
-    this.loading = true;
     const user = this.authService.getCurrentUser();
 
     if (!user) {
-      this.loading = false;
+      this.orders = [];
+      this.filteredOrders = [];
+      this.isOrdersLoading = false;
+      this.hasOrdersLoadedOnce = true;
+      return;
+    }
+
+    this.isOrdersLoading = true;
+
+    const track = <T>(source: Observable<T>) =>
+      source.pipe(
+        takeUntil(this.destroy$),
+        finalize(() => {
+          this.isOrdersLoading = false;
+          this.hasOrdersLoadedOnce = true;
+        })
+      );
+
+    if (user.role === 'Client') {
+      track(this.apiService.get<any>('orders/my-orders')).subscribe({
+        next: (response) => this.applyOrdersFromResponse(response, false),
+        error: (err) => this.finishOrdersLoadError(err)
+      });
+      return;
+    }
+    if (user.role === 'Designer') {
+      track(this.apiService.get<any>('orders/assigned-orders')).subscribe({
+        next: (response) => this.applyOrdersFromResponse(response, false),
+        error: (err) => this.finishOrdersLoadError(err)
+      });
+      return;
+    }
+
+    track(this.sharedListData.fetchAllOrdersUncached()).subscribe({
+      next: (list) => {
+        const orders = Array.isArray(list) ? list : [];
+        this.applyOrdersArray(orders);
+      },
+      error: (err) => this.finishOrdersLoadError(err)
+    });
+  }
+
+  private applyOrdersFromResponse(response: unknown, isPagedItems: boolean): void {
+    const orders = isPagedItems
+      ? ApiService.extractItems<any>(response)
+      : Array.isArray(response)
+        ? response
+        : [];
+    this.applyOrdersArray(orders);
+  }
+
+  private applyOrdersArray(orders: unknown[]): void {
+    if (!orders || !Array.isArray(orders)) {
       this.orders = [];
       this.filteredOrders = [];
       return;
     }
 
-    let endpoint = 'orders';
-    if (user.role === 'Client') {
-      endpoint = 'orders/my-orders';
-    } else if (user.role === 'Designer') {
-      endpoint = 'orders/assigned-orders';
-    } else {
-      endpoint = 'orders?page=1&pageSize=500';
+    this.orders = orders.map(order => this.transformOrder(order as any));
+    this.buildSummaryCards();
+    this.buildQuickFilterChips();
+    this.applyFilters();
+  }
+
+  private finishOrdersLoadError(error?: unknown): void {
+    let errorMessage = 'Failed to load orders';
+    const err = error as { status?: number; error?: { error?: string } } | undefined;
+    if (err?.status === 403) {
+      errorMessage = 'You do not have permission to view orders';
+    } else if (err?.status === 401) {
+      errorMessage = 'Please log in to view orders';
+    } else if (err?.error?.error) {
+      errorMessage = err.error.error;
     }
-
-    this.apiService.get<any>(endpoint)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (response) => {
-          const orders = endpoint.includes('?')
-            ? ApiService.extractItems<any>(response)
-            : (Array.isArray(response) ? response : []);
-          if (!orders || !Array.isArray(orders)) {
-            this.orders = [];
-            this.filteredOrders = [];
-            this.loading = false;
-            return;
-          }
-
-          this.orders = orders.map(order => this.transformOrder(order));
-          this.buildSummaryCards();
-          this.buildQuickFilterChips();
-          this.applyFilters();
-          this.loading = false;
-        },
-        error: (error) => {
-          let errorMessage = 'Failed to load orders';
-          if (error.status === 403) {
-            errorMessage = 'You do not have permission to view orders';
-          } else if (error.status === 401) {
-            errorMessage = 'Please log in to view orders';
-          } else if (error.error?.error) {
-            errorMessage = error.error.error;
-          }
-
-          this.messageService.add({ severity: 'error', summary: 'Error', detail: errorMessage });
-          this.loading = false;
-          this.orders = [];
-          this.filteredOrders = [];
-        }
-      });
+    this.messageService.add({ severity: 'error', summary: 'Error', detail: errorMessage });
+    this.orders = [];
+    this.filteredOrders = [];
   }
 
   // ═══ SUMMARY CARDS ═══
@@ -576,6 +653,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   onOrderUpdated(): void {
+    this.dashboardService.invalidateDashboardCache();
     this.loadOrders();
   }
 
@@ -602,8 +680,6 @@ export class OrderListComponent implements OnInit, OnDestroy {
       companyName: ''
     }
   };
-  clientOptions: { label: string; value: string }[] = [];
-  designerOptions: { label: string; value: string }[] = [];
 
   canCreateOrder(): boolean {
     return this.authService.hasRole('Client');
@@ -650,30 +726,25 @@ export class OrderListComponent implements OnInit, OnDestroy {
       price: null,
       completedAt: new Date(),
       notes: '',
-      newClient: { email: '', firstName: '', lastName: '', companyName: '' }
+        newClient: { email: '', firstName: '', lastName: '', companyName: '' }
     };
+    this.selectedQuickClient = null;
+    this.selectedQuickDesigner = null;
+    this.quickClientSuggestions = [];
+    this.quickDesignerSuggestions = [];
     this.showQuickCompletedDialog = true;
-    this.loadQuickCompletedUsers();
   }
 
-  private loadQuickCompletedUsers(): void {
-    this.apiService.get<any>('users?page=1&pageSize=500')
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (response) => {
-          const users = ApiService.extractItems<any>(response);
-          this.clientOptions = users
-            .filter(u => u.role === 'Client' || u.roleName === 'Client')
-            .map(u => ({ label: `${u.firstName || ''} ${u.lastName || ''} (${u.email || 'No email'})`.trim(), value: u.id }));
-          this.designerOptions = users
-            .filter(u => u.role === 'Designer' || u.roleName === 'Designer')
-            .map(u => ({ label: `${u.firstName || ''} ${u.lastName || ''} (${u.email || 'No email'})`.trim(), value: u.id }));
-        },
-        error: () => {
-          this.clientOptions = [];
-          this.designerOptions = [];
-        }
-      });
+  onQuickClientComplete(event: { query: string }): void {
+    this.userSearch$.next({ scope: 'qc', query: event.query ?? '' });
+  }
+
+  onQuickDesignerComplete(event: { query: string }): void {
+    this.userSearch$.next({ scope: 'qd', query: event.query ?? '' });
+  }
+
+  onAssignDesignerComplete(event: { query: string }): void {
+    this.userSearch$.next({ scope: 'ad', query: event.query ?? '' });
   }
 
   onQuickCompletedFileSelect(event: any): void {
@@ -688,19 +759,21 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   submitQuickCompletedOrder(): void {
     const m = this.quickCompletedModel;
-    const missingClient = !this.quickCompletedUseNewClient && !m.clientUserId;
+    const clientId = this.selectedQuickClient?.id ?? m.clientUserId;
+    const designerId = this.selectedQuickDesigner?.id ?? m.designerUserId;
+    const missingClient = !this.quickCompletedUseNewClient && !clientId;
     const missingNewClient = this.quickCompletedUseNewClient && (!m.newClient?.email || !m.newClient?.firstName || !m.newClient?.lastName || !m.newClient?.companyName);
-    if (missingClient || missingNewClient || !m.designerUserId || !m.title?.trim() || !m.price || !m.completedAt || this.quickCompletedFiles.length === 0) {
+    if (missingClient || missingNewClient || !designerId || !m.title?.trim() || !m.price || !m.completedAt || this.quickCompletedFiles.length === 0) {
       this.messageService.add({ severity: 'warn', summary: 'Missing Fields', detail: 'Please complete all required fields.' });
       return;
     }
 
     const payload: any = {
-      clientUserId: this.quickCompletedUseNewClient ? null : m.clientUserId,
+      clientUserId: this.quickCompletedUseNewClient ? null : clientId,
       newClient: this.quickCompletedUseNewClient ? m.newClient : null,
       title: m.title.trim(),
       description: m.description?.trim() || null,
-      designerUserId: m.designerUserId,
+      designerUserId: designerId,
       price: Number(m.price),
       completedAt: new Date(m.completedAt).toISOString(),
       notes: m.notes?.trim() || null
@@ -718,6 +791,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
           this.quickCompletedSubmitting = false;
           this.showQuickCompletedDialog = false;
           this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Completed order added successfully' });
+          this.sharedListData.clearAll();
+          this.dashboardService.invalidateDashboardCache();
           this.loadOrders();
           if (created?.id) {
             this.selectedOrderId = created.id;
@@ -736,6 +811,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   onOrderCreated(order: any): void {
+    this.dashboardService.invalidateDashboardCache();
     if (this.quoteConversionId && order?.id) {
       this.apiService.post(`quotes/${this.quoteConversionId}/convert-to-order`, { orderId: order.id })
         .pipe(takeUntil(this.destroy$))
@@ -794,37 +870,23 @@ export class OrderListComponent implements OnInit, OnDestroy {
   // ═══ ACTION DIALOGS ═══
   openAssignDialog(order: Order): void {
     this.selectedOrder = order;
-    this.selectedDesignerId = order.designerId || null;
-    this.loadDesigners();
+    this.assignDesignerSuggestions = [];
+    this.selectedAssignDesigner = order.designerId
+      ? { id: order.designerId, label: 'Current designer — type to search and replace' }
+      : null;
     this.showAssignDialog = true;
   }
 
-  loadDesigners(): void {
-    this.apiService.get<any>('users?page=1&pageSize=500')
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (response) => {
-          const users = ApiService.extractItems<any>(response);
-          this.availableDesigners = users
-            .filter(u => u.role === 'Designer' || u.roleName === 'Designer')
-            .map(u => {
-              const fullName = [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
-              return { label: fullName || u.email || 'Unknown Designer', value: u.id };
-            });
-        },
-        error: () => { this.availableDesigners = []; }
-      });
-  }
-
   assignDesigner(): void {
-    if (!this.selectedOrder || !this.selectedDesignerId) return;
+    if (!this.selectedOrder || !this.selectedAssignDesigner?.id) return;
 
-    this.apiService.post(`orders/${this.selectedOrder.id}/assign`, { designerId: this.selectedDesignerId })
+    this.apiService.post(`orders/${this.selectedOrder.id}/assign`, { designerId: this.selectedAssignDesigner.id })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
           this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Designer assigned successfully' });
           this.showAssignDialog = false;
+          this.dashboardService.invalidateDashboardCache();
           this.loadOrders();
         },
         error: () => {
@@ -893,6 +955,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
         next: () => {
           this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Order status updated successfully' });
           this.showStatusDialog = false;
+          this.dashboardService.invalidateDashboardCache();
           this.loadOrders();
         },
         error: (error) => {
@@ -908,6 +971,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.messageService.add({ severity: 'success', summary: 'Approved', detail: 'Order has been approved' });
+          this.dashboardService.invalidateDashboardCache();
           this.loadOrders();
         },
         error: (error) => {
@@ -922,6 +986,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.messageService.add({ severity: 'success', summary: 'Revision Requested', detail: 'Revision has been requested' });
+          this.dashboardService.invalidateDashboardCache();
           this.loadOrders();
         },
         error: (error) => {
@@ -937,6 +1002,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.messageService.add({ severity: 'success', summary: 'Preview Submitted', detail: 'Preview has been delivered to client' });
+          this.dashboardService.invalidateDashboardCache();
           this.loadOrders();
         },
         error: (error) => {

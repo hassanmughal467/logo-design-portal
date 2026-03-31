@@ -1,8 +1,10 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Injector } from '@angular/core';
 import { BehaviorSubject, Observable, throwError } from 'rxjs';
 import { map, catchError, tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { ApiService } from './api.service';
+import { SharedListDataService } from './shared-list-data.service';
+import { DashboardService } from './dashboard.service';
 import { LoginRequest, LoginResponse, RegisterRequest, User } from '@shared/models/user.model';
 
 const TOKEN_KEY = 'auth_token';
@@ -23,7 +25,8 @@ export class AuthService {
 
   constructor(
     private apiService: ApiService,
-    private router: Router
+    private router: Router,
+    private injector: Injector
   ) {
     // Restore session from localStorage on app init (e.g. after refresh)
     this.loadUserFromStorage();
@@ -74,6 +77,12 @@ export class AuthService {
   }
 
   logout(): void {
+    this.injector.get(SharedListDataService).clearAll();
+    try {
+      this.injector.get(DashboardService).invalidateDashboardCache();
+    } catch {
+      /* avoid hard failure if DI graph changes */
+    }
     this.accessToken = null;
     this.tokenExpiry = null;
     this.currentUserSubject.next(null);

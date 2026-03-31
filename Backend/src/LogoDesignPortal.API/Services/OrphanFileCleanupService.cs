@@ -1,22 +1,18 @@
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace LogoDesignPortal.API.Services;
 
 /// <summary>
-/// Background service that periodically scans the preview (Temporary) file storage
-/// and deletes orphan files: files on disk that have no corresponding database record.
-/// Runs every 24 hours. Never touches Reference or Final (Permanent) storage.
+/// Scans preview (Temporary) file storage and deletes orphan files (no DB row). Invoked on a schedule via Hangfire (not IHostedService) so only cluster workers run it.
 /// </summary>
-public class OrphanFileCleanupService : BackgroundService
+public class OrphanFileCleanupService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _configuration;
     private readonly ILogger<OrphanFileCleanupService> _logger;
-    private static readonly TimeSpan DefaultInterval = TimeSpan.FromHours(24);
 
     public OrphanFileCleanupService(
         IServiceProvider serviceProvider,
@@ -28,44 +24,8 @@ public class OrphanFileCleanupService : BackgroundService
         _logger = logger;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        _logger.LogInformation("OrphanFileCleanupService started. Will run every 24 hours.");
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                await RunCleanupAsync(stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Orphan file cleanup failed. Will retry at next interval.");
-            }
-
-            var intervalMinutes = _configuration.GetValue<int?>("FileStorage:OrphanCleanupIntervalMinutes");
-            var interval = intervalMinutes.HasValue && intervalMinutes.Value > 0
-                ? TimeSpan.FromMinutes(intervalMinutes.Value)
-                : DefaultInterval;
-
-            try
-            {
-                await Task.Delay(interval, stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-        }
-
-        _logger.LogInformation("OrphanFileCleanupService stopped.");
-    }
-
-    private async Task RunCleanupAsync(CancellationToken cancellationToken)
+    /// <summary>Single cleanup pass; scheduled via Hangfire recurring job (not duplicated per instance when Redis storage is used).</summary>
+    public async Task RunOnceAsync(CancellationToken cancellationToken = default)
     {
         var fileStoragePath = _configuration["FileStorage:Path"]
             ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
@@ -80,8 +40,7 @@ public class OrphanFileCleanupService : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
 
-        // Load all file paths from LogoFiles and RevisionFiles
-        var knownPaths = await GetKnownFilePathsAsync(context, cancellationToken);
+        var knownPaths = await GetKnownFilePathsAsync(context, cancellationToken).ConfigureAwait(false);
 
         var deletedCount = 0;
         var files = Directory.EnumerateFiles(previewStoragePath, "*", SearchOption.TopDirectoryOnly);
@@ -118,26 +77,24 @@ public class OrphanFileCleanupService : BackgroundService
         IApplicationDbContext context,
         CancellationToken cancellationToken)
     {
-        // LogoFiles: Preview and Revision types are stored in Temporary folder
         var logoPaths = await context.LogoFiles
             .AsNoTracking()
             .Where(f => f.FilePath != null && f.FilePath.Length > 0)
             .Select(f => f.FilePath)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        // RevisionFiles: also stored in Temporary folder
         var revisionPaths = await context.RevisionFiles
             .AsNoTracking()
             .Where(f => f.FilePath != null && f.FilePath.Length > 0)
             .Select(f => f.FilePath)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        var allPaths = logoPaths.Concat(revisionPaths)
+        return logoPaths.Concat(revisionPaths)
             .Where(p => !string.IsNullOrWhiteSpace(p))
             .Select(NormalizePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        return allPaths;
     }
 
     private static string NormalizePath(string path)

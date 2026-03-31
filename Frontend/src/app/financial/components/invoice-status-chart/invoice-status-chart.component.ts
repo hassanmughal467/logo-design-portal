@@ -8,7 +8,6 @@ import { InvoiceStatusItem } from '@core/services/financial-analytics.service';
 })
 export class InvoiceStatusChartComponent implements OnChanges {
   @Input() items: InvoiceStatusItem[] = [];
-  @Input() loading = false;
 
   chartOptions: any = null;
   readonly colors: Record<string, string> = {

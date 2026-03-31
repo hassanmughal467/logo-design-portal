@@ -12,7 +12,6 @@ import {
 })
 export class ForecastAnalyticsComponent implements OnChanges {
   @Input() data: ForecastAnalytics | null = null;
-  @Input() loading = false;
 
   orderForecastChart: any;
   revenueForecastChart: any;

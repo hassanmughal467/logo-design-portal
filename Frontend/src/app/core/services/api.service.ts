@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '@environments/environment';
+import { SKIP_LOADER_HEADER } from '../interceptors/http-request-tracker.interceptor';
 
 @Injectable({
   providedIn: 'root'
@@ -14,6 +15,14 @@ export class ApiService {
   }
 
   constructor(private http: HttpClient) {}
+
+  /**
+   * Pass as `headers` on HttpClient calls to omit the request from the non-blocking HTTP activity counter
+   * ({@link SKIP_LOADER_HEADER} is stripped before the request is sent).
+   */
+  skipLoaderHeaders(): HttpHeaders {
+    return new HttpHeaders({ [SKIP_LOADER_HEADER]: 'true' });
+  }
 
   // Generic HTTP methods
   get<T>(endpoint: string): Observable<T> {
@@ -77,7 +86,7 @@ export class ApiService {
     return {
       total: data?.total ?? meta?.total ?? 0,
       page: data?.page ?? meta?.page ?? 1,
-      pageSize: data?.pageSize ?? meta?.pageSize ?? 20,
+      pageSize: data?.pageSize ?? meta?.pageSize ?? 50,
       totalPages: meta?.totalPages ?? (data?.pageSize > 0 && data?.total != null
         ? Math.ceil(data.total / data.pageSize) : 0)
     };

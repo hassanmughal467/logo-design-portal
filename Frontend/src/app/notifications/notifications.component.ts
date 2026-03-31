@@ -21,7 +21,6 @@ export type NotificationFilter = 'all' | 'Order' | 'Message' | 'Invoice' | 'Syst
 })
 export class NotificationsComponent implements OnInit, OnDestroy {
   groupedNotifications: NotificationGroup[] = [];
-  loading = false;
   showUnreadOnly = false;
   currentPage = 1;
   totalCount = 0;
@@ -96,7 +95,6 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   }
 
   loadNotifications(): void {
-    this.loading = true;
     const referenceType = this.activeFilter === 'all' ? undefined : this.activeFilter;
     const search = this.searchQuery?.trim() || undefined;
 
@@ -112,13 +110,11 @@ export class NotificationsComponent implements OnInit, OnDestroy {
           this.totalCount = result.totalCount;
           this.totalPages = Math.max(1, Math.ceil(this.totalCount / this.pageSize));
           this.groupedNotifications = groupNotificationsByDate(result.items);
-          this.loading = false;
         },
         error: () => {
           this.groupedNotifications = [];
           this.totalCount = 0;
           this.totalPages = 1;
-          this.loading = false;
         }
       });
   }

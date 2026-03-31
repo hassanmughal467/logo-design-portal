@@ -26,7 +26,7 @@ public class BillingController : ControllerBase
     /// </summary>
     [HttpGet("queue")]
     [ProducesResponseType(typeof(List<BillingQueueOverviewDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetBillingQueue([FromQuery] Guid? clientId = null, [FromQuery] DateTime? fromDate = null, [FromQuery] DateTime? toDate = null, [FromQuery] bool onlyUninvoiced = true)
+    public async Task<IActionResult> GetBillingQueue([FromQuery] Guid? clientId = null, [FromQuery] DateTime? fromDate = null, [FromQuery] DateTime? toDate = null, [FromQuery] bool onlyUninvoiced = true, [FromQuery] int page = 1, [FromQuery] int pageSize = 100)
     {
         if (clientId.HasValue || fromDate.HasValue || toDate.HasValue || !onlyUninvoiced)
         {
@@ -35,7 +35,9 @@ public class BillingController : ControllerBase
                 ClientId = clientId,
                 FromDate = fromDate,
                 ToDate = toDate,
-                OnlyUninvoiced = onlyUninvoiced
+                OnlyUninvoiced = onlyUninvoiced,
+                Page = page,
+                PageSize = pageSize
             });
             return Ok(filtered);
         }

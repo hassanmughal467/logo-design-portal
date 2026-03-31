@@ -15,7 +15,6 @@ import {
 })
 export class OrderAnalyticsComponent implements OnChanges {
   @Input() data: OrderAnalytics | null = null;
-  @Input() loading = false;
 
   ordersTrendChart: any;
   ordersTrendDailyChart: any;

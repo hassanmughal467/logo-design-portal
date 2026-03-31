@@ -1,9 +1,3 @@
-<!-- Loading state -->
-<div class="designer-detail-container loading-state" *ngIf="loading && !designer">
-  <p-progressSpinner></p-progressSpinner>
-  <p>Loading designer details...</p>
-</div>
-
 <!-- Error state -->
 <div class="designer-detail-container error-state" *ngIf="loadFailed && !designer">
   <i class="pi pi-exclamation-triangle" style="font-size: 3rem; color: var(--red-500); margin-bottom: 1rem;"></i>
@@ -18,9 +12,7 @@
     <h2>{{ designer.user.firstName }} {{ designer.user.lastName }}</h2>
   </div>
 
-  <p-progressSpinner *ngIf="loading"></p-progressSpinner>
-
-  <div *ngIf="!loading" class="content">
+  <div class="content">
     <div class="info-cards">
       <p-card>
         <h3>Designer Information</h3>

@@ -1,7 +1,6 @@
 <div class="chart-card">
   <h3 class="chart-title"><i class="pi pi-chart-line"></i> Revenue Forecast (Moving Average)</h3>
-  <div *ngIf="loading" class="chart-skeleton"></div>
-  <div *ngIf="!loading && chartOptions" class="chart-container">
+  <div *ngIf="chartOptions" class="chart-container">
     <apx-chart
       [series]="chartOptions.series"
       [chart]="chartOptions.chart"
@@ -14,7 +13,7 @@
       [tooltip]="chartOptions.tooltip">
     </apx-chart>
   </div>
-  <div *ngIf="!loading && (!items || items.length === 0)" class="chart-empty">
+  <div *ngIf="!items || items.length === 0" class="chart-empty">
     <i class="pi pi-chart-line"></i>
     <p>No forecast data</p>
   </div>

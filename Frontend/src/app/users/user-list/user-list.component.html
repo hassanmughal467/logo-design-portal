@@ -16,17 +16,10 @@
     </div>
   </div>
 
-  <!-- Loading State -->
-  <div *ngIf="loading" style="text-align: center; padding: 3rem;">
-    <i class="pi pi-spin pi-spinner" style="font-size: 2rem;"></i>
-    <p>Loading users...</p>
-  </div>
-
   <p-card styleClass="users-card">
     <p-table 
       #dt
       [value]="users" 
-      [loading]="loading"
       [paginator]="true"
       [rows]="rows"
       [first]="first"
@@ -34,8 +27,7 @@
       (onPage)="onPageChange($event)"
       [globalFilterFields]="['firstName', 'lastName', 'email', 'roleName']"
       [rowsPerPageOptions]="[10, 25, 50]"
-      styleClass="p-datatable-striped p-datatable-sm"
-      [responsive]="true">
+      styleClass="p-datatable-striped p-datatable-sm">
       
       <ng-template pTemplate="caption">
         <div class="table-header">

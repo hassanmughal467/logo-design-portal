@@ -68,7 +68,7 @@
   </div>
 
   <!-- Notification List (Grouped) -->
-  <div class="notifications-list" *ngIf="!loading">
+  <div class="notifications-list">
     <ng-container *ngFor="let group of groupedNotifications">
       <div class="notification-group">
         <h3 class="group-label">{{ group.label }}</h3>
@@ -128,8 +128,4 @@
     </div>
   </div>
 
-  <div *ngIf="loading" class="loading-state">
-    <i class="pi pi-spin pi-spinner"></i>
-    <p>Loading notifications...</p>
-  </div>
 </div>

@@ -13,7 +13,7 @@ test('UAT - slow internet shows loader and remains usable', async ({ page }) => 
   await login.login(E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   await login.expectRedirectToDashboard();
 
-  await expect(page.locator('.loading-container')).toBeVisible();
+  await expect(page.getByTestId('scoped-page-skeleton')).toBeVisible();
   await expect(page.getByRole('heading', { name: /Dashboard/i })).toBeVisible();
 });
 

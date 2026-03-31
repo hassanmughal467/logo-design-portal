@@ -18,15 +18,13 @@
     <p-table 
       #dt
       [value]="permissions" 
-      [loading]="loading"
       [paginator]="true"
       [rows]="rows"
       [first]="first"
       (onPage)="first = $event.first"
       [globalFilterFields]="['name', 'description', 'resource', 'action']"
       [rowsPerPageOptions]="[10, 25, 50]"
-      styleClass="p-datatable-striped"
-      [responsive]="true">
+      styleClass="p-datatable-striped">
       
       <ng-template pTemplate="caption">
         <div class="table-header">
@@ -98,7 +96,7 @@
       <p class="matrix-subtitle">Toggle permissions for each role. SuperAdmin has all permissions automatically.</p>
     </div>
     
-    <div *ngIf="(permissions.length === 0 || roles.length === 0) && !loading" class="matrix-empty">
+    <div *ngIf="(permissions.length === 0 || roles.length === 0)" class="matrix-empty">
       <i class="pi pi-info-circle" style="font-size: 2rem; color: var(--text-color-secondary);"></i>
       <p>{{ roles.length === 0 ? 'Loading roles...' : 'No permissions available. Please load permissions first.' }}</p>
     </div>

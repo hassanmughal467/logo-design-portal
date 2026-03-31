@@ -16,14 +16,8 @@
     </div>
   </div>
 
-  <!-- Loading State -->
-  <div *ngIf="loading" class="loading-container">
-    <p-progressSpinner></p-progressSpinner>
-    <p>Loading client details...</p>
-  </div>
-
   <!-- Error State -->
-  <div *ngIf="loadFailed && !loading" class="error-container">
+  <div *ngIf="loadFailed" class="error-container">
     <i class="pi pi-exclamation-triangle" style="font-size: 3rem; color: var(--red-500); margin-bottom: 1rem;"></i>
     <h3>Failed to Load Client</h3>
     <p>{{ errorMessage || 'An error occurred while loading the client.' }}</p>
@@ -31,7 +25,7 @@
   </div>
 
   <!-- Client Info Card -->
-  <div *ngIf="!loading && client" class="client-info-section">
+  <div *ngIf="client" class="client-info-section">
     <p-card styleClass="info-card">
       <div class="client-info-grid">
         <div class="info-item">
@@ -81,7 +75,7 @@
   </div>
 
   <!-- Tabs Section -->
-  <div *ngIf="!loading && client" class="tabs-section">
+  <div *ngIf="client" class="tabs-section">
     <p-card styleClass="tabs-card">
       <p-tabView [(activeIndex)]="activeTab">
         <!-- Order History Tab -->
@@ -101,8 +95,7 @@
               [value]="orders" 
               [paginator]="true"
               [rows]="10"
-              styleClass="p-datatable-striped"
-              [responsive]="true">
+              styleClass="p-datatable-striped">
               <ng-template pTemplate="header">
                 <tr>
                   <th>Order ID</th>
@@ -169,8 +162,7 @@
               [value]="invoices" 
               [paginator]="true"
               [rows]="10"
-              styleClass="p-datatable-striped"
-              [responsive]="true">
+              styleClass="p-datatable-striped">
               <ng-template pTemplate="header">
                 <tr>
                   <th>Invoice #</th>

@@ -32,7 +32,7 @@
             class="global-search-input" />
           <i *ngIf="globalSearch" class="pi pi-times search-clear" (click)="globalSearch = ''; onSearchChange()"></i>
         </span>
-        <div class="search-stats" *ngIf="!loading">
+        <div class="search-stats">
           <span class="stat-item">{{ totalClients }} Client{{ totalClients !== 1 ? 's' : '' }}</span>
           <span class="stat-divider">•</span>
           <span class="stat-item">{{ totalFiles }} File{{ totalFiles !== 1 ? 's' : '' }}</span>
@@ -42,7 +42,7 @@
   </div>
 
   <!-- Filters -->
-  <p-card styleClass="filters-card" *ngIf="!loading">
+  <p-card styleClass="filters-card">
     <div class="filters-container">
       <!-- Super Admin Filters -->
       <div *ngIf="isSuperAdmin" class="filter-row">
@@ -172,17 +172,11 @@
     </div>
   </p-card>
 
-  <div *ngIf="loading" class="loading-container">
-    <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
-    <p>Loading files...</p>
-  </div>
-
   <!-- Super Admin Hierarchical View -->
-  <div *ngIf="!loading && isSuperAdmin && viewMode === 'table'">
+  <div *ngIf="isSuperAdmin && viewMode === 'table'">
     <p-card styleClass="files-card">
       <p-table 
         [value]="clientGroups" 
-        [loading]="loading"
         [paginator]="true"
         [rows]="pageSize"
         [first]="0"
@@ -397,10 +391,9 @@
   </div>
 
   <!-- Regular User Table View -->
-  <p-card styleClass="files-card" *ngIf="!loading && !isSuperAdmin && viewMode === 'table'">
+  <p-card styleClass="files-card" *ngIf="!isSuperAdmin && viewMode === 'table'">
     <p-table 
       [value]="logoGroups" 
-      [loading]="loading"
       [paginator]="true"
       [rows]="pageSize"
       [first]="0"
@@ -553,7 +546,7 @@
   </p-card>
 
   <!-- Grid View (for both SuperAdmin and regular users) -->
-  <div *ngIf="!loading && viewMode === 'grid'" class="grid-view">
+  <div *ngIf="viewMode === 'grid'" class="grid-view">
     <div class="logos-grid">
       <p-card *ngFor="let logo of getPaginatedLogos()" styleClass="logo-card">
         <div class="logo-card-header" (click)="toggleLogo(logo.orderId)">

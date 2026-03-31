@@ -46,7 +46,6 @@ export interface Comment {
 export class ProjectDetailComponent implements OnInit, OnDestroy {
   projectId: string | null = null;
   project: Project | null = null;
-  loading = false;
   activeTab: number = 0;
 
   // Revisions
@@ -91,7 +90,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   }
 
   loadProject(): void {
-    this.loading = true;
     // Try to load from orders API (projects might be orders)
     this.apiService.get<any>(`orders/${this.projectId}`)
       .pipe(takeUntil(this.destroy$))
@@ -110,7 +108,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
             createdAt: new Date(order.createdAt),
             updatedAt: new Date(order.updatedAt || order.createdAt)
           };
-          this.loading = false;
         },
         error: () => {
           // If order not found, create a mock project
@@ -124,7 +121,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
             createdAt: new Date(),
             updatedAt: new Date()
           };
-          this.loading = false;
         }
       });
   }

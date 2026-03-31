@@ -4,10 +4,10 @@
     <p>All your approved final files</p>
   </div>
 
-  <div class="gallery-grid" *ngIf="!loading">
+  <div class="gallery-grid">
     <div 
       class="gallery-item" 
-      *ngFor="let item of galleryItems"
+      *ngFor="let item of galleryItems; trackBy: trackById"
       (click)="previewItem(item)"
     >
       <div class="gallery-item-image">
@@ -41,10 +41,6 @@
     </div>
   </div>
 
-  <div *ngIf="loading" class="loading-state">
-    <i class="pi pi-spin pi-spinner"></i>
-    <p>Loading gallery...</p>
-  </div>
 </div>
 
 <p-dialog 

@@ -11,7 +11,6 @@ import {
 })
 export class DesignerAnalyticsComponent implements OnChanges {
   @Input() data: DesignerAnalytics | null = null;
-  @Input() loading = false;
 
   designerChart: any;
   designerActivityChart: any;

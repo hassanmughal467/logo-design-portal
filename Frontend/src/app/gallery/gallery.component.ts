@@ -5,6 +5,7 @@ import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { GalleryItem } from '@shared/models/gallery.model';
+import { trackById } from '@core/utils/track-by.utils';
 
 @Component({
   selector: 'app-gallery',
@@ -12,8 +13,9 @@ import { GalleryItem } from '@shared/models/gallery.model';
   styleUrls: ['./gallery.component.scss']
 })
 export class GalleryComponent implements OnInit, OnDestroy {
+  readonly trackById = trackById;
+
   galleryItems: GalleryItem[] = [];
-  loading = false;
   selectedItem: GalleryItem | null = null;
   showPreviewDialog = false;
 
@@ -43,13 +45,11 @@ export class GalleryComponent implements OnInit, OnDestroy {
   }
 
   loadGallery(): void {
-    this.loading = true;
     this.apiService.get<GalleryItem[]>('gallery/my-gallery')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (items) => {
           this.galleryItems = items;
-          this.loading = false;
         },
         error: (error) => {
           this.messageService.add({
@@ -58,7 +58,6 @@ export class GalleryComponent implements OnInit, OnDestroy {
             detail: error.error?.error || 'Failed to load gallery'
           });
           this.galleryItems = [];
-          this.loading = false;
         }
       });
   }

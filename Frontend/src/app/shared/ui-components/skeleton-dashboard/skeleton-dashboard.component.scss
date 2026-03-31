@@ -1,0 +1,104 @@
+@import '../skeleton-shimmer.scss';
+
+.skeleton-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.sk-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.skeleton-dashboard--client .sk-kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.sk-kpi {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--surface-border, var(--p-border-color, #dee2e6));
+  border-radius: 10px;
+  background: var(--surface-card, var(--p-surface-0, #fff));
+}
+
+.sk-kpi-icon {
+  @include skeleton-shimmer-block;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.sk-kpi-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.sk-kpi-value {
+  @include skeleton-shimmer-block;
+  height: 18px;
+  width: 48%;
+  margin-bottom: 0.45rem;
+}
+
+.sk-kpi-label {
+  @include skeleton-shimmer-block;
+  height: 11px;
+  width: 72%;
+  opacity: 0.9;
+}
+
+.sk-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.sk-section-title {
+  @include skeleton-shimmer-block;
+  height: 16px;
+  width: 220px;
+  max-width: 55%;
+}
+
+.sk-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+
+  &--split {
+    flex-direction: row;
+    flex-wrap: wrap;
+
+    .sk-chart {
+      flex: 1;
+      min-width: 260px;
+      min-height: 220px;
+    }
+  }
+}
+
+.sk-chart {
+  @include skeleton-shimmer-block;
+  min-height: 200px;
+  border-radius: 10px;
+  opacity: 0.95;
+
+  &--secondary {
+    opacity: 0.9;
+  }
+}
+
+.skeleton-dashboard--analytics .sk-chart {
+  min-height: 240px;
+}
+
+.skeleton-dashboard--table app-skeleton-table {
+  display: block;
+}

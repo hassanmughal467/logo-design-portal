@@ -124,13 +124,13 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
-                return Unauthorized(new { error = "User identity could not be determined." });
+                return Unauthorized(this.StandardError("User identity could not be determined."));
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var order = await _orderService.GetOrderByIdAsync(id, userId, userRole);
             
             if (order == null)
             {
-                return NotFound(new { error = "Order not found." });
+                return NotFound(this.StandardError("Order not found."));
             }
 
             return Ok(order);
@@ -138,12 +138,12 @@ public class OrdersController : ControllerBase
         catch (ForbiddenAccessException ex)
         {
             // User is authenticated but doesn't have access to this resource
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
+            return StatusCode(StatusCodes.Status403Forbidden, this.StandardError(ex.Message));
         }
         catch (UnauthorizedAccessException ex)
         {
             // User is not authenticated
-            return Unauthorized(new { error = ex.Message });
+            return Unauthorized(this.StandardError(ex.Message));
         }
     }
 
@@ -169,12 +169,26 @@ public class OrdersController : ControllerBase
         return Ok(orders);
     }
 
+    /// <summary>Typeahead order search (10–20 items).</summary>
+    [HttpGet("search")]
+    [Authorize]
+    [RequirePermission("ViewAllOrders")]
+    [ProducesResponseType(typeof(IReadOnlyList<OrderTypeaheadDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SearchOrders([FromQuery] string? query, [FromQuery] int limit = 15)
+    {
+        limit = Math.Clamp(limit, 1, 20);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var items = await _orderService.SearchOrdersForTypeaheadAsync(userRole, query, limit);
+        return Ok(items);
+    }
+
     [HttpGet]
     [Authorize]
     [RequirePermission("ViewAllOrders")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetAllOrders([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    public async Task<IActionResult> GetAllOrders([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -183,6 +197,7 @@ public class OrdersController : ControllerBase
         return Ok(new ApiResponse<object>
         {
             Data = new { items = paged.Items, total = paged.Total, page = paged.Page, pageSize = paged.PageSize },
+            Message = null,
             Meta = new ApiMeta { Total = paged.Total, Page = paged.Page, PageSize = paged.PageSize, TotalPages = totalPages }
         });
     }

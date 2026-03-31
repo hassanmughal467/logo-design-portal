@@ -62,5 +62,10 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.HasIndex(e => e.Status);
         builder.HasIndex(e => e.PaidDate);
         builder.HasIndex(e => new { e.ClientId, e.Status });
+        builder.HasIndex(e => e.CreatedAt);
+
+        builder.Property(e => e.RowVersion)
+            .IsRowVersion()
+            .IsConcurrencyToken();
     }
 }

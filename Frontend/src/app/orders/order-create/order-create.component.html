@@ -110,7 +110,7 @@
           </p-dropdown>
         </div>
 
-        <!-- Placement (Left Chest / Jacket Back) - shown only for Embroidery or Custom Patch -->
+        <!-- Placement (Left Chest / Jacket Back) - shown for Embroidery/Digitizing or Custom Patch -->
         <div class="form-group" *ngIf="showPlacementDropdown">
           <label for="placement">Placement</label>
           <p-dropdown 
@@ -173,7 +173,7 @@
             placeholder="e.g., Modern, minimalist, professional"
           />
           <small class="p-error" *ngIf="showStylePreferencesDropdown && f['stylePreferences'].invalid && f['stylePreferences'].touched">
-            Stitch type is required for embroidery
+            Stitch type is required for Embroidery / Digitizing
           </small>
         </div>
 

@@ -8,7 +8,6 @@ import { DesignerRevenueItem } from '@core/services/financial-analytics.service'
 })
 export class DesignerRevenueChartComponent implements OnChanges {
   @Input() items: DesignerRevenueItem[] = [];
-  @Input() loading = false;
 
   chartOptions: any = null;
 

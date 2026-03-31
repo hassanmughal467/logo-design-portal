@@ -10,7 +10,6 @@ import { forkJoin, of } from 'rxjs';
   styleUrls: ['./client-intelligence-dashboard.component.scss']
 })
 export class ClientIntelligenceDashboardComponent implements OnInit, OnDestroy {
-  loading = true;
   apiError = false;
   overview: ClientAnalyticsOverview | null = null;
   topClients: any[] = [];
@@ -40,7 +39,6 @@ export class ClientIntelligenceDashboardComponent implements OnInit, OnDestroy {
   }
 
   loadData(): void {
-    this.loading = true;
     this.apiError = false;
 
     forkJoin({
@@ -69,9 +67,7 @@ export class ClientIntelligenceDashboardComponent implements OnInit, OnDestroy {
         error: () => {
           this.apiError = true;
         },
-        complete: () => {
-          this.loading = false;
-        }
+        complete: () => {}
       });
   }
 

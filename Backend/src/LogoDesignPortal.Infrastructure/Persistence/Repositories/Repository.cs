@@ -20,6 +20,7 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
     public virtual async Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _dbSet
+            .AsNoTracking()
             .Where(e => !e.IsDeleted)
             .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
     }
@@ -27,6 +28,7 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
     public virtual async Task<IEnumerable<T>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _dbSet
+            .AsNoTracking()
             .Where(e => !e.IsDeleted)
             .ToListAsync(cancellationToken);
     }
@@ -34,6 +36,7 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
     public virtual async Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
     {
         return await _dbSet
+            .AsNoTracking()
             .Where(e => !e.IsDeleted)
             .Where(predicate)
             .ToListAsync(cancellationToken);
@@ -64,13 +67,14 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
     public virtual async Task<bool> ExistsAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
     {
         return await _dbSet
+            .AsNoTracking()
             .Where(e => !e.IsDeleted)
             .AnyAsync(predicate, cancellationToken);
     }
 
     public virtual async Task<int> CountAsync(Expression<Func<T, bool>>? predicate = null, CancellationToken cancellationToken = default)
     {
-        var query = _dbSet.Where(e => !e.IsDeleted);
+        var query = _dbSet.AsNoTracking().Where(e => !e.IsDeleted);
         
         if (predicate != null)
         {

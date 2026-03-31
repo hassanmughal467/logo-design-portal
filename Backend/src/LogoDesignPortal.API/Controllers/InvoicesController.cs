@@ -1,4 +1,5 @@
 using LogoDesignPortal.API.Extensions;
+using LogoDesignPortal.Application.DTOs.Common;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Domain.Enums;
@@ -60,8 +61,8 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(List<InvoiceResponseDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetInvoices([FromQuery] Guid? clientId = null, [FromQuery] DateTime? issueDateFrom = null, [FromQuery] DateTime? issueDateTo = null, [FromQuery] BillingType? billingType = null, [FromQuery] InvoiceStatus? status = null)
+    [ProducesResponseType(typeof(PagedResultDto<InvoiceResponseDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetInvoices([FromQuery] Guid? clientId = null, [FromQuery] DateTime? issueDateFrom = null, [FromQuery] DateTime? issueDateTo = null, [FromQuery] BillingType? billingType = null, [FromQuery] InvoiceStatus? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
@@ -73,7 +74,7 @@ public class InvoicesController : ControllerBase
             BillingType = billingType,
             Status = status
         };
-        var invoices = await _invoiceService.GetInvoicesAsync(userId, userRole, filters);
+        var invoices = await _invoiceService.GetInvoicesAsync(userId, userRole, filters, page, pageSize);
         return Ok(invoices);
     }
 
@@ -205,7 +206,7 @@ public class InvoicesController : ControllerBase
         {
             var userId = User.GetUserIdOrThrow();
             var userRole = User.FindFirstValue(ClaimTypes.Role);
-            var invoices = await _invoiceService.GetInvoicesAsync(userId, userRole);
+            var invoices = await _invoiceService.GetInvoicesForExportAsync(userId, userRole, filters: null, maxRows: 500);
 
             // Filter by status if provided
             if (!string.IsNullOrWhiteSpace(status))

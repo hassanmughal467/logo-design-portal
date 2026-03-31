@@ -26,5 +26,8 @@ public class OrderStatusHistoryConfiguration : IEntityTypeConfiguration<OrderSta
             .WithMany(o => o.StatusHistory)
             .HasForeignKey(e => e.OrderId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Filter/sort analytics and order timeline queries by order + status + time.
+        builder.HasIndex(e => new { e.OrderId, e.NewStatus, e.CreatedAt });
     }
 }

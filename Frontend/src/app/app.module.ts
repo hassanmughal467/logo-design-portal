@@ -10,7 +10,8 @@ import { ToastModule } from 'primeng/toast';
 
 // Core
 import { TokenInterceptor } from './core/interceptors/token.interceptor';
-import { ErrorInterceptor } from './core/interceptors/error.interceptor';
+import { HttpRequestTrackerInterceptor } from './core/interceptors/http-request-tracker.interceptor';
+import { HttpLoadingErrorInterceptor } from './core/interceptors/http-loading-error.interceptor';
 
 // Components
 import { AppComponent } from './app.component';
@@ -40,7 +41,12 @@ import { LayoutModule } from './layout/layout.module';
     },
     {
       provide: HTTP_INTERCEPTORS,
-      useClass: ErrorInterceptor,
+      useClass: HttpRequestTrackerInterceptor,
+      multi: true
+    },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: HttpLoadingErrorInterceptor,
       multi: true
     }
   ],

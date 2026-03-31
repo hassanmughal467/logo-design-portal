@@ -7,26 +7,15 @@
     </div>
   </div>
 
-  <!-- Loading State -->
-  <div *ngIf="loading" class="loading-container" style="text-align: center; padding: 2rem;">
-    <p-progressSpinner 
-      strokeWidth="4" 
-      animationDuration="1s"
-      [style]="{width: '50px', height: '50px'}">
-    </p-progressSpinner>
-    <p style="margin-top: 1rem;">Loading designers...</p>
-  </div>
-
   <!-- Debug Info (remove in production) -->
   <div *ngIf="false" style="background: #f0f0f0; padding: 10px; margin: 10px; border-radius: 4px;">
     <p><strong>Debug Info:</strong></p>
-    <p>Loading: {{ loading }}</p>
     <p>Designers Count: {{ designers.length }}</p>
     <p>Error Message: {{ errorMessage || 'None' }}</p>
   </div>
 
   <!-- Error Message Display -->
-  <p-card *ngIf="errorMessage && !loading" styleClass="error-card">
+  <p-card *ngIf="errorMessage" styleClass="error-card">
     <div class="error-message">
       <i class="pi pi-exclamation-triangle"></i>
       <div>
@@ -45,15 +34,13 @@
   <p-card styleClass="designers-card" *ngIf="!errorMessage">
     <p-table 
       [value]="designers" 
-      [loading]="loading"
       [paginator]="true"
       [rows]="rows"
       [first]="first"
       (onPage)="first = $event.first"
       [globalFilterFields]="['userFirstName', 'userLastName', 'specialization']"
       [rowsPerPageOptions]="[10, 25, 50]"
-      styleClass="p-datatable-striped"
-      [responsive]="true">
+      styleClass="p-datatable-striped">
       
       <ng-template pTemplate="caption">
         <div class="table-header">

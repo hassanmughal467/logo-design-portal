@@ -23,7 +23,6 @@ export interface DateRangeBounds {
   styleUrls: ['./financial.component.scss']
 })
 export class FinancialComponent implements OnInit, OnDestroy {
-  loading = true;
   isAdmin = false;
   isClient = false;
   private destroy$ = new Subject<void>();
@@ -107,7 +106,6 @@ export class FinancialComponent implements OnInit, OnDestroy {
   }
 
   loadFinancialData(): void {
-    this.loading = true;
     const user = this.authService.getCurrentUser();
     this.isAdmin = user?.role === 'SuperAdmin' || user?.role === 'Admin';
     this.isClient = user?.role === 'Client' || user?.roleName === 'Client';
@@ -115,12 +113,13 @@ export class FinancialComponent implements OnInit, OnDestroy {
 
     // Admin: financial dashboard loads its own data (never mix with client data)
     if (this.isAdmin) {
-      this.loading = false;
       return;
     }
 
     // Client/Designer: use only client-scoped data from dashboard (filtered by ClientId for clients)
     this.initChartOptions();
+
+    this.dashboardService.invalidateDashboardCache();
 
     // Load dashboard data (filtered by ClientId)
     this.dashboardService.getDashboardData()
@@ -128,7 +127,6 @@ export class FinancialComponent implements OnInit, OnDestroy {
         takeUntil(this.destroy$),
         catchError(error => {
           console.error('Error loading financial data:', error);
-          this.loading = false;
           return of(null);
         })
       )
@@ -145,7 +143,6 @@ export class FinancialComponent implements OnInit, OnDestroy {
             this.buildFinancialSnapshot(data);
           }
         }
-        this.loading = false;
       });
   }
 

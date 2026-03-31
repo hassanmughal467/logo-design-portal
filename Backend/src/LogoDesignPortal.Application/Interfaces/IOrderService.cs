@@ -44,4 +44,7 @@ public interface IOrderService
     /// Admin updates the client charge price for an order. Can be done anytime before invoice generation.
     /// </summary>
     Task<OrderResponseDto> UpdateClientChargePriceAsync(Guid orderId, UpdateClientChargePriceRequestDto request, Guid userId, string? userRole = null);
+
+    /// <summary>Debounce-friendly order search for admin pickers (respects role masking).</summary>
+    Task<IReadOnlyList<OrderTypeaheadDto>> SearchOrdersForTypeaheadAsync(string? userRole, string? query, int limit, CancellationToken cancellationToken = default);
 }

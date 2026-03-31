@@ -12,6 +12,9 @@ import { DataTableWrapperComponent } from './data-table-wrapper/data-table-wrapp
 import { PrimaryButtonComponent } from './primary-button/primary-button.component';
 import { SecondaryButtonComponent } from './secondary-button/secondary-button.component';
 import { ModalDialogComponent } from './modal-dialog/modal-dialog.component';
+import { SkeletonCardComponent } from './skeleton-card/skeleton-card.component';
+import { SkeletonTableComponent } from './skeleton-table/skeleton-table.component';
+import { SkeletonDashboardComponent } from './skeleton-dashboard/skeleton-dashboard.component';
 
 @NgModule({
   declarations: [
@@ -24,7 +27,10 @@ import { ModalDialogComponent } from './modal-dialog/modal-dialog.component';
     DataTableWrapperComponent,
     PrimaryButtonComponent,
     SecondaryButtonComponent,
-    ModalDialogComponent
+    ModalDialogComponent,
+    SkeletonCardComponent,
+    SkeletonTableComponent,
+    SkeletonDashboardComponent
   ],
   imports: [CommonModule, ButtonModule, DialogModule],
   exports: [
@@ -37,7 +43,10 @@ import { ModalDialogComponent } from './modal-dialog/modal-dialog.component';
     DataTableWrapperComponent,
     PrimaryButtonComponent,
     SecondaryButtonComponent,
-    ModalDialogComponent
+    ModalDialogComponent,
+    SkeletonCardComponent,
+    SkeletonTableComponent,
+    SkeletonDashboardComponent
   ]
 })
 export class UiComponentsModule {}

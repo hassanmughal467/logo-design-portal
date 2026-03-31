@@ -12,15 +12,13 @@
   <p-card styleClass="messages-card">
     <p-table 
       [value]="messages" 
-      [loading]="loading"
       [paginator]="true"
       [rows]="rows"
       [first]="first"
       (onPage)="first = $event.first"
       [globalFilterFields]="['senderName', 'recipientName', 'content']"
       [rowsPerPageOptions]="[10, 25, 50]"
-      styleClass="p-datatable-striped"
-      [responsive]="true">
+      styleClass="p-datatable-striped">
       
       <ng-template pTemplate="caption">
         <div class="table-header">

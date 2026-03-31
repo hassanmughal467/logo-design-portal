@@ -4,24 +4,30 @@ import { DashboardService } from './dashboard.service';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
+import { SharedListDataService } from './shared-list-data.service';
 
 describe('DashboardService', () => {
   let service: DashboardService;
   let apiService: jasmine.SpyObj<ApiService>;
   let authService: jasmine.SpyObj<AuthService>;
   let notificationService: jasmine.SpyObj<NotificationService>;
+  let sharedListData: jasmine.SpyObj<SharedListDataService>;
 
   beforeEach(() => {
     apiService = jasmine.createSpyObj('ApiService', ['get']);
     authService = jasmine.createSpyObj('AuthService', ['getCurrentUser']);
     notificationService = jasmine.createSpyObj('NotificationService', ['getNotifications']);
+    sharedListData = jasmine.createSpyObj('SharedListDataService', ['getAllUsers', 'getAllOrdersAdmin', 'clearAll']);
+    sharedListData.getAllUsers.and.returnValue(of([]));
+    sharedListData.getAllOrdersAdmin.and.returnValue(of([]));
 
     TestBed.configureTestingModule({
       providers: [
         DashboardService,
         { provide: ApiService, useValue: apiService },
         { provide: AuthService, useValue: authService },
-        { provide: NotificationService, useValue: notificationService }
+        { provide: NotificationService, useValue: notificationService },
+        { provide: SharedListDataService, useValue: sharedListData }
       ]
     });
 

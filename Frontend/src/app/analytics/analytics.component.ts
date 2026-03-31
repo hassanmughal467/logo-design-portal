@@ -3,10 +3,10 @@ import { AuthService } from '@core/services/auth.service';
 import { AdminAnalyticsService } from '@core/services/admin-analytics.service';
 import { DashboardService, DashboardData } from '@core/services/dashboard.service';
 import { ApiService } from '@core/services/api.service';
+import { SharedListDataService } from '@core/services/shared-list-data.service';
 import { MessageService } from 'primeng/api';
-import { Subject } from 'rxjs';
-import { takeUntil, catchError, forkJoin, of } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { forkJoin, of, Subject } from 'rxjs';
+import { catchError, finalize, map, takeUntil } from 'rxjs/operators';
 import { OrderStatus } from '@shared/models/order.model';
 
 @Component({
@@ -15,7 +15,6 @@ import { OrderStatus } from '@shared/models/order.model';
   styleUrls: ['./analytics.component.scss']
 })
 export class AnalyticsComponent implements OnInit, OnDestroy {
-  loading = true;
   private destroy$ = new Subject<void>();
 
   overview: any = null;
@@ -47,6 +46,13 @@ export class AnalyticsComponent implements OnInit, OnDestroy {
   deliveryChartOptions: any;
   revisionChartOptions: any;
 
+  isAnalyticsLoading = false;
+  hasAnalyticsLoadedOnce = false;
+
+  get showAnalyticsSkeleton(): boolean {
+    return this.isAnalyticsLoading && !this.hasAnalyticsLoadedOnce;
+  }
+
   // Expand/collapse for section blocks
   orderChartsCollapsed = false;
   workflowCollapsed = false;
@@ -61,7 +67,8 @@ export class AnalyticsComponent implements OnInit, OnDestroy {
     private adminAnalytics: AdminAnalyticsService,
     private dashboardService: DashboardService,
     private apiService: ApiService,
-    private messageService: MessageService
+    private messageService: MessageService,
+    private sharedListData: SharedListDataService
   ) {}
 
   ngOnInit(): void {
@@ -90,12 +97,11 @@ export class AnalyticsComponent implements OnInit, OnDestroy {
     }
 
     if (!this.isAdmin) {
-      this.loading = false;
       return;
     }
 
-    this.loading = true;
     this.apiError = false;
+    this.isAnalyticsLoading = true;
     forkJoin({
       overview: this.adminAnalytics.getOverview().pipe(catchError((err) => { console.error('Analytics overview error:', err); return of(null); })),
       orders: this.adminAnalytics.getOrderAnalytics().pipe(catchError((err) => { console.error('Order analytics error:', err); return of(null); })),
@@ -106,11 +112,17 @@ export class AnalyticsComponent implements OnInit, OnDestroy {
       system: this.adminAnalytics.getSystemAnalytics().pipe(catchError((err) => { console.error('System analytics error:', err); return of(null); })),
       forecast: this.adminAnalytics.getForecastAnalytics().pipe(catchError((err) => { console.error('Forecast analytics error:', err); return of(null); })),
       insights: this.adminAnalytics.getInsights().pipe(catchError((err) => { console.error('Insights error:', err); return of(null); })),
-      recentOrders: this.apiService.get<any>('orders?page=1&pageSize=500').pipe(
-        map(res => ApiService.extractItems<any>(res)),
+      recentOrders: this.sharedListData.fetchAllOrdersUncached().pipe(
+        map((res) => (Array.isArray(res) ? res : []) as any[]),
         catchError(() => of([]))
       )
-    }).pipe(takeUntil(this.destroy$)).subscribe({
+    }).pipe(
+      takeUntil(this.destroy$),
+      finalize(() => {
+        this.isAnalyticsLoading = false;
+        this.hasAnalyticsLoadedOnce = true;
+      })
+    ).subscribe({
       next: (data) => {
         this.overview = data.overview;
         this.orderAnalytics = data.orders;
@@ -134,12 +146,10 @@ export class AnalyticsComponent implements OnInit, OnDestroy {
             detail: 'Could not load analytics data. Ensure the backend is running and the API URL is correct (check environment.ts).'
           });
         }
-        this.loading = false;
       },
       error: (err) => {
         console.error('Analytics load error:', err);
         this.apiError = true;
-        this.loading = false;
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
@@ -150,16 +160,31 @@ export class AnalyticsComponent implements OnInit, OnDestroy {
   }
 
   private loadClientAnalytics(): void {
-    this.loading = true;
     this.initClientChartOptions();
+    this.isAnalyticsLoading = true;
+    this.dashboardService.invalidateDashboardCache();
     this.dashboardService.getDashboardData()
-      .pipe(takeUntil(this.destroy$), catchError(() => of(null)))
+      .pipe(
+        takeUntil(this.destroy$),
+        catchError((err) => {
+          console.error('Client analytics error:', err);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Could not load usage insights. Please try again.'
+          });
+          return of(null);
+        }),
+        finalize(() => {
+          this.isAnalyticsLoading = false;
+          this.hasAnalyticsLoadedOnce = true;
+        })
+      )
       .subscribe((data: DashboardData | null) => {
         this.clientDashboardData = data;
         if (data) {
           this.buildClientAnalytics(data);
         }
-        this.loading = false;
       });
   }
 

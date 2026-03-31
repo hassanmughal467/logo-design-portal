@@ -2,7 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '@core/services/auth.service';
+import { LoadingService } from '@core/services/loading.service';
 import { MessageService } from 'primeng/api';
+import { finalize } from 'rxjs/operators';
 
 @Component({
   selector: 'app-login',
@@ -19,6 +21,7 @@ export class LoginComponent implements OnInit {
   constructor(
     private fb: FormBuilder,
     private authService: AuthService,
+    private loadingService: LoadingService,
     private router: Router,
     private route: ActivatedRoute,
     private messageService: MessageService
@@ -68,10 +71,10 @@ export class LoginComponent implements OnInit {
     this.loading = true;
     const { email, password } = this.loginForm.value;
 
-
-    this.authService.login({ email, password }).subscribe({
+    this.loadingService
+      .runCritical(this.authService.login({ email, password }).pipe(finalize(() => (this.loading = false))))
+      .subscribe({
       next: () => {
-        this.loading = false;
         this.loginError = '';
         this.messageService.add({
           severity: 'success',
@@ -81,8 +84,6 @@ export class LoginComponent implements OnInit {
         this.router.navigate([this.returnUrl]);
       },
       error: (error) => {
-        this.loading = false;
-        
         // Extract error message from backend response
         // Backend returns { error: "message" } for 401 Unauthorized
         let errorMessage = 'Invalid email or password';

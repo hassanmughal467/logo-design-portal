@@ -1,3 +1,4 @@
+using LogoDesignPortal.Application.Caching;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Xunit;
@@ -233,6 +234,7 @@ public class DesignerPayoutServiceTests
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Mock.Of<ICommentService>(),
             Options.Create(safetyOptions),
+            Mock.Of<IReadModelCacheVersions>(),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<DesignerPayoutService>>());
     }
 }

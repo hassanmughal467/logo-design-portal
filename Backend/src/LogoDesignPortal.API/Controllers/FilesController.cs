@@ -132,7 +132,7 @@ public class FilesController : ControllerBase
 
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAllFiles([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    public async Task<IActionResult> GetAllFiles([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         try
         {

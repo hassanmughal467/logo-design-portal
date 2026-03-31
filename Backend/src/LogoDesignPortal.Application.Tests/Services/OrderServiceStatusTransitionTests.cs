@@ -1,7 +1,9 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Moq;
 using Xunit;
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.Services;
 using LogoDesignPortal.Application.Interfaces;
@@ -193,6 +195,8 @@ public class OrderServiceStatusTransitionTests
             Mock.Of<IFileService>(),
             Mock.Of<IClientLogoPricingService>(),
             Mock.Of<ICommentService>(),
-            Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>());
+            Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>(),
+            Mock.Of<IDistributedCache>(),
+            Mock.Of<IReadModelCacheVersions>());
     }
 }

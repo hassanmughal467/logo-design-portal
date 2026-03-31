@@ -9,15 +9,13 @@
   <p-card styleClass="reviews-card">
     <p-table 
       [value]="reviews" 
-      [loading]="loading"
       [paginator]="true"
       [rows]="rows"
       [first]="first"
       (onPage)="first = $event.first"
       [globalFilterFields]="['clientName', 'comment']"
       [rowsPerPageOptions]="[10, 25, 50]"
-      styleClass="p-datatable-striped"
-      [responsive]="true">
+      styleClass="p-datatable-striped">
       
       <ng-template pTemplate="caption">
         <div class="table-header">

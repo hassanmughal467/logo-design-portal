@@ -12,7 +12,6 @@ import {
 })
 export class WorkflowAnalyticsComponent implements OnChanges {
   @Input() data: WorkflowAnalytics | null = null;
-  @Input() loading = false;
 
   funnelChart: any;
   revisionChart: any;

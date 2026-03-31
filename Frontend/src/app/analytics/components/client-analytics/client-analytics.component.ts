@@ -12,7 +12,6 @@ import {
 })
 export class ClientAnalyticsComponent implements OnChanges {
   @Input() data: ClientAnalytics | null = null;
-  @Input() loading = false;
 
   newVsReturningChart: any;
   ordersPerClientChart: any;

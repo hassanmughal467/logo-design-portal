@@ -6,7 +6,7 @@ public class OrderComment : BaseEntity
 {
     public Guid OrderId { get; set; }
     public string Content { get; set; } = string.Empty;
-    public Guid CreatedBy { get; set; }
+    public new Guid CreatedBy { get; set; }
     public bool IsInternal { get; set; } = true; // Internal comments (Admin/Designer only), not visible to clients
 
     /// <summary>Type of comment for visibility and mediation control.</summary>

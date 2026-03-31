@@ -25,7 +25,6 @@ export interface DesignerProfile {
 })
 export class DesignerListComponent implements OnInit, OnDestroy {
   designers: DesignerProfile[] = [];
-  loading = false;
   globalFilter = '';
   first = 0;
   rows = 10;
@@ -49,7 +48,6 @@ export class DesignerListComponent implements OnInit, OnDestroy {
   }
 
   loadDesigners(): void {
-    this.loading = true;
     this.errorMessage = undefined;
     // Backend endpoint: GET /api/users/designer-profiles
     this.apiService.get<DesignerProfile[]>('users/designer-profiles')
@@ -57,7 +55,6 @@ export class DesignerListComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (designers) => {
           this.designers = designers || [];
-          this.loading = false;
           if (this.designers.length === 0) {
             this.messageService.add({
               severity: 'info',
@@ -73,7 +70,6 @@ export class DesignerListComponent implements OnInit, OnDestroy {
           console.error('Error body:', error?.error);
           this.errorMessage = error?.error?.error || error?.message || 'Failed to load designers. Please try again.';
           this.designers = [];
-          this.loading = false;
           this.messageService.add({
             severity: 'error',
             summary: 'Error',

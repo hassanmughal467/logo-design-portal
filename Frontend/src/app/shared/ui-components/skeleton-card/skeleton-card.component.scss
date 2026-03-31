@@ -1,0 +1,42 @@
+@import '../skeleton-shimmer.scss';
+
+.skeleton-card {
+  padding: 1.15rem;
+  border: 1px solid var(--surface-border, var(--p-border-color, #dee2e6));
+  border-radius: 10px;
+  background: var(--surface-card, var(--p-surface-0, #fff));
+  min-height: 120px;
+
+  &--compact {
+    min-height: 88px;
+    padding: 0.9rem;
+
+    .sk-title {
+      max-width: 55%;
+      height: 12px;
+      margin-bottom: 0.65rem;
+    }
+
+    .sk-line {
+      height: 10px;
+      margin-bottom: 0.45rem;
+    }
+  }
+}
+
+.sk-title {
+  @include skeleton-shimmer-block;
+  height: 14px;
+  max-width: 40%;
+  margin-bottom: 1rem;
+}
+
+.sk-line {
+  @include skeleton-shimmer-block;
+  height: 12px;
+  margin-bottom: 0.6rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}

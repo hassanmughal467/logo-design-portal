@@ -6,21 +6,12 @@
 
   <!-- Admin/SuperAdmin: Full Financial Analytics Dashboard -->
   <div *ngIf="isAdmin">
-    <div *ngIf="loading" class="loading-container">
-      <p-progressSpinner strokeWidth="4" [style]="{width: '50px', height: '50px'}"></p-progressSpinner>
-      <p>Loading financial analytics...</p>
-    </div>
-    <app-financial-dashboard *ngIf="!loading"></app-financial-dashboard>
+    <app-financial-dashboard></app-financial-dashboard>
   </div>
 
   <!-- Client/Designer: Simplified Financial Dashboard -->
   <div *ngIf="!isAdmin">
-    <div *ngIf="loading" class="loading-container">
-      <p-progressSpinner></p-progressSpinner>
-      <p>Loading financial data...</p>
-    </div>
-
-    <div *ngIf="!loading" class="financial-content">
+    <div class="financial-content">
       <!-- Activity Overview -->
       <p-card styleClass="financial-card">
         <h3 class="kpi-section-title"><i class="pi pi-chart-bar"></i> Activity Overview</h3>

@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
-import { ApiService } from '@core/services/api.service';
+import { SharedListDataService } from '@core/services/shared-list-data.service';
 import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -27,7 +27,6 @@ export interface LogoProject {
 })
 export class ProjectListComponent implements OnInit, OnDestroy {
   projects: LogoProject[] = [];
-  loading = false;
   globalFilter = '';
   selectedStatus: string | null = null;
   first = 0;
@@ -39,9 +38,9 @@ export class ProjectListComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   constructor(
-    private apiService: ApiService,
     private messageService: MessageService,
-    private router: Router
+    private router: Router,
+    private sharedListData: SharedListDataService
   ) {}
 
   ngOnInit(): void {
@@ -54,13 +53,13 @@ export class ProjectListComponent implements OnInit, OnDestroy {
   }
 
   loadProjects(): void {
-    this.loading = true;
     // Transform orders to projects
-    this.apiService.get<any>('orders?page=1&pageSize=500')
+    this.sharedListData
+      .fetchAllOrdersUncached()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response) => {
-          const orders = ApiService.extractItems<Order>(response);
+        next: (ordersRaw) => {
+          const orders = ordersRaw as Order[];
           this.projects = orders.map(order => ({
             id: order.id,
             orderId: order.id,
@@ -84,12 +83,10 @@ export class ProjectListComponent implements OnInit, OnDestroy {
             deadline: order.dueDate ? new Date(order.dueDate) : new Date(),
             createdAt: new Date(order.createdAt)
           }));
-          this.loading = false;
         },
         error: (error) => {
           console.error('Error loading projects:', error);
           this.projects = [];
-          this.loading = false;
         }
       });
   }

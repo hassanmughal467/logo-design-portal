@@ -31,9 +31,6 @@
         </div>
       </div>
     </div>
-    <div *ngIf="loading" class="kpi-skeleton">
-      <div class="skeleton-card" *ngFor="let i of [1,2,3,4]"></div>
-    </div>
   </div>
 
   <div *ngIf="apiError" class="api-error-banner">
@@ -44,7 +41,7 @@
     </div>
   </div>
 
-  <div *ngIf="!loading && !apiError" class="dashboard-charts">
+  <div *ngIf="!apiError" class="dashboard-charts">
     <!-- Row 2: Top Clients Leaderboard -->
     <div class="dashboard-row full-width">
       <p-card styleClass="chart-card">

@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Moq;
 using Xunit;
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.Services;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Domain.Entities;
@@ -175,6 +177,8 @@ public class OrderServiceFullBatchTests
             Mock.Of<IFileService>(),
             Mock.Of<IClientLogoPricingService>(),
             Mock.Of<ICommentService>(),
-            Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>());
+            Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>(),
+            Mock.Of<IDistributedCache>(),
+            Mock.Of<IReadModelCacheVersions>());
     }
 }

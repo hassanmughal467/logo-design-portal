@@ -9,7 +9,6 @@ import { AnalyticsOverview } from '@core/services/admin-analytics.service';
 })
 export class DashboardAnalyticsComponent {
   @Input() overview: AnalyticsOverview | null = null;
-  @Input() loading = false;
   @Input() recentOrders: any[] = [];
   @Input() apiError = false;
   @Input() insights: string[] | undefined = [];

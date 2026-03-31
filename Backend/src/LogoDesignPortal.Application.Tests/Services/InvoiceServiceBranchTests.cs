@@ -234,6 +234,7 @@ public class InvoiceServiceBranchTests
             notification.Object,
             realtime.Object,
             Options.Create(new ProductionSafetyOptions()),
+            Mock.Of<LogoDesignPortal.Application.Caching.IReadModelCacheVersions>(),
             Mock.Of<ILogger<InvoiceService>>());
 
         return new Fixture(context, service, notification, realtime, adminUserId, clientUserId, completedOrderId, alreadyInvoicedOrderId);

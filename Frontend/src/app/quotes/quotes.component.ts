@@ -16,7 +16,6 @@ export class QuotesComponent implements OnInit {
   @ViewChild('quoteFileUpload') private quoteFileUpload?: FileUpload;
 
   quotes: Quote[] = [];
-  loading = false;
   showCreateDialog = false;
   showRespondDialog = false;
   quoteForm: FormGroup;
@@ -66,15 +65,12 @@ export class QuotesComponent implements OnInit {
   }
 
   loadQuotes(): void {
-    this.loading = true;
     const statusQuery = this.selectedStatusFilter ? `?status=${this.selectedStatusFilter}` : '';
     this.api.get<Quote[]>(`quotes${statusQuery}`).subscribe({
       next: data => {
         this.quotes = data ?? [];
-        this.loading = false;
       },
       error: () => {
-        this.loading = false;
         this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load quotes' });
       }
     });

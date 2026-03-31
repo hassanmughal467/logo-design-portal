@@ -1,5 +1,6 @@
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
+using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -109,5 +110,48 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
                 throw;
             }
         });
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, double>> GetDesignerAverageCompletionDaysByDesignerAsync(CancellationToken cancellationToken = default)
+    {
+        var provider = Database.ProviderName ?? string.Empty;
+        if (provider.Contains("Sqlite", StringComparison.OrdinalIgnoreCase)
+            || provider.Contains("InMemory", StringComparison.OrdinalIgnoreCase))
+        {
+            var rows = await LogoOrders.AsNoTracking()
+                .Where(o => o.DesignerId.HasValue && o.Status == OrderStatus.Completed)
+                .Select(o => new { DesignerId = o.DesignerId!.Value, o.CreatedAt, End = o.UpdatedAt ?? o.CreatedAt })
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (rows.Count == 0)
+                return new Dictionary<Guid, double>();
+            return rows
+                .GroupBy(x => x.DesignerId)
+                .ToDictionary(g => g.Key, g => g.Average(x => (x.End - x.CreatedAt).TotalDays));
+        }
+
+        var completed = (int)OrderStatus.Completed;
+        var sqlResults = await Database
+            .SqlQueryRaw<DesignerAvgCompletionRow>(
+                """
+                SELECT `DesignerId` AS `DesignerId`,
+                       AVG(TIMESTAMPDIFF(MICROSECOND, `CreatedAt`, COALESCE(`UpdatedAt`, `CreatedAt`)) / 86400000000.0) AS `AvgCompletionDays`
+                FROM `LogoOrders`
+                WHERE `IsDeleted` = 0 AND `DesignerId` IS NOT NULL AND `Status` = {0}
+                GROUP BY `DesignerId`
+                """,
+                completed)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return sqlResults.ToDictionary(r => r.DesignerId, r => r.AvgCompletionDays);
+    }
+
+    /// <summary>Result shape for raw SQL only; not mapped to a table.</summary>
+    private sealed class DesignerAvgCompletionRow
+    {
+        public Guid DesignerId { get; set; }
+        public double AvgCompletionDays { get; set; }
     }
 }

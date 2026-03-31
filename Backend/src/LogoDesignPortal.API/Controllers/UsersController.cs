@@ -101,10 +101,21 @@ public class UsersController : ControllerBase
         return Ok(user);
     }
 
+    /// <summary>Typeahead search (10–20 items); debounce on the client (~300ms).</summary>
+    [HttpGet("search")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(typeof(IReadOnlyList<UserTypeaheadDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SearchUsers([FromQuery] string? query, [FromQuery] string? role, [FromQuery] int limit = 15)
+    {
+        limit = Math.Clamp(limit, 1, 20);
+        var items = await _userService.SearchUsersForTypeaheadAsync(query, role, limit);
+        return Ok(items);
+    }
+
     [HttpGet]
     [Authorize(Roles = "SuperAdmin,Admin")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAllUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    public async Task<IActionResult> GetAllUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         pageSize = Math.Clamp(pageSize, 1, 100);
         var paged = await _userService.GetUsersPagedAsync(page, pageSize);

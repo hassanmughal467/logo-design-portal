@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '@core/services/api.service';
+import { SharedListDataService } from '@core/services/shared-list-data.service';
 import { MessageService, OverlayOptions } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -91,7 +92,8 @@ export class ClientPricingManagementComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private messageService: MessageService,
-    private fb: FormBuilder
+    private fb: FormBuilder,
+    private sharedListData: SharedListDataService
   ) {
     this.addForm = this.fb.group({
       clientId: ['', Validators.required],
@@ -134,11 +136,12 @@ export class ClientPricingManagementComponent implements OnInit, OnDestroy {
 
   loadClients(): void {
     this.loading = true;
-    this.apiService.get<any>('users?page=1&pageSize=500')
+    this.sharedListData
+      .getAllUsers()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response) => {
-          const users = ApiService.extractItems<any>(response);
+        next: (usersRaw) => {
+          const users = usersRaw as any[];
           this.clients = users
             .filter(u => (u.role === 'Client' || u.roleName === 'Client') && (u.clientProfile?.id ?? u.clientProfile?.Id))
             .map(u => {

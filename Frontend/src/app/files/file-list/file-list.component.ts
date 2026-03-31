@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
+import { SharedListDataService } from '@core/services/shared-list-data.service';
 import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
@@ -22,7 +23,6 @@ export class FileListComponent implements OnInit, OnDestroy {
   originalClientGroups: ClientGroup[] = []; // Original unfiltered client groups
   originalLogoGroups: LogoGroup[] = []; // Original unfiltered logo groups
   
-  loading = false;
   viewMode: 'table' | 'grid' = 'table';
   
   // User role
@@ -89,7 +89,8 @@ export class FileListComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private authService: AuthService,
     private messageService: MessageService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private sharedListData: SharedListDataService
   ) {}
 
   ngOnInit(): void {
@@ -139,11 +140,12 @@ export class FileListComponent implements OnInit, OnDestroy {
 
   loadClientsForFilter(): Promise<void> {
     return new Promise((resolve) => {
-      this.apiService.get<any>('users?page=1&pageSize=500')
+      this.sharedListData
+        .getAllUsers()
         .pipe(takeUntil(this.destroy$))
         .subscribe({
-          next: (response) => {
-            const users = ApiService.extractItems<any>(response);
+          next: (usersRaw) => {
+            const users = usersRaw as any[];
             // Build mapping of User.Id to ClientProfile.Id
             this.userIdToClientProfileIdMap.clear();
             const clientUsers = users.filter(u => u.role === 'Client' || u.roleName === 'Client');
@@ -179,11 +181,12 @@ export class FileListComponent implements OnInit, OnDestroy {
   }
 
   loadUsersForFilter(): void {
-    this.apiService.get<any>('users?page=1&pageSize=500')
+    this.sharedListData
+      .getAllUsers()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response) => {
-          const users = ApiService.extractItems<any>(response);
+        next: (usersRaw) => {
+          const users = usersRaw as any[];
           // Build user map for role lookup
           users.forEach(user => {
             const userId = user.id;
@@ -255,7 +258,6 @@ export class FileListComponent implements OnInit, OnDestroy {
   }
 
   loadFiles(): void {
-    this.loading = true;
     this.apiService.get<any>(`files?page=${this.pageNumber}&pageSize=${this.pageSize}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -272,7 +274,6 @@ export class FileListComponent implements OnInit, OnDestroy {
             this.totalClients = 0;
             this.totalFiles = 0;
             this.totalPages = 0;
-            this.loading = false;
             this.messageService.add({
               severity: 'info',
               summary: 'No Files',
@@ -309,27 +310,27 @@ export class FileListComponent implements OnInit, OnDestroy {
           this.logoGroups = [];
           this.clientGroups = [];
           this.allFiles = [];
-          this.loading = false;
         }
       });
   }
 
   loadOrdersAndGroup(): void {
     const user = this.authService.getCurrentUser();
-    let ordersEndpoint = 'orders';
-    
-    if (user?.role === 'Client') {
-      ordersEndpoint = 'orders/my-orders';
-    } else if (user?.role === 'Designer') {
-      ordersEndpoint = 'orders/assigned-orders';
-    }
-    
-    const ordersUrl = ordersEndpoint === 'orders' ? `${ordersEndpoint}?page=1&pageSize=500` : ordersEndpoint;
-    this.apiService.get<any>(ordersUrl)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (response) => {
-          const orders = response?.items ?? (Array.isArray(response) ? response : []);
+
+    const finishError = () => {
+      if (this.isSuperAdmin) {
+        this.groupByClient(new Map());
+      } else {
+        this.groupByLogo(new Map());
+      }
+      this.applyFilters();
+      
+    };
+
+    const handleOrdersResponse = (response: unknown) => {
+          const orders = Array.isArray(response)
+            ? response
+            : (response as any)?.items ?? [];
           const orderMap = new Map<string, any>();
           orders.forEach((order: any) => {
             orderMap.set(order.id, order);
@@ -393,7 +394,7 @@ export class FileListComponent implements OnInit, OnDestroy {
                 this.loadUsersForFilter();
               }
               this.applyFilters();
-              this.loading = false;
+              
             });
           } else {
             this.groupByLogo(orderMap);
@@ -402,20 +403,24 @@ export class FileListComponent implements OnInit, OnDestroy {
               this.loadUsersForFilter();
             }
             this.applyFilters();
-            this.loading = false;
+            
           }
-        },
-        error: () => {
-          // If orders fetch fails, group without order info
-          if (this.isSuperAdmin) {
-            this.groupByClient(new Map());
-          } else {
-            this.groupByLogo(new Map());
-          }
-          this.applyFilters();
-          this.loading = false;
-        }
-      });
+    };
+
+    if (user?.role === 'Client') {
+      this.apiService.get<any>('orders/my-orders')
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({ next: handleOrdersResponse, error: finishError });
+    } else if (user?.role === 'Designer') {
+      this.apiService.get<any>('orders/assigned-orders')
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({ next: handleOrdersResponse, error: finishError });
+    } else {
+      this.sharedListData
+        .fetchAllOrdersUncached()
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({ next: handleOrdersResponse, error: finishError });
+    }
   }
 
   groupByClient(orderMap: Map<string, any>): void {

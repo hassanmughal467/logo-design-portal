@@ -8,7 +8,6 @@ import { FinancialOverview } from '@core/services/financial-analytics.service';
 })
 export class FinancialKpiCardsComponent {
   @Input() data: FinancialOverview | null = null;
-  @Input() loading = false;
 
   formatCurrency(v: number): string {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);

@@ -18,16 +18,24 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddSingleton<SlowQueryLoggingInterceptor>();
+
         // Database - Use SQLite for local dev (no MySQL needed), MySQL for production
-        services.AddDbContext<ApplicationDbContext>(options =>
+        services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
+            options.AddInterceptors(sp.GetRequiredService<SlowQueryLoggingInterceptor>());
+
             var connectionString = configuration.GetConnectionString("DefaultConnection") ?? "";
             var migrationsAssembly = "LogoDesignPortal.Infrastructure";
 
             if (connectionString.Contains("Data Source=") || connectionString.Contains(".db"))
             {
                 // SQLite - zero setup, works out of the box for local development
-                options.UseSqlite(connectionString, b => b.MigrationsAssembly(migrationsAssembly));
+                options.UseSqlite(connectionString, b =>
+                {
+                    b.MigrationsAssembly(migrationsAssembly);
+                    b.CommandTimeout(120);
+                });
             }
             else
             {
@@ -36,6 +44,7 @@ public static class DependencyInjection
                 options.UseMySql(connectionString, serverVersion, b =>
                 {
                     b.MigrationsAssembly(migrationsAssembly);
+                    b.CommandTimeout(120);
                     b.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(30), errorNumbersToAdd: null);
                 });
             }

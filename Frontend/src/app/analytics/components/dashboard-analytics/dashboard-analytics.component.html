@@ -156,7 +156,7 @@
       <button pButton label="View All" icon="pi pi-arrow-right" iconPos="right" class="p-button-text p-button-sm" (click)="navigateToOrders(); $event.stopPropagation()"></button>
     </div>
     <div class="recent-orders-body" [class.collapsed]="recentOrdersCollapsed">
-    <p-table [value]="recentOrders" [paginator]="false" styleClass="p-datatable-sm" [responsive]="true">
+    <p-table [value]="recentOrders" [paginator]="false" styleClass="p-datatable-sm">
       <ng-template pTemplate="header">
         <tr>
           <th>Title</th>

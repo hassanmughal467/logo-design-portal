@@ -1,5 +1,7 @@
 using AutoMapper;
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.Configuration;
+using LogoDesignPortal.Application.DTOs.Common;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
@@ -19,16 +21,32 @@ public class InvoiceService : IInvoiceService
     private readonly INotificationService _notificationService;
     private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
     private readonly ProductionSafetyOptions _safetyOptions;
+    private readonly IReadModelCacheVersions _readModelCache;
     private readonly ILogger<InvoiceService> _logger;
 
-    public InvoiceService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender, IOptions<ProductionSafetyOptions> safetyOptions, ILogger<InvoiceService> logger)
+    public InvoiceService(
+        IApplicationDbContext context,
+        IMapper mapper,
+        INotificationService notificationService,
+        IRealtimeEntityUpdateSender entityUpdateSender,
+        IOptions<ProductionSafetyOptions> safetyOptions,
+        IReadModelCacheVersions readModelCache,
+        ILogger<InvoiceService> logger)
     {
         _context = context;
         _mapper = mapper;
         _notificationService = notificationService;
         _entityUpdateSender = entityUpdateSender;
         _safetyOptions = safetyOptions?.Value ?? new ProductionSafetyOptions();
+        _readModelCache = readModelCache;
         _logger = logger;
+    }
+
+    /// <summary>Invalidates cached order lists, financial aggregates, and admin analytics when invoicing state changes.</summary>
+    private void InvalidateFinancialReadModels()
+    {
+        _readModelCache.BumpOrders();
+        _readModelCache.BumpAnalytics();
     }
 
     public async Task<InvoiceResponseDto> CreateInvoiceAsync(CreateInvoiceRequestDto request, Guid createdBy)
@@ -269,6 +287,8 @@ public class InvoiceService : IInvoiceService
             await _context.SaveChangesAsync(ct);
         });
 
+        InvalidateFinancialReadModels();
+
         // Structured logging for production monitoring
         _logger.LogInformation("InvoiceGenerated. InvoiceId={InvoiceId}, OrderIds={OrderIds}, UserId={UserId}, Timestamp={Timestamp}",
             invoice.Id, string.Join(",", orderIds), createdBy, DateTime.UtcNow);
@@ -318,48 +338,131 @@ public class InvoiceService : IInvoiceService
         return MapToInvoiceResponseDto(invoice);
     }
 
-    public async Task<List<InvoiceResponseDto>> GetInvoicesAsync(Guid? userId, string? userRole, InvoiceQueryFilterDto? filters = null)
+    public async Task<PagedResultDto<InvoiceResponseDto>> GetInvoicesAsync(Guid? userId, string? userRole, InvoiceQueryFilterDto? filters = null, int page = 1, int pageSize = 50)
     {
-        var query = _context.Invoices
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = BuildFilteredInvoicesQuery(userId, userRole, filters);
+        var total = await query.CountAsync();
+
+        var pageIds = await query
+            .OrderByDescending(i => i.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(i => i.Id)
+            .ToListAsync();
+
+        if (pageIds.Count == 0)
+        {
+            return new PagedResultDto<InvoiceResponseDto>
+            {
+                Items = new List<InvoiceResponseDto>(),
+                Total = total,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
+        var invoices = await _context.Invoices
             .Include(i => i.Client)
                 .ThenInclude(c => c.User)
             .Include(i => i.InvoiceOrders)
-                .ThenInclude(io => io.Order)
+            .Where(i => pageIds.Contains(i.Id))
+            .ToListAsync();
+
+        var orderLineInfo = await LoadInvoiceOrderLineInfoAsync(invoices);
+
+        await BatchUpdateOverdueInvoicesAsync(invoices);
+
+        var idOrder = pageIds.Select((id, idx) => (id, idx)).ToDictionary(x => x.id, x => x.idx);
+        var sorted = invoices.OrderBy(i => idOrder[i.Id]).ToList();
+        var items = sorted.Select(i => MapToInvoiceResponseDto(i, orderLineInfo)).ToList();
+
+        return new PagedResultDto<InvoiceResponseDto>
+        {
+            Items = items,
+            Total = total,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    public async Task<List<InvoiceResponseDto>> GetInvoicesForExportAsync(Guid? userId, string? userRole, InvoiceQueryFilterDto? filters = null, int maxRows = 500)
+    {
+        maxRows = Math.Clamp(maxRows, 1, 500);
+        var query = BuildFilteredInvoicesQuery(userId, userRole, filters);
+
+        var ids = await query
+            .OrderByDescending(i => i.CreatedAt)
+            .Take(maxRows)
+            .Select(i => i.Id)
+            .ToListAsync();
+
+        if (ids.Count == 0)
+            return new List<InvoiceResponseDto>();
+
+        var invoices = await _context.Invoices
+            .Include(i => i.Client)
+                .ThenInclude(c => c.User)
+            .Include(i => i.InvoiceOrders)
+            .Where(i => ids.Contains(i.Id))
+            .ToListAsync();
+
+        var orderLineInfo = await LoadInvoiceOrderLineInfoAsync(invoices);
+        await BatchUpdateOverdueInvoicesAsync(invoices);
+
+        var idOrder = ids.Select((id, idx) => (id, idx)).ToDictionary(x => x.id, x => x.idx);
+        var sorted = invoices.OrderBy(i => idOrder[i.Id]).ToList();
+        return sorted.Select(i => MapToInvoiceResponseDto(i, orderLineInfo)).ToList();
+    }
+
+    private IQueryable<Invoice> BuildFilteredInvoicesQuery(Guid? userId, string? userRole, InvoiceQueryFilterDto? filters)
+    {
+        var query = _context.Invoices
             .Where(i => !i.IsDeleted)
             .AsQueryable();
 
-        // Filter by role
         if (userRole == "Client" && userId.HasValue)
-        {
             query = query.Where(i => i.Client.UserId == userId.Value);
-        }
 
-        if (filters != null)
+        if (filters == null)
+            return query;
+
+        if (filters.ClientId.HasValue)
+            query = query.Where(i => i.ClientId == filters.ClientId.Value);
+        if (filters.BillingType.HasValue)
+            query = query.Where(i => i.BillingType == filters.BillingType.Value);
+        if (filters.Status.HasValue)
+            query = query.Where(i => i.Status == filters.Status.Value);
+        if (filters.IssueDateFrom.HasValue)
         {
-            if (filters.ClientId.HasValue)
-                query = query.Where(i => i.ClientId == filters.ClientId.Value);
-            if (filters.BillingType.HasValue)
-                query = query.Where(i => i.BillingType == filters.BillingType.Value);
-            if (filters.Status.HasValue)
-                query = query.Where(i => i.Status == filters.Status.Value);
-            if (filters.IssueDateFrom.HasValue)
-            {
-                var from = filters.IssueDateFrom.Value.Date;
-                query = query.Where(i => i.IssueDate.Date >= from);
-            }
-            if (filters.IssueDateTo.HasValue)
-            {
-                var to = filters.IssueDateTo.Value.Date;
-                query = query.Where(i => i.IssueDate.Date <= to);
-            }
+            var from = filters.IssueDateFrom.Value.Date;
+            query = query.Where(i => i.IssueDate.Date >= from);
+        }
+        if (filters.IssueDateTo.HasValue)
+        {
+            var to = filters.IssueDateTo.Value.Date;
+            query = query.Where(i => i.IssueDate.Date <= to);
         }
 
-        var invoices = await query.OrderByDescending(i => i.CreatedAt).ToListAsync();
+        return query;
+    }
 
-        // Batch update overdue status (single SaveChanges instead of per-invoice)
-        await BatchUpdateOverdueInvoicesAsync(invoices);
+    private async Task<Dictionary<Guid, (string? Title, DateTime CreatedAt)>> LoadInvoiceOrderLineInfoAsync(List<Invoice> invoices)
+    {
+        var orderIds = invoices
+            .SelectMany(i => i.InvoiceOrders.Where(io => io.OrderId.HasValue).Select(io => io.OrderId!.Value))
+            .Distinct()
+            .ToList();
+        if (orderIds.Count == 0)
+            return new Dictionary<Guid, (string?, DateTime)>();
 
-        return invoices.Select(MapToInvoiceResponseDto).ToList();
+        return await _context.LogoOrders
+            .AsNoTracking()
+            .Where(o => orderIds.Contains(o.Id))
+            .Select(o => new { o.Id, o.Title, o.CreatedAt })
+            .ToDictionaryAsync(x => x.Id, x => (x.Title, x.CreatedAt));
     }
 
     public async Task<InvoiceResponseDto> GenerateFlexibleInvoiceAsync(GenerateFlexibleInvoiceRequestDto request, Guid createdBy)
@@ -452,6 +555,8 @@ public class InvoiceService : IInvoiceService
             await _context.SaveChangesAsync(ct);
         });
 
+        InvalidateFinancialReadModels();
+
         // Notify client after successful invoice generation
         var clientUserId = await _context.ClientProfiles
             .Where(c => c.Id == request.ClientId && !c.IsDeleted)
@@ -530,11 +635,14 @@ public class InvoiceService : IInvoiceService
             await _context.SaveChangesAsync(ct);
         });
 
+        InvalidateFinancialReadModels();
+
         return await GetInvoiceByIdAsync(invoiceId) ?? throw new InvalidOperationException("Failed to update invoice items.");
     }
 
     public async Task<List<InvoiceResponseDto>> GetInvoicesByClientAsync(Guid clientId)
     {
+        const int maxInvoicesForClientDetail = 150;
         var client = await _context.ClientProfiles
             .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
 
@@ -547,14 +655,15 @@ public class InvoiceService : IInvoiceService
             .Include(i => i.Client)
                 .ThenInclude(c => c.User)
             .Include(i => i.InvoiceOrders)
-                .ThenInclude(io => io.Order)
             .Where(i => i.ClientId == client.Id && !i.IsDeleted)
             .OrderByDescending(i => i.CreatedAt)
+            .Take(maxInvoicesForClientDetail)
             .ToListAsync();
 
+        var orderLineInfo = await LoadInvoiceOrderLineInfoAsync(invoices);
         await BatchUpdateOverdueInvoicesAsync(invoices);
 
-        return invoices.Select(MapToInvoiceResponseDto).ToList();
+        return invoices.Select(i => MapToInvoiceResponseDto(i, orderLineInfo)).ToList();
     }
 
     public async Task<InvoiceResponseDto> UpdateInvoiceAsync(Guid invoiceId, UpdateInvoiceRequestDto request, Guid updatedBy)
@@ -645,6 +754,8 @@ public class InvoiceService : IInvoiceService
 
         await _context.SaveChangesAsync();
 
+        InvalidateFinancialReadModels();
+
         return await GetInvoiceByIdAsync(invoiceId) ?? throw new InvalidOperationException("Failed to update invoice.");
     }
 
@@ -673,6 +784,8 @@ public class InvoiceService : IInvoiceService
         await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Paid, performedBy, $"Invoice marked as paid. Payment method: {paymentMethod ?? "Not specified"}");
 
         await _context.SaveChangesAsync();
+
+        InvalidateFinancialReadModels();
 
         _logger.LogInformation("PaymentRecorded. InvoiceId={InvoiceId}, UserId={UserId}, Timestamp={Timestamp}",
             invoiceId, performedBy ?? invoice.CreatedBy, DateTime.UtcNow);
@@ -714,6 +827,8 @@ public class InvoiceService : IInvoiceService
         await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Sent, performedBy, "Invoice sent to client");
 
         await _context.SaveChangesAsync();
+
+        InvalidateFinancialReadModels();
 
         // TODO: Implement email sending logic
         // For now, just return true
@@ -768,19 +883,24 @@ public class InvoiceService : IInvoiceService
                 && i.DueDate.Value < DateTime.UtcNow)
             .ToListAsync();
 
+        var anyStatusChanged = false;
         foreach (var invoice in overdueInvoices)
         {
             if (invoice.Status != InvoiceStatus.Overdue)
             {
                 invoice.Status = InvoiceStatus.Overdue;
                 invoice.UpdatedAt = DateTime.UtcNow;
-                
+                anyStatusChanged = true;
+
                 // Create audit log (system action)
                 await CreateInvoiceLogAsync(invoice.Id, InvoiceAction.Overdue, null, "Invoice automatically marked as overdue");
             }
         }
 
         await _context.SaveChangesAsync();
+
+        if (anyStatusChanged)
+            InvalidateFinancialReadModels();
     }
 
     // Private helper methods
@@ -867,24 +987,31 @@ public class InvoiceService : IInvoiceService
     }
 
     private InvoiceResponseDto MapToInvoiceResponseDto(Invoice invoice)
+        => MapToInvoiceResponseDto(invoice, null);
+
+    private InvoiceResponseDto MapToInvoiceResponseDto(Invoice invoice,
+        IReadOnlyDictionary<Guid, (string? Title, DateTime CreatedAt)>? orderLineInfo)
     {
-        // Get all order IDs
         var orderIds = invoice.InvoiceOrders
             .Where(io => io.OrderId.HasValue)
             .Select(io => io.OrderId!.Value)
             .ToList();
 
-        // Get first order for backward compatibility
-        var firstOrder = invoice.InvoiceOrders.FirstOrDefault(io => io.OrderId.HasValue)?.Order;
-        var orderId = firstOrder?.Id ?? Guid.Empty;
+        var firstOrderId = invoice.InvoiceOrders.FirstOrDefault(io => io.OrderId.HasValue)?.OrderId;
+        Guid orderId;
+        if (firstOrderId.HasValue)
+            orderId = firstOrderId.Value;
+        else
+        {
+            var fo = invoice.InvoiceOrders.FirstOrDefault(io => io.OrderId.HasValue)?.Order;
+            orderId = fo?.Id ?? Guid.Empty;
+        }
 
-        // Calculate status (with auto-update for overdue)
         var status = invoice.Status == InvoiceStatus.Paid ? "Paid" :
                     invoice.Status == InvoiceStatus.Overdue ? "Overdue" :
                     invoice.DueDate.HasValue && invoice.DueDate.Value < DateTime.UtcNow && invoice.Status != InvoiceStatus.Paid ? "Overdue" :
                     "Pending";
 
-        // Map billing type
         var billingTypeDisplay = invoice.BillingType switch
         {
             BillingType.PerLogo => "Per Logo",
@@ -894,13 +1021,28 @@ public class InvoiceService : IInvoiceService
             _ => "Per Logo"
         };
 
-        // Map invoice items
+        string? ResolveTitle(InvoiceOrder io)
+        {
+            if (io.OrderId.HasValue && orderLineInfo != null &&
+                orderLineInfo.TryGetValue(io.OrderId.Value, out var meta))
+                return meta.Title;
+            return io.Order?.Title;
+        }
+
+        DateTime? ResolveDate(InvoiceOrder io)
+        {
+            if (io.OrderId.HasValue && orderLineInfo != null &&
+                orderLineInfo.TryGetValue(io.OrderId.Value, out var meta))
+                return meta.CreatedAt;
+            return io.Order?.CreatedAt;
+        }
+
         var items = invoice.InvoiceOrders.Select(io => new InvoiceItemDto
         {
             Id = io.Id,
             OrderId = io.OrderId,
-            OrderTitle = io.Order?.Title,
-            OrderDate = io.Order?.CreatedAt,
+            OrderTitle = ResolveTitle(io),
+            OrderDate = ResolveDate(io),
             Description = io.Description,
             Amount = io.Amount
         }).ToList();
@@ -914,8 +1056,8 @@ public class InvoiceService : IInvoiceService
         {
             Id = invoice.Id,
             InvoiceNumber = invoice.InvoiceNumber,
-            OrderId = orderId, // Backward compatibility
-            OrderIds = orderIds, // New: all order IDs
+            OrderId = orderId,
+            OrderIds = orderIds,
             ClientId = invoice.Client.UserId,
             ClientName = $"{invoice.Client.User.FirstName} {invoice.Client.User.LastName}",
             Amount = invoice.Amount,
@@ -938,40 +1080,42 @@ public class InvoiceService : IInvoiceService
 
     public async Task<InvoiceStatisticsDto> GetInvoiceStatisticsAsync(Guid? userId = null, string? userRole = null)
     {
+        await UpdateOverdueInvoicesAsync();
+
         var query = _context.Invoices
+            .AsNoTracking()
             .Where(i => !i.IsDeleted)
             .AsQueryable();
 
-        // Filter by role
         if (userRole == "Client" && userId.HasValue)
         {
             var client = await _context.ClientProfiles
+                .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.UserId == userId.Value && !c.IsDeleted);
             if (client != null)
-            {
                 query = query.Where(i => i.ClientId == client.Id);
-            }
         }
 
-        var invoices = await query.ToListAsync();
+        var totalInvoices = await query.CountAsync();
+        var paidInvoices = await query.CountAsync(i => i.Status == InvoiceStatus.Paid);
+        var overdueInvoices = await query.CountAsync(i => i.Status == InvoiceStatus.Overdue);
+        var unpaidInvoices = await query.CountAsync(i => i.Status != InvoiceStatus.Paid);
 
-        await BatchUpdateOverdueInvoicesAsync(invoices);
+        var totalAmount = await query.SumAsync(i => i.TotalAmount);
+        var paidAmount = await query.Where(i => i.Status == InvoiceStatus.Paid).SumAsync(i => i.TotalAmount);
+        var unpaidAmount = await query.Where(i => i.Status != InvoiceStatus.Paid).SumAsync(i => i.TotalAmount);
+        var overdueAmount = await query.Where(i => i.Status == InvoiceStatus.Overdue).SumAsync(i => i.TotalAmount);
 
-        // Re-query to get updated statuses
-        invoices = await query.ToListAsync();
-
-        var statistics = new InvoiceStatisticsDto
+        return new InvoiceStatisticsDto
         {
-            TotalInvoices = invoices.Count,
-            PaidInvoices = invoices.Count(i => i.Status == InvoiceStatus.Paid),
-            DueInvoices = invoices.Count(i => i.Status != InvoiceStatus.Paid), // Unpaid = Pending + Overdue
-            OverdueInvoices = invoices.Count(i => i.Status == InvoiceStatus.Overdue),
-            TotalAmount = invoices.Sum(i => i.TotalAmount),
-            PaidAmount = invoices.Where(i => i.Status == InvoiceStatus.Paid).Sum(i => i.TotalAmount),
-            DueAmount = invoices.Where(i => i.Status != InvoiceStatus.Paid).Sum(i => i.TotalAmount), // Unpaid = Pending + Overdue
-            OverdueAmount = invoices.Where(i => i.Status == InvoiceStatus.Overdue).Sum(i => i.TotalAmount)
+            TotalInvoices = totalInvoices,
+            PaidInvoices = paidInvoices,
+            DueInvoices = unpaidInvoices,
+            OverdueInvoices = overdueInvoices,
+            TotalAmount = totalAmount,
+            PaidAmount = paidAmount,
+            DueAmount = unpaidAmount,
+            OverdueAmount = overdueAmount
         };
-
-        return statistics;
     }
 }

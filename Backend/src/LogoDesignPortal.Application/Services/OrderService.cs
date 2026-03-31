@@ -1,4 +1,5 @@
 using AutoMapper;
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.DTOs.Common;
 using LogoDesignPortal.Application.DTOs.Files;
 using LogoDesignPortal.Application.DTOs.Orders;
@@ -12,6 +13,7 @@ using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -27,8 +29,20 @@ public class OrderService : IOrderService
     private readonly IClientLogoPricingService _clientLogoPricingService;
     private readonly ICommentService _commentService;
     private readonly ILogger<OrderService> _logger;
+    private readonly IDistributedCache _distributedCache;
+    private readonly IReadModelCacheVersions _readModelCache;
 
-    public OrderService(IApplicationDbContext context, IMapper mapper, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender, IFileService fileService, IClientLogoPricingService clientLogoPricingService, ICommentService commentService, ILogger<OrderService> logger)
+    public OrderService(
+        IApplicationDbContext context,
+        IMapper mapper,
+        INotificationService notificationService,
+        IRealtimeEntityUpdateSender entityUpdateSender,
+        IFileService fileService,
+        IClientLogoPricingService clientLogoPricingService,
+        ICommentService commentService,
+        ILogger<OrderService> logger,
+        IDistributedCache distributedCache,
+        IReadModelCacheVersions readModelCache)
     {
         _context = context;
         _mapper = mapper;
@@ -38,6 +52,19 @@ public class OrderService : IOrderService
         _clientLogoPricingService = clientLogoPricingService;
         _commentService = commentService;
         _logger = logger;
+        _distributedCache = distributedCache;
+        _readModelCache = readModelCache;
+    }
+
+    /// <summary>
+    /// Bumps cache epochs so distributed list/analytics entries stop being used after order (or related user) mutations.
+    /// </summary>
+    private void InvalidateOrderReadModelsChanged(bool invalidateUsersToo = false)
+    {
+        _readModelCache.BumpOrders();
+        _readModelCache.BumpAnalytics();
+        if (invalidateUsersToo)
+            _readModelCache.BumpUsers();
     }
 
     public async Task<OrderResponseDto> CreateOrderAsync(CreateOrderRequestDto request, Guid clientId)
@@ -80,6 +107,7 @@ public class OrderService : IOrderService
         );
 
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         _logger.LogInformation("OrderCreated. OrderId={OrderId}, UserId={UserId}", order.Id, clientId);
 
@@ -150,6 +178,7 @@ public class OrderService : IOrderService
 
                 await _context.SaveChangesAsync(ct);
             });
+            InvalidateOrderReadModelsChanged();
         }
         catch
         {
@@ -294,6 +323,8 @@ public class OrderService : IOrderService
             await _context.SaveChangesAsync(ct);
         });
 
+        InvalidateOrderReadModelsChanged();
+
         _logger.LogInformation("ManualCompletedOrderCreated. OrderId={OrderId}, AdminId={AdminId}, ClientUserId={ClientUserId}, DesignerUserId={DesignerUserId}, Files={Files}",
             orderId, createdBy, clientUserId, request.DesignerUserId, uploadedFiles?.Count ?? 0);
 
@@ -353,6 +384,7 @@ public class OrderService : IOrderService
         });
 
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged(invalidateUsersToo: true);
         return user.Id;
     }
 
@@ -384,6 +416,7 @@ public class OrderService : IOrderService
                 if (string.IsNullOrEmpty(deletedProfile.CompanyName)) deletedProfile.CompanyName = "Personal";
                 deletedProfile.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
+                InvalidateOrderReadModelsChanged(invalidateUsersToo: true);
                 client = deletedProfile;
             }
             else
@@ -399,6 +432,7 @@ public class OrderService : IOrderService
                 if (string.IsNullOrEmpty(client.CompanyName)) client.CompanyName = "Personal";
                 _context.ClientProfiles.Add(client);
                 await _context.SaveChangesAsync();
+                InvalidateOrderReadModelsChanged(invalidateUsersToo: true);
                 client = await _context.ClientProfiles.Include(c => c.User).FirstAsync(c => c.Id == client.Id);
             }
         }
@@ -439,6 +473,7 @@ public class OrderService : IOrderService
     public async Task<OrderResponseDto?> GetOrderByIdAsync(Guid orderId, Guid? userId, string? userRole)
     {
         var order = await _context.LogoOrders
+            .AsNoTracking()
             .Include(o => o.Client)
                 .ThenInclude(c => c.User)
             .Include(o => o.Designer)
@@ -454,7 +489,7 @@ public class OrderService : IOrderService
         // Authorization checks
         // Use ForbiddenAccessException for authorization failures (user is authenticated but lacks permission)
         // This will result in 403 Forbidden instead of 401 Unauthorized
-        if (userRole == "Client" && order.Client.UserId != userId)
+        if (userRole == "Client" && (order.Client == null || order.Client.UserId != userId))
         {
             throw new ForbiddenAccessException("You don't have access to this order.");
         }
@@ -584,6 +619,7 @@ public class OrderService : IOrderService
 
     public async Task<List<OrderResponseDto>> GetOrdersByClientAsync(Guid clientId)
     {
+        const int maxList = 200;
         var client = await _context.ClientProfiles
             .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
 
@@ -593,6 +629,7 @@ public class OrderService : IOrderService
         }
 
         var query = _context.LogoOrders
+            .AsNoTracking()
             .Include(o => o.Client)
                 .ThenInclude(c => c.User)
             .Include(o => o.Designer)
@@ -604,6 +641,7 @@ public class OrderService : IOrderService
 
         var orders = await query
             .OrderByDescending(o => o.CreatedAt)
+            .Take(maxList)
             .ToListAsync();
 
         var response = _mapper.Map<List<OrderResponseDto>>(orders);
@@ -636,6 +674,7 @@ public class OrderService : IOrderService
 
     public async Task<List<OrderResponseDto>> GetOrdersByDesignerAsync(Guid designerId)
     {
+        const int maxList = 200;
         var designer = await _context.DesignerProfiles
             .FirstOrDefaultAsync(d => d.UserId == designerId && !d.IsDeleted);
 
@@ -645,11 +684,14 @@ public class OrderService : IOrderService
         }
 
         var orders = await _context.LogoOrders
+            .AsNoTracking()
             .Include(o => o.Client)
                 .ThenInclude(c => c.User)
             .Include(o => o.Designer)
                 .ThenInclude(d => d.User)
             .Where(o => o.DesignerId == designer.Id && !o.IsDeleted)
+            .OrderByDescending(o => o.CreatedAt)
+            .Take(maxList)
             .ToListAsync();
 
         var response = _mapper.Map<List<OrderResponseDto>>(orders);
@@ -670,6 +712,7 @@ public class OrderService : IOrderService
     public async Task<List<OrderResponseDto>> GetAllOrdersAsync(string? userRole)
     {
         var query = _context.LogoOrders
+            .AsNoTracking()
             .Include(o => o.Client)
                 .ThenInclude(c => c.User)
             .Include(o => o.Designer)
@@ -680,6 +723,7 @@ public class OrderService : IOrderService
         query = query.Where(o => !o.IsArchived);
 
         var count = await query.CountAsync();
+    
         if (count > GetAllOrdersMaxLimit)
             throw new InvalidOperationException($"Order count ({count}) exceeds maximum allowed ({GetAllOrdersMaxLimit}). Use the paged endpoint (GetOrdersPagedAsync) for large datasets.");
 
@@ -743,19 +787,36 @@ public class OrderService : IOrderService
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
+        var roleKey = userRole ?? string.Empty;
+        var cacheKey = $"ldp:cache:orders:paged:e{_readModelCache.OrdersEpoch}:{roleKey}:{page}:{pageSize}";
+        var pagedCached = await DistributedJsonCache.GetSafeAsync<PagedResultDto<OrderResponseDto>>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (pagedCached != null)
+            return pagedCached;
+
+        var baseQuery = _context.LogoOrders
+            .AsNoTracking()
+            .Where(o => !o.IsDeleted && !o.IsArchived);
+
+        var total = await baseQuery.CountAsync();
+
+        var pageIds = await baseQuery
+            .OrderByDescending(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(o => o.Id)
+            .ToListAsync();
+
         var query = _context.LogoOrders
+            .AsNoTracking()
             .Include(o => o.Client)
                 .ThenInclude(c => c.User)
             .Include(o => o.Designer)
                 .ThenInclude(d => d.User)
-            .Where(o => !o.IsDeleted && !o.IsArchived)
-            .OrderByDescending(o => o.CreatedAt);
+            .Where(o => pageIds.Contains(o.Id));
 
-        var total = await query.CountAsync();
-        var orders = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        var orders = await query.ToListAsync();
+        var orderRank = pageIds.Select((id, idx) => (id, idx)).ToDictionary(t => t.id, t => t.idx);
+        orders = orders.OrderBy(o => orderRank[o.Id]).ToList();
 
         var response = _mapper.Map<List<OrderResponseDto>>(orders);
         var orderIds = orders.Select(o => o.Id).ToList();
@@ -801,13 +862,67 @@ public class OrderService : IOrderService
             }
         }
 
-        return new PagedResultDto<OrderResponseDto>
+        var pagedResult = new PagedResultDto<OrderResponseDto>
         {
             Items = response,
             Total = total,
             Page = page,
             PageSize = pageSize
         };
+
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, pagedResult, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
+
+        return pagedResult;
+    }
+
+    public async Task<IReadOnlyList<OrderTypeaheadDto>> SearchOrdersForTypeaheadAsync(string? userRole, string? query, int limit, CancellationToken cancellationToken = default)
+    {
+        limit = Math.Clamp(limit, 1, 20);
+        var term = query?.Trim() ?? string.Empty;
+        var q = _context.LogoOrders.AsNoTracking()
+            .Include(o => o.Client)
+            .Where(o => !o.IsDeleted && !o.IsArchived);
+
+        if (term.Length > 0)
+        {
+            var t = term.ToLowerInvariant();
+            var idMatch = Guid.TryParse(term, out var g) ? g : (Guid?)null;
+            q = q.Where(o =>
+                (o.Title != null && o.Title.ToLower().Contains(t)) ||
+                (idMatch != null && o.Id == idMatch) ||
+                (o.Client != null && o.Client.CompanyName != null && o.Client.CompanyName.ToLower().Contains(t)));
+        }
+
+        var orders = await q
+            .OrderByDescending(o => o.CreatedAt)
+            .Take(limit)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var result = new List<OrderTypeaheadDto>();
+        foreach (var o in orders)
+        {
+            var num = NotificationFormatHelper.GetOrderNumber(o.Id);
+            var title = o.Title ?? string.Empty;
+            string label;
+            if (string.Equals(userRole, "Designer", StringComparison.Ordinal))
+                label = $"{num} — {title}";
+            else
+            {
+                var company = o.Client?.CompanyName;
+                label = string.IsNullOrEmpty(company) ? $"{num} — {title}" : $"{num} — {title} ({company})";
+            }
+
+            result.Add(new OrderTypeaheadDto
+            {
+                Id = o.Id,
+                Title = title,
+                Status = o.Status.ToString(),
+                Label = label
+            });
+        }
+
+        return result;
     }
 
     public async Task<OrderResponseDto> AssignOrderToDesignerAsync(Guid orderId, Guid designerId, Guid assignedBy)
@@ -859,6 +974,7 @@ public class OrderService : IOrderService
 
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         _logger.LogInformation("DesignerAssigned. OrderId={OrderId}, AssignedBy={AssignedBy}, DesignerId={DesignerId}", orderId, assignedBy, designerId);
 
@@ -952,6 +1068,7 @@ public class OrderService : IOrderService
 
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         // Notify client when order status changes (if client exists and changer is not client)
         if (order.Client != null && order.Client.UserId != userId)
@@ -1145,6 +1262,7 @@ public class OrderService : IOrderService
 
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         var currencyForThread = string.IsNullOrWhiteSpace(order.CurrencyCode) ? "USD" : order.CurrencyCode.Trim();
         var clientPriceThreadLine = $"Requested client price: {currencyForThread} {request.ProposedPrice:0.00}";
@@ -1227,6 +1345,7 @@ public class OrderService : IOrderService
 
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         if (!string.IsNullOrWhiteSpace(request.Comment))
             await _commentService.AppendPriceNegotiationNoteAsync(orderId, approvedBy, CommentType.PriceNegotiationClient, request.Comment.Trim());
@@ -1290,6 +1409,7 @@ public class OrderService : IOrderService
                 });
 
                 await _context.SaveChangesAsync();
+                InvalidateOrderReadModelsChanged();
 
                 var rejectThread = string.IsNullOrWhiteSpace(message)
                     ? "Rejected the proposed client price."
@@ -1334,6 +1454,7 @@ public class OrderService : IOrderService
                 });
 
                 await _context.SaveChangesAsync();
+                InvalidateOrderReadModelsChanged();
 
                 await _commentService.AppendPriceNegotiationNoteAsync(orderId, userId, CommentType.PriceNegotiationClient, note);
 
@@ -1387,6 +1508,7 @@ public class OrderService : IOrderService
 
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         // Create notification for client via NotificationService
         var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
@@ -1524,6 +1646,7 @@ public class OrderService : IOrderService
 
         _context.OrderStatusHistories.Add(statusHistory);
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         _logger.LogInformation("PreviewForwarded. OrderId={OrderId}, UserId={UserId}, FileCount={FileCount}", order.Id, sentBy, files.Count);
 
@@ -1596,6 +1719,7 @@ public class OrderService : IOrderService
         order.UpdatedBy = userId;
 
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         // Notify Admin/SuperAdmin that client updated order details
         try
@@ -1752,6 +1876,7 @@ public class OrderService : IOrderService
         );
 
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
         var reasonSnippet = request.Reason.Length > 200 ? request.Reason[..200] + "..." : request.Reason;
@@ -1898,6 +2023,7 @@ public class OrderService : IOrderService
         );
 
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         return await GetOrderByIdAsync(orderId, userId, "Admin");
     }
@@ -1940,6 +2066,7 @@ public class OrderService : IOrderService
         );
 
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         return await GetOrderByIdAsync(orderId, userId, "Admin");
     }
@@ -2012,6 +2139,7 @@ public class OrderService : IOrderService
         );
 
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         return await GetOrderByIdAsync(orderId, userId, "Admin");
     }
@@ -2098,6 +2226,7 @@ public class OrderService : IOrderService
         order.UpdatedBy = userId;
 
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         return await GetOrderByIdAsync(orderId, userId, "Admin");
     }
@@ -2138,6 +2267,7 @@ public class OrderService : IOrderService
         order.PriceUpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+        InvalidateOrderReadModelsChanged();
 
         return await GetOrderByIdAsync(orderId, userId, "Admin");
     }

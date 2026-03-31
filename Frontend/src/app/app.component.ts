@@ -2,10 +2,12 @@ import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { RealtimeNotificationService } from '@core/services/realtime-notification.service';
+import { LoadingService } from '@core/services/loading.service';
 
 @Component({
   selector: 'app-root',
   template: `
+    <div class="critical-loading-bar" *ngIf="loading.criticalLoading$ | async" aria-hidden="true"></div>
     <router-outlet></router-outlet>
     <p-toast position="top-right" [showTransitionOptions]="'300ms'" [hideTransitionOptions]="'500ms'">
       <ng-template let-message pTemplate="message">
@@ -21,6 +23,22 @@ import { RealtimeNotificationService } from '@core/services/realtime-notificatio
     </p-toast>
   `,
   styles: [`
+    .critical-loading-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      z-index: 11000;
+      pointer-events: none;
+      background: linear-gradient(90deg, var(--primary-color, #0d47a1), var(--primary-color-light, #1976d2), var(--primary-color, #0d47a1));
+      background-size: 200% 100%;
+      animation: app-critical-bar-shimmer 1.1s ease-in-out infinite;
+    }
+    @keyframes app-critical-bar-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
     .toast-message-wrapper { min-width: 200px; }
     .toast-message-wrapper.clickable { cursor: pointer; }
     .toast-detail { margin: 0.25rem 0 0 0; }
@@ -33,7 +51,8 @@ export class AppComponent {
   constructor(
     private realtimeNotificationService: RealtimeNotificationService,
     private router: Router,
-    private messageService: MessageService
+    private messageService: MessageService,
+    readonly loading: LoadingService
   ) {}
 
   onToastClick(message: { data?: { redirectUrl?: string } }): void {

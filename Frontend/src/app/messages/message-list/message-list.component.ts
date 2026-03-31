@@ -30,7 +30,6 @@ export interface Message {
 })
 export class MessageListComponent implements OnInit, OnDestroy {
   messages: Message[] = [];
-  loading = false;
   globalFilter = '';
   first = 0;
   rows = 10;
@@ -61,7 +60,6 @@ export class MessageListComponent implements OnInit, OnDestroy {
   }
 
   loadMessages(): void {
-    this.loading = true;
     // Try to fetch messages (will fail gracefully if endpoint doesn't exist)
     this.apiService.get<Message[]>('messages')
       .pipe(takeUntil(this.destroy$))
@@ -86,11 +84,9 @@ export class MessageListComponent implements OnInit, OnDestroy {
             isRejected: m.isRejected
           }));
           this.unreadCount = this.messages.filter(m => !m.isRead).length;
-          this.loading = false;
         },
         error: () => {
           this.messages = [];
-          this.loading = false;
         }
       });
   }

@@ -15,6 +15,7 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { InputTextModule } from 'primeng/inputtext';
 import { DropdownModule } from 'primeng/dropdown';
+import { AutoCompleteModule } from 'primeng/autocomplete';
 import { DialogModule } from 'primeng/dialog';
 import { FileUploadModule } from 'primeng/fileupload';
 import { CalendarModule } from 'primeng/calendar';
@@ -37,6 +38,7 @@ import { MessageService } from 'primeng/api';
     TooltipModule,
     InputTextModule,
     DropdownModule,
+    AutoCompleteModule,
     DialogModule,
     FileUploadModule,
     CalendarModule,

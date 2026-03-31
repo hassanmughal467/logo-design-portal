@@ -86,6 +86,9 @@ public class LogoOrder : BaseEntity
     public OrderSource OrderSource { get; set; } = OrderSource.Portal;
     public Guid? QuoteId { get; set; }
 
+    /// <summary>EF Core optimistic concurrency token (MySQL <c>timestamp(6)</c>, database-generated).</summary>
+    public DateTime RowVersion { get; set; }
+
     // Revision tracking (Fiverr/Upwork style)
     /// <summary>Number of times the client has requested a revision. Incremented on each RequestRevision.</summary>
     public int RevisionCount { get; set; }

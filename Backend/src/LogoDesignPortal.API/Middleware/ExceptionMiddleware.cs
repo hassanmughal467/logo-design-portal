@@ -1,5 +1,7 @@
+using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.Exceptions;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System.Linq;
 using System.Net;
@@ -8,12 +10,8 @@ using System.Text.Json;
 namespace LogoDesignPortal.API.Middleware;
 
 /// <summary>
-/// Global exception middleware. Catches unhandled exceptions from all controllers.
-/// Returns safe responses without exposing stack traces to clients.
-/// Logs full error details internally for incident tracking.
-/// Includes errorId in response for easy log correlation - search server logs for the errorId to find full stack trace.
-/// In Development: includes stack trace in 500 response for easier debugging.
-/// Set "IncludeExceptionDetailsInProduction": true in appsettings to include exception message in production (for debugging).
+/// Global exception middleware. Catches unhandled exceptions from the pipeline.
+/// Returns <c>{ message, correlationId }</c> JSON and completes the response so clients do not hang.
 /// </summary>
 public class ExceptionMiddleware
 {
@@ -34,34 +32,40 @@ public class ExceptionMiddleware
     {
         try
         {
-            await _next(context);
+            await _next(context).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            var errorId = Guid.NewGuid().ToString("N")[..12];
-            // Log with errorId first so you can search logs for it when user reports the errorId from API response
+            var correlationId = context.GetCorrelationId();
             _logger.LogError(ex,
-                "ErrorId: {ErrorId} | Unhandled exception: {Message} | Path: {Path} | Method: {Method} | StackTrace: {StackTrace}",
-                errorId, ex.Message, context.Request.Path, context.Request.Method, ex.StackTrace);
-            await HandleExceptionAsync(context, ex, errorId);
+                "CorrelationId={CorrelationId} | Unhandled exception: {Message} | {Method} {Path}",
+                correlationId, ex.Message, context.Request.Method, context.Request.Path);
+            await HandleExceptionAsync(context, ex, correlationId).ConfigureAwait(false);
         }
     }
 
-    private static readonly string[] AllowedCorsOrigins = new[]
+    private static readonly string[] AllowedCorsOrigins =
     {
         "https://admin.hawkmerchandising.com",
         "http://admin.hawkmerchandising.com",
         "https://api.hawkmerchandising.com",
         "http://api.hawkmerchandising.com",
         "http://localhost:4200",
-        "https://localhost:4200"
+        "https://localhost:4200",
+        "http://127.0.0.1:4200",
+        "https://127.0.0.1:4200"
     };
 
-    private Task HandleExceptionAsync(HttpContext context, Exception exception, string errorId)
+    private async Task HandleExceptionAsync(HttpContext context, Exception exception, string correlationId)
     {
+        if (context.Response.HasStarted)
+        {
+            _logger.LogError("CorrelationId={CorrelationId} | Response already started; cannot write error body.", correlationId);
+            return;
+        }
+
         var (statusCode, message) = GetStatusCodeAndMessage(exception);
 
-        // Add CORS headers to error responses so browser doesn't block them (required when ExceptionMiddleware short-circuits pipeline)
         var origin = context.Request.Headers.Origin.FirstOrDefault();
         if (!string.IsNullOrEmpty(origin) && AllowedCorsOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
         {
@@ -69,9 +73,9 @@ public class ExceptionMiddleware
             context.Response.Headers.Append("Access-Control-Allow-Credentials", "true");
         }
 
-        // Add errorId to response header for easy tracking (e.g., in IIS logs, browser DevTools)
-        context.Response.Headers.Append("X-Error-Id", errorId);
-
+        // CorrelationIdMiddleware already set this when the response hadn't started.
+        if (!context.Response.Headers.ContainsKey("X-Correlation-Id"))
+            context.Response.Headers.Append("X-Correlation-Id", correlationId);
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)statusCode;
 
@@ -81,28 +85,28 @@ public class ExceptionMiddleware
         object response;
         if (_env.IsDevelopment() && is500)
         {
-            response = new { message, errorId, ex = exception.ToString() };
+            response = new { message, correlationId, detail = exception.ToString() };
         }
         else if (is500)
         {
-            // In production: always include errorId. When IncludeExceptionDetailsInProduction is true, include full exception (type, message, stack trace, inner exceptions).
             response = includeDetailsInProduction
-                ? new { message, errorId, ex = exception.ToString() }
-                : new { message, errorId };
+                ? new { message, correlationId, detail = exception.ToString() }
+                : new { message, correlationId };
         }
         else
         {
-            response = new { message, errorId };
+            response = new { message, correlationId };
         }
 
-        var json = JsonSerializer.Serialize(response);
-        return context.Response.WriteAsync(json);
+        await context.Response.WriteAsync(JsonSerializer.Serialize(response)).ConfigureAwait(false);
     }
 
     private static (HttpStatusCode statusCode, string message) GetStatusCodeAndMessage(Exception exception)
     {
         return exception switch
         {
+            DbUpdateConcurrencyException => (HttpStatusCode.Conflict,
+                "This record was updated by someone else. Refresh the page and try again."),
             ForbiddenAccessException => (HttpStatusCode.Forbidden, exception.Message),
             UnauthorizedAccessException uaEx when uaEx.Message?.Contains("Access to the path", StringComparison.OrdinalIgnoreCase) == true
                 || uaEx.Message?.Contains("is denied", StringComparison.OrdinalIgnoreCase) == true =>

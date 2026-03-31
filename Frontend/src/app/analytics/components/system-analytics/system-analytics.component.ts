@@ -13,7 +13,6 @@ import {
 })
 export class SystemAnalyticsComponent implements OnChanges {
   @Input() data: SystemAnalytics | null = null;
-  @Input() loading = false;
 
   dailyActivityChart: any;
   notificationActivityChart: any;

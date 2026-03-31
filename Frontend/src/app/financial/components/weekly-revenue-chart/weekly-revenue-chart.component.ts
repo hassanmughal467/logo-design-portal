@@ -8,7 +8,6 @@ import { WeeklyRevenueItem } from '@core/services/financial-analytics.service';
 })
 export class WeeklyRevenueChartComponent implements OnChanges {
   @Input() items: WeeklyRevenueItem[] = [];
-  @Input() loading = false;
 
   chartOptions: any = null;
 

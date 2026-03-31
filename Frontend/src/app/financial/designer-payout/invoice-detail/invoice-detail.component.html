@@ -1,10 +1,5 @@
 <div class="invoice-detail-page">
-  <div *ngIf="loading" class="loading-state">
-    <p-progressSpinner strokeWidth="4" [style]="{ width: '40px', height: '40px' }"></p-progressSpinner>
-    <span>Loading invoice...</span>
-  </div>
-
-  <div *ngIf="!loading && invoice" class="invoice-content">
+  <div *ngIf="invoice" class="invoice-content">
     <app-page-header [title]="'Invoice ' + invoice.invoiceNumber" [subtitle]="invoice.designerName">
       <span [class]="'status-badge ' + getStatusBadgeClass()" badge>{{ invoice.status }}</span>
       <div actions>

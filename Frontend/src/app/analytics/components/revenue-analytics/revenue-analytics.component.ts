@@ -14,7 +14,6 @@ import {
 })
 export class RevenueAnalyticsComponent implements OnChanges {
   @Input() data: RevenueAnalytics | null = null;
-  @Input() loading = false;
 
   revenueTrendChart: any;
   revenueTrendDailyChart: any;

@@ -39,6 +39,9 @@ public class AuditLogService : IAuditLogService
 
     public async Task<List<AuditLogResponseDto>> GetAuditLogsAsync(string? entityType = null, Guid? entityId = null, int pageNumber = 1, int pageSize = 50)
     {
+        pageNumber = Math.Max(1, pageNumber);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
         var query = _context.AuditLogs
             .Where(a => !a.IsDeleted)
             .AsQueryable();

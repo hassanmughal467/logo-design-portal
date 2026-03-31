@@ -22,7 +22,6 @@ export interface Review {
 })
 export class ReviewListComponent implements OnInit, OnDestroy {
   reviews: Review[] = [];
-  loading = false;
   globalFilter = '';
   first = 0;
   rows = 10;
@@ -44,7 +43,6 @@ export class ReviewListComponent implements OnInit, OnDestroy {
   }
 
   loadReviews(): void {
-    this.loading = true;
     // Try to fetch reviews (will fail gracefully if endpoint doesn't exist)
     this.apiService.get<Review[]>('reviews')
       .pipe(takeUntil(this.destroy$))
@@ -61,11 +59,9 @@ export class ReviewListComponent implements OnInit, OnDestroy {
             isPublished: r.isPublished,
             createdAt: r.createdAt
           }));
-          this.loading = false;
         },
         error: () => {
           this.reviews = [];
-          this.loading = false;
         }
       });
   }

@@ -1,5 +1,6 @@
 using Xunit;
 using Moq;
+using LogoDesignPortal.Application.BackgroundJobs;
 using LogoDesignPortal.Application.Services;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Application.Interfaces.Authentication;
@@ -15,7 +16,6 @@ public class AuthServiceTests
 {
     private readonly Mock<IApplicationDbContext> _contextMock;
     private readonly Mock<IJwtTokenService> _jwtTokenServiceMock;
-    private readonly Mock<IEmailService> _emailServiceMock;
     private readonly Mock<IConfiguration> _configurationMock;
     private readonly AuthService _authService;
 
@@ -23,15 +23,14 @@ public class AuthServiceTests
     {
         _contextMock = new Mock<IApplicationDbContext>();
         _jwtTokenServiceMock = new Mock<IJwtTokenService>();
-        _emailServiceMock = new Mock<IEmailService>();
         _configurationMock = new Mock<IConfiguration>();
         
         _authService = new AuthService(
             _contextMock.Object,
             _jwtTokenServiceMock.Object,
-            _emailServiceMock.Object,
             Mock.Of<LogoDesignPortal.Application.Interfaces.INotificationService>(),
-            _configurationMock.Object
+            _configurationMock.Object,
+            new NullBackgroundJobScheduler()
         );
     }
 

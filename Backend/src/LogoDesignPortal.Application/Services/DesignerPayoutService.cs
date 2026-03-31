@@ -1,3 +1,4 @@
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.Configuration;
 using LogoDesignPortal.Application.DTOs.DesignerPayout;
 using LogoDesignPortal.Application.Exceptions;
@@ -20,6 +21,7 @@ public class DesignerPayoutService : IDesignerPayoutService
     private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
     private readonly ICommentService _commentService;
     private readonly ProductionSafetyOptions _safetyOptions;
+    private readonly IReadModelCacheVersions _readModelCache;
     private readonly ILogger<DesignerPayoutService> _logger;
 
     public DesignerPayoutService(
@@ -28,6 +30,7 @@ public class DesignerPayoutService : IDesignerPayoutService
         IRealtimeEntityUpdateSender entityUpdateSender,
         ICommentService commentService,
         IOptions<ProductionSafetyOptions> safetyOptions,
+        IReadModelCacheVersions readModelCache,
         ILogger<DesignerPayoutService> logger)
     {
         _context = context;
@@ -35,7 +38,15 @@ public class DesignerPayoutService : IDesignerPayoutService
         _entityUpdateSender = entityUpdateSender;
         _commentService = commentService;
         _safetyOptions = safetyOptions?.Value ?? new ProductionSafetyOptions();
+        _readModelCache = readModelCache;
         _logger = logger;
+    }
+
+    /// <summary>Invalidates cached order lists and financial/admin analytics when designer payout data changes.</summary>
+    private void InvalidatePayoutReadModels()
+    {
+        _readModelCache.BumpOrders();
+        _readModelCache.BumpAnalytics();
     }
 
     public async Task<List<DesignerPricingInfoDto>> GetDesignPricingInfoAsync(Guid? designerId = null)
@@ -149,6 +160,8 @@ public class DesignerPayoutService : IDesignerPayoutService
 
         await _context.SaveChangesAsync();
 
+        InvalidatePayoutReadModels();
+
         // When price requires admin approval, notify Admin/SuperAdmin
         if (differs)
         {
@@ -206,6 +219,8 @@ public class DesignerPayoutService : IDesignerPayoutService
         TransitionToPriceApprovalPendingForDesignerIfNeeded(order, designerUserId);
 
         await _context.SaveChangesAsync();
+
+        InvalidatePayoutReadModels();
 
         var proposeLine = $"Proposed designer payout: PKR {request.ProposedPrice:N0}.";
         if (!string.IsNullOrWhiteSpace(request.Message))
@@ -328,6 +343,8 @@ public class DesignerPayoutService : IDesignerPayoutService
         RestoreOrderStatusAfterDesignerPriceDecision(order, request.Action, previousOrderStatus, previousDesignerPriceStatus, adminUserId);
 
         await _context.SaveChangesAsync();
+
+        InvalidatePayoutReadModels();
 
         var payoutLine = request.Action switch
         {
@@ -621,6 +638,8 @@ public class DesignerPayoutService : IDesignerPayoutService
         if (itemsCount == 0)
             throw new InvalidOperationException($"All eligible orders were already invoiced. No new invoice items created for designer in {startDate:MMMM yyyy}.");
 
+        InvalidatePayoutReadModels();
+
         _logger.LogInformation("DesignerPayoutGenerated. InvoiceId={InvoiceId}, DesignerId={DesignerId}, UserId={UserId}, Timestamp={Timestamp}",
             invoiceId, designerId, adminUserId, DateTime.UtcNow);
 
@@ -669,6 +688,8 @@ public class DesignerPayoutService : IDesignerPayoutService
         invoice.UpdatedBy = adminUserId;
 
         await _context.SaveChangesAsync();
+
+        InvalidatePayoutReadModels();
     }
 
     public async Task<List<OrderPricingSummaryDto>> GetDesignerPayoutEligibleOrdersAsync(Guid designerId)
@@ -866,6 +887,8 @@ public class DesignerPayoutService : IDesignerPayoutService
         if (itemsCount == 0)
             throw new InvalidOperationException("No valid orders were added to the invoice. All selected orders may have failed validation or were already invoiced.");
 
+        InvalidatePayoutReadModels();
+
         return await GetDesignerInvoiceByIdAsync(invoiceId) ?? throw new InvalidOperationException("Failed to retrieve created invoice.");
     }
 
@@ -964,6 +987,8 @@ public class DesignerPayoutService : IDesignerPayoutService
         invoice.UpdatedBy = adminUserId;
 
         await _context.SaveChangesAsync();
+
+        InvalidatePayoutReadModels();
     }
 
     public async Task AddDesignerInvoiceAdjustmentAsync(Guid invoiceId, string description, decimal amount, Guid adminUserId)
@@ -1000,6 +1025,8 @@ public class DesignerPayoutService : IDesignerPayoutService
         invoice.UpdatedBy = adminUserId;
 
         await _context.SaveChangesAsync();
+
+        InvalidatePayoutReadModels();
     }
 
     public async Task RemoveDesignerInvoiceAdjustmentAsync(Guid invoiceId, Guid adjustmentId, Guid adminUserId)
@@ -1028,6 +1055,8 @@ public class DesignerPayoutService : IDesignerPayoutService
         invoice.UpdatedBy = adminUserId;
 
         await _context.SaveChangesAsync();
+
+        InvalidatePayoutReadModels();
     }
 
     public async Task<List<DesignerPayoutOverviewDto>> GetDesignerPayoutOverviewAsync()

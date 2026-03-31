@@ -12,7 +12,7 @@ import { Order, OrderStatus } from '@shared/models/order.model';
 import { MessageService } from 'primeng/api';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Observable, Subject, firstValueFrom, forkJoin } from 'rxjs';
-import { takeUntil, catchError } from 'rxjs/operators';
+import { takeUntil, catchError, finalize, timeout, map } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 export interface ActionRequiredItem {
@@ -62,7 +62,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     ordersByMonth: [],
     revenueByPackage: []
   };
-  loading = true;
   private destroy$ = new Subject<void>();
 
   // Chart data
@@ -124,6 +123,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   timelineOrderTitle = '';
   timelineEvents: OrderTimelineEvent[] = [];
   loadingTimeline = false;
+
+  /** Initial load uses skeleton; refetches keep layout visible with subtle dimming. */
+  isDashboardLoading = false;
+  hasDashboardLoadedOnce = false;
+
+  get showDashboardSkeleton(): boolean {
+    return this.isDashboardLoading && !this.hasDashboardLoadedOnce;
+  }
 
   // Full Order History
   allOrders: Order[] = [];
@@ -226,7 +233,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private handleOrderUpdate(data?: { orderId?: string }): void {
     // On reconnect, always refresh to recover from missed events
     if (data?.orderId === '**reconnect**' || this.user) {
-      this.loadDashboardData();
+      this.loadDashboardData(true);
     }
   }
 
@@ -235,8 +242,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  private loadDashboardData(): void {
-    this.loading = true;
+  /** @param forceFresh When true, clears cached dashboard/list streams before loading (mutations, realtime). */
+  private loadDashboardData(forceFresh = false): void {
+    this.isDashboardLoading = true;
+    if (forceFresh) {
+      this.dashboardService.invalidateDashboardCache();
+    }
     const isAdmin = this.authService.getCurrentUser()?.role === 'SuperAdmin' || this.authService.getCurrentUser()?.role === 'Admin';
 
     if (isAdmin) {
@@ -246,7 +257,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
         orderAnalytics: this.adminAnalytics.getOrderAnalytics().pipe(catchError(() => of(null))),
         revenueAnalytics: this.adminAnalytics.getRevenueAnalytics().pipe(catchError(() => of(null)))
       })
-        .pipe(takeUntil(this.destroy$))
+        .pipe(
+          timeout(180000),
+          takeUntil(this.destroy$),
+          catchError(() =>
+            this.dashboardService.getDashboardData().pipe(
+              map((d) => ({
+                dashboard: d,
+                overview: null,
+                orderAnalytics: null,
+                revenueAnalytics: null
+              }))
+            )
+          ),
+          finalize(() => {
+            this.isDashboardLoading = false;
+            this.hasDashboardLoadedOnce = true;
+          })
+        )
         .subscribe({
           next: ({ dashboard: data, overview, orderAnalytics, revenueAnalytics }) => {
             this.dashboardData = data;
@@ -281,18 +309,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.updateStats(this.dashboardData);
             this.setupCharts(this.dashboardData);
             this.notifications = data.notifications || [];
-            this.loading = false;
           },
           error: () => {
-            this.dashboardService.getDashboardData().pipe(takeUntil(this.destroy$)).subscribe({
-              next: (d) => { this.dashboardData = d; this.updateStats(d); this.setupCharts(d); this.notifications = d.notifications || []; this.loading = false; },
-              error: () => { this.loading = false; this.messageService.add({ severity: 'warn', summary: 'Warning', detail: 'Unable to load dashboard data.' }); }
-            });
+            this.messageService.add({ severity: 'warn', summary: 'Warning', detail: 'Unable to load dashboard data.' });
           }
         });
     } else {
       this.dashboardService.getDashboardData()
-        .pipe(takeUntil(this.destroy$))
+        .pipe(
+          timeout(180000),
+          takeUntil(this.destroy$),
+          finalize(() => {
+            this.isDashboardLoading = false;
+            this.hasDashboardLoadedOnce = true;
+          })
+        )
         .subscribe({
           next: (data) => {
             this.dashboardData = data;
@@ -318,7 +349,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
             // Load security info
             this.loadSecurityInfo();
           }
-          this.loading = false;
         },
         error: (error) => {
           console.error('Error loading dashboard data:', error);
@@ -340,7 +370,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
             revenueByPackage: []
           };
           this.updateStats(this.dashboardData);
-          this.loading = false;
           this.messageService.add({
             severity: 'warn',
             summary: 'Warning',
@@ -834,8 +863,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onOrderUpdated(): void {
-    // Refresh dashboard data when order is updated
-    this.loadDashboardData();
+    this.loadDashboardData(true);
   }
 
   canAddToInvoice(order: Order): boolean {
@@ -931,8 +959,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onOrderCreated(order: any): void {
-    // Refresh dashboard data when order is created
-    this.loadDashboardData();
+    this.loadDashboardData(true);
     // Optionally open the created order in detail modal
     if (order && order.id) {
       this.selectedOrderId = order.id;
@@ -987,7 +1014,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
               summary: 'Success',
               detail: 'Price approved successfully'
             });
-            this.loadDashboardData();
+            this.loadDashboardData(true);
           },
           error: (error) => {
             this.messageService.add({
@@ -1008,7 +1035,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
               summary: 'Success',
               detail: 'Order approved successfully'
             });
-            this.loadDashboardData();
+            this.loadDashboardData(true);
           },
           error: (error) => {
             this.messageService.add({
@@ -1121,7 +1148,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.showPaymentDialog = false;
         this.selectedInvoices = [];
         this.paymentMethod = '';
-        this.loadDashboardData();
+        this.loadDashboardData(true);
       })
       .catch((error) => {
         this.messageService.add({
@@ -1137,7 +1164,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.showPaymentDialog = false;
     this.selectedInvoices = [];
     this.paymentMethod = '';
-    this.loadDashboardData();
+    this.loadDashboardData(true);
   }
 
   downloadInvoiceReport(format: 'csv' | 'pdf'): void {
@@ -1552,7 +1579,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const dt = (order as any).designType;
     let logoCategory: string | null = null;
     let placement: number | null = null;
-    if (dc === 'EmbroideryDigitizing') logoCategory = dt === 'LeftChest' || dt === 'JacketBack' ? 'embroidery' : 'digitizing';
+    if (dc === 'EmbroideryDigitizing') logoCategory = 'embroideryDigitizing';
     else if (dc === 'VectorScreenPrinting') logoCategory = 'vector';
     else if (dc === 'CustomPatch') logoCategory = 'customPatch';
     if (dt === 'LeftChest') placement = 1;

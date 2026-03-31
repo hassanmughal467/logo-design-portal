@@ -24,14 +24,8 @@
     </div>
   </div>
 
-  <!-- Loading State -->
-  <div *ngIf="loading" class="loading-container">
-    <p-progressSpinner></p-progressSpinner>
-    <p>Loading project details...</p>
-  </div>
-
   <!-- Project Info Card -->
-  <div *ngIf="!loading && project" class="project-info-section">
+  <div *ngIf="project" class="project-info-section">
     <p-card styleClass="info-card">
       <div class="project-info-grid">
         <div class="info-item">
@@ -63,7 +57,7 @@
   </div>
 
   <!-- Tabs Section -->
-  <div *ngIf="!loading && project" class="tabs-section">
+  <div *ngIf="project" class="tabs-section">
     <p-card styleClass="tabs-card">
       <p-tabView [(activeIndex)]="activeTab">
         <!-- Files & Revisions Tab -->

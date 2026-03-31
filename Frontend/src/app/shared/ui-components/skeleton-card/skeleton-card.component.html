@@ -1,0 +1,11 @@
+<div
+  class="skeleton-card"
+  [class.skeleton-card--compact]="compact"
+  role="status"
+  aria-live="polite"
+  aria-busy="true">
+  <div *ngIf="showTitle" class="sk-title"></div>
+  <div class="sk-lines">
+    <div class="sk-line" *ngFor="let i of lineIndices" [style.width.%]="i === lines - 1 ? 72 : 100"></div>
+  </div>
+</div>

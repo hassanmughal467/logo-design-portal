@@ -8,7 +8,6 @@ import { PackageRevenueItem } from '@core/services/financial-analytics.service';
 })
 export class PackageRevenueChartComponent implements OnChanges {
   @Input() items: PackageRevenueItem[] = [];
-  @Input() loading = false;
 
   chartOptions: any = null;
   readonly colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];

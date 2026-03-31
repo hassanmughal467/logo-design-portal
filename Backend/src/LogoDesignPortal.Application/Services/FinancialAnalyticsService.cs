@@ -1,18 +1,31 @@
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Logging;
 
 namespace LogoDesignPortal.Application.Services;
 
 public class FinancialAnalyticsService : IFinancialAnalyticsService
 {
     private readonly IApplicationDbContext _context;
+    private readonly IDistributedCache _distributedCache;
+    private readonly IReadModelCacheVersions _readModelCacheVersions;
+    private readonly ILogger<FinancialAnalyticsService> _logger;
 
-    public FinancialAnalyticsService(IApplicationDbContext context)
+    public FinancialAnalyticsService(
+        IApplicationDbContext context,
+        IDistributedCache distributedCache,
+        IReadModelCacheVersions readModelCacheVersions,
+        ILogger<FinancialAnalyticsService> logger)
     {
         _context = context;
+        _distributedCache = distributedCache;
+        _readModelCacheVersions = readModelCacheVersions;
+        _logger = logger;
     }
 
     private static string GetPackageFromPrice(decimal price)
@@ -25,48 +38,53 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
 
     public async Task<FinancialOverviewDto> GetOverviewAsync()
     {
+        var cacheKey = $"ldp:cache:financial:overview:e{_readModelCacheVersions.OrdersEpoch}";
+        var cached = await DistributedJsonCache.GetSafeAsync<FinancialOverviewDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
+
+        var dto = await BuildFinancialOverviewUncachedAsync().ConfigureAwait(false);
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
+        return dto;
+    }
+
+    private async Task<FinancialOverviewDto> BuildFinancialOverviewUncachedAsync()
+    {
         var now = DateTime.UtcNow;
         var startOfWeek = now.AddDays(-(int)now.DayOfWeek);
         var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var startOfLastMonth = startOfMonth.AddMonths(-1);
 
-        var completedOrders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Select(o => new { o.Price, o.RefundAmount, o.IsRefunded, o.UpdatedAt, o.CreatedAt })
-            .ToListAsync();
+        var comp = _context.LogoOrders.AsNoTracking()
+            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed);
 
-        var invoices = await _context.Invoices
-            .Where(i => !i.IsDeleted)
-            .Select(i => new { i.TotalAmount, i.Status, i.PaidDate })
-            .ToListAsync();
+        var totalRevenue = await comp.SumAsync(o => o.Price);
+        var refundedAmount = await comp
+            .Where(o => o.IsRefunded && o.RefundAmount.HasValue)
+            .SumAsync(o => o.RefundAmount ?? 0);
 
-        var totalRevenue = completedOrders.Sum(o => o.Price);
-        var refundedAmount = completedOrders.Where(o => o.IsRefunded && o.RefundAmount.HasValue).Sum(o => o.RefundAmount ?? 0);
-        var collectedRevenue = invoices.Where(i => i.Status == InvoiceStatus.Paid).Sum(i => i.TotalAmount);
-        var outstandingBalance = invoices.Where(i => i.Status == InvoiceStatus.Pending || i.Status == InvoiceStatus.Overdue).Sum(i => i.TotalAmount);
+        var inv = _context.Invoices.AsNoTracking().Where(i => !i.IsDeleted);
+        var collectedRevenue = await inv.Where(i => i.Status == InvoiceStatus.Paid).SumAsync(i => i.TotalAmount);
+        var outstandingBalance = await inv
+            .Where(i => i.Status == InvoiceStatus.Pending || i.Status == InvoiceStatus.Overdue)
+            .SumAsync(i => i.TotalAmount);
 
-        var revenueThisMonth = completedOrders
+        var revenueThisMonth = await comp
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfMonth)
-            .Sum(o => o.Price);
-
-        var revenueThisWeek = completedOrders
+            .SumAsync(o => o.Price);
+        var revenueThisWeek = await comp
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfWeek)
-            .Sum(o => o.Price);
-
-        var lastMonthRevenue = completedOrders
-            .Where(o =>
-            {
-                var d = o.UpdatedAt ?? o.CreatedAt;
-                return d >= startOfLastMonth && d < startOfMonth;
-            })
-            .Sum(o => o.Price);
+            .SumAsync(o => o.Price);
+        var lastMonthRevenue = await comp
+            .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfLastMonth && (o.UpdatedAt ?? o.CreatedAt) < startOfMonth)
+            .SumAsync(o => o.Price);
 
         var revenueGrowth = lastMonthRevenue > 0
             ? (decimal)((revenueThisMonth - lastMonthRevenue) / lastMonthRevenue * 100)
             : 0;
 
-        var totalOrders = await _context.LogoOrders.CountAsync(o => !o.IsDeleted);
-        var completedCount = completedOrders.Count;
+        var totalOrders = await _context.LogoOrders.AsNoTracking().CountAsync(o => !o.IsDeleted);
+        var completedCount = await comp.CountAsync();
         var avgOrderValue = completedCount > 0 ? totalRevenue / completedCount : 0;
 
         return new FinancialOverviewDto
@@ -77,9 +95,9 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
             AverageOrderValue = avgOrderValue,
             TotalOrders = totalOrders,
             RevenueGrowthPercent = Math.Round(revenueGrowth, 1),
-            InvoicesPaid = invoices.Count(i => i.Status == InvoiceStatus.Paid),
-            InvoicesPending = invoices.Count(i => i.Status == InvoiceStatus.Pending),
-            OverdueInvoices = invoices.Count(i => i.Status == InvoiceStatus.Overdue),
+            InvoicesPaid = await inv.CountAsync(i => i.Status == InvoiceStatus.Paid),
+            InvoicesPending = await inv.CountAsync(i => i.Status == InvoiceStatus.Pending),
+            OverdueInvoices = await inv.CountAsync(i => i.Status == InvoiceStatus.Overdue),
             OutstandingBalance = outstandingBalance,
             CollectedRevenue = collectedRevenue,
             RefundedAmount = refundedAmount
@@ -88,51 +106,60 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
 
     public async Task<RevenueTrendDto> GetRevenueTrendAsync()
     {
+        var cacheKey = $"ldp:cache:financial:revenueTrend:e{_readModelCacheVersions.OrdersEpoch}";
+        var cached = await DistributedJsonCache.GetSafeAsync<RevenueTrendDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
+
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var completedOrders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Select(o => new { o.Price, o.UpdatedAt, o.CreatedAt })
-            .ToListAsync();
-
-        var items = completedOrders
-            .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfSixMonths)
+        var raw = await _context.LogoOrders.AsNoTracking()
+            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed && (o.UpdatedAt ?? o.CreatedAt) >= startOfSixMonths)
             .GroupBy(o => new { Year = (o.UpdatedAt ?? o.CreatedAt).Year, Month = (o.UpdatedAt ?? o.CreatedAt).Month })
-            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
-            .Select(g => new FinancialRevenueTrendItemDto
+            .Select(g => new
             {
-                MonthKey = $"{g.Key.Year}-{g.Key.Month:D2}",
-                Month = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM yyyy"),
+                g.Key.Year,
+                g.Key.Month,
                 Revenue = g.Sum(x => x.Price)
             })
-            .ToList();
+            .OrderBy(x => x.Year).ThenBy(x => x.Month)
+            .ToListAsync();
 
-        return new RevenueTrendDto { Items = items };
+        var items = raw.Select(x => new FinancialRevenueTrendItemDto
+        {
+            MonthKey = $"{x.Year}-{x.Month:D2}",
+            Month = new DateTime(x.Year, x.Month, 1).ToString("MMM yyyy"),
+            Revenue = x.Revenue
+        }).ToList();
+
+        var dto = new RevenueTrendDto { Items = items };
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(8), _logger).ConfigureAwait(false);
+        return dto;
     }
 
     public async Task<OrdersVsRevenueDto> GetOrdersVsRevenueAsync()
     {
+        var cacheKey = $"ldp:cache:financial:ordersVsRevenue:e{_readModelCacheVersions.OrdersEpoch}";
+        var cached = await DistributedJsonCache.GetSafeAsync<OrdersVsRevenueDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
+
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var orders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted)
-            .Select(o => new { o.Price, o.Status, o.CreatedAt, o.UpdatedAt })
-            .ToListAsync();
-
-        var byMonth = orders
-            .GroupBy(o => new { Year = o.CreatedAt.Year, Month = o.CreatedAt.Month })
-            .Where(g => new DateTime(g.Key.Year, g.Key.Month, 1) >= startOfSixMonths)
-            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
+        var byMonth = await _context.LogoOrders.AsNoTracking()
+            .Where(o => !o.IsDeleted && o.CreatedAt >= startOfSixMonths)
+            .GroupBy(o => new { o.CreatedAt.Year, o.CreatedAt.Month })
             .Select(g => new
             {
                 g.Key.Year,
                 g.Key.Month,
                 OrdersCount = g.Count(),
-                Revenue = g.Where(x => x.Status == OrderStatus.Completed).Sum(x => x.Price)
+                Revenue = g.Sum(x => x.Status == OrderStatus.Completed ? x.Price : 0m)
             })
-            .ToList();
+            .OrderBy(x => x.Year).ThenBy(x => x.Month)
+            .ToListAsync();
 
         var items = byMonth.Select(x => new OrdersVsRevenueItemDto
         {
@@ -142,19 +169,28 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
             Revenue = x.Revenue
         }).ToList();
 
-        return new OrdersVsRevenueDto { Items = items };
+        var dto = new OrdersVsRevenueDto { Items = items };
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(8), _logger).ConfigureAwait(false);
+        return dto;
     }
 
     public async Task<PackageRevenueDto> GetPackageRevenueAsync()
     {
-        var completedOrders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Select(o => o.Price)
-            .ToListAsync();
+        var q = _context.LogoOrders.AsNoTracking()
+            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed);
 
-        var items = completedOrders
-            .GroupBy(GetPackageFromPrice)
-            .Select(g => new PackageRevenueItemDto { Package = g.Key, Revenue = g.Sum(x => x) })
+        var basic = await q.Where(o => o.Price < 200).SumAsync(o => o.Price);
+        var standard = await q.Where(o => o.Price >= 200 && o.Price < 500).SumAsync(o => o.Price);
+        var premium = await q.Where(o => o.Price >= 500 && o.Price < 1000).SumAsync(o => o.Price);
+        var custom = await q.Where(o => o.Price >= 1000).SumAsync(o => o.Price);
+
+        var items = new[]
+            {
+                new PackageRevenueItemDto { Package = "Basic", Revenue = basic },
+                new PackageRevenueItemDto { Package = "Standard", Revenue = standard },
+                new PackageRevenueItemDto { Package = "Premium", Revenue = premium },
+                new PackageRevenueItemDto { Package = "Custom", Revenue = custom }
+            }
             .OrderByDescending(x => x.Revenue)
             .ToList();
 
@@ -163,17 +199,12 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
 
     public async Task<DesignerRevenueDto> GetDesignerRevenueAsync()
     {
-        var data = await _context.LogoOrders
+        var agg = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.DesignerId.HasValue && o.Status == OrderStatus.Completed)
-            .Include(o => o.Designer)
-            .ThenInclude(d => d!.User)
             .GroupBy(o => o.DesignerId!.Value)
             .Select(g => new
             {
                 DesignerId = g.Key,
-                DesignerName = g.First().Designer != null && g.First().Designer!.User != null
-                    ? $"{g.First().Designer!.User!.FirstName} {g.First().Designer!.User!.LastName}"
-                    : "Unknown",
                 TotalRevenue = g.Sum(o => o.Price),
                 OrdersCompleted = g.Count()
             })
@@ -181,10 +212,17 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
             .Take(15)
             .ToListAsync();
 
-        var items = data.Select(x => new DesignerRevenueItemDto
+        var ids = agg.Select(x => x.DesignerId).ToList();
+        var names = await _context.DesignerProfiles.AsNoTracking()
+            .Where(d => ids.Contains(d.Id) && !d.IsDeleted)
+            .Select(d => new { d.Id, d.User!.FirstName, d.User.LastName })
+            .ToListAsync();
+        var nameLookup = names.ToDictionary(x => x.Id, x => $"{x.FirstName} {x.LastName}".Trim());
+
+        var items = agg.Select(x => new DesignerRevenueItemDto
         {
             DesignerId = x.DesignerId,
-            DesignerName = x.DesignerName,
+            DesignerName = nameLookup.TryGetValue(x.DesignerId, out var n) && !string.IsNullOrWhiteSpace(n) ? n : "Unknown",
             TotalRevenue = x.TotalRevenue,
             OrdersCompleted = x.OrdersCompleted
         }).ToList();
@@ -194,19 +232,12 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
 
     public async Task<ClientRevenueDto> GetClientRevenueAsync()
     {
-        var data = await _context.LogoOrders
+        var agg = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Include(o => o.Client)
-            .ThenInclude(c => c!.User)
             .GroupBy(o => o.ClientId)
             .Select(g => new
             {
                 ClientId = g.Key,
-                ClientName = g.First().Client != null
-                    ? (g.First().Client!.User != null
-                        ? $"{g.First().Client!.User!.FirstName} {g.First().Client!.User!.LastName} ({g.First().Client!.CompanyName})"
-                        : g.First().Client!.CompanyName)
-                    : "Unknown",
                 OrdersCount = g.Count(),
                 TotalRevenue = g.Sum(o => o.Price)
             })
@@ -214,10 +245,21 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
             .Take(15)
             .ToListAsync();
 
-        var items = data.Select(x => new ClientRevenueItemDto
+        var ids = agg.Select(x => x.ClientId).ToList();
+        var profiles = await _context.ClientProfiles.AsNoTracking()
+            .Where(c => ids.Contains(c.Id) && !c.IsDeleted)
+            .Select(c => new { c.Id, c.CompanyName, c.User!.FirstName, c.User.LastName })
+            .ToListAsync();
+        var nameLookup = profiles.ToDictionary(
+            x => x.Id,
+            x => string.IsNullOrWhiteSpace($"{x.FirstName} {x.LastName}".Trim())
+                ? (x.CompanyName ?? "Unknown")
+                : $"{x.FirstName} {x.LastName} ({x.CompanyName})");
+
+        var items = agg.Select(x => new ClientRevenueItemDto
         {
             ClientId = x.ClientId,
-            ClientName = x.ClientName,
+            ClientName = nameLookup.TryGetValue(x.ClientId, out var n) ? n : "Unknown",
             OrdersCount = x.OrdersCount,
             TotalRevenue = x.TotalRevenue
         }).ToList();
@@ -255,15 +297,12 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
         var last7Days = DateTime.UtcNow.AddDays(-7);
         var startOfPeriod = new DateTime(last7Days.Year, last7Days.Month, last7Days.Day, 0, 0, 0, DateTimeKind.Utc);
 
-        var completedOrders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfPeriod)
-            .Select(o => new { o.Price, Date = (o.UpdatedAt ?? o.CreatedAt).Date })
+        var byDateList = await _context.LogoOrders.AsNoTracking()
+            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed && (o.UpdatedAt ?? o.CreatedAt) >= startOfPeriod)
+            .GroupBy(o => (o.UpdatedAt ?? o.CreatedAt).Date)
+            .Select(g => new { Date = g.Key, Revenue = g.Sum(x => x.Price) })
             .ToListAsync();
-
-        var byDate = completedOrders
-            .GroupBy(o => o.Date)
-            .ToDictionary(g => g.Key, g => g.Sum(x => x.Price));
+        var byDate = byDateList.ToDictionary(x => x.Date, x => x.Revenue);
 
         var items = new List<WeeklyRevenueItemDto>();
         for (var i = 0; i < 7; i++)
@@ -285,22 +324,25 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var completedOrders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Select(o => new { o.Price, o.UpdatedAt, o.CreatedAt })
+        var raw = await _context.LogoOrders.AsNoTracking()
+            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed && (o.UpdatedAt ?? o.CreatedAt) >= startOfSixMonths)
+            .GroupBy(o => new { Year = (o.UpdatedAt ?? o.CreatedAt).Year, Month = (o.UpdatedAt ?? o.CreatedAt).Month })
+            .Select(g => new
+            {
+                g.Key.Year,
+                g.Key.Month,
+                AverageOrderValue = g.Average(x => x.Price),
+                Count = g.Count()
+            })
+            .OrderBy(x => x.Year).ThenBy(x => x.Month)
             .ToListAsync();
 
-        var items = completedOrders
-            .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfSixMonths)
-            .GroupBy(o => new { Year = (o.UpdatedAt ?? o.CreatedAt).Year, Month = (o.UpdatedAt ?? o.CreatedAt).Month })
-            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
-            .Select(g => new OrderValueTrendItemDto
-            {
-                MonthKey = $"{g.Key.Year}-{g.Key.Month:D2}",
-                Month = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM yyyy"),
-                AverageOrderValue = g.Count() > 0 ? g.Average(x => x.Price) : 0
-            })
-            .ToList();
+        var items = raw.Select(x => new OrderValueTrendItemDto
+        {
+            MonthKey = $"{x.Year}-{x.Month:D2}",
+            Month = new DateTime(x.Year, x.Month, 1).ToString("MMM yyyy"),
+            AverageOrderValue = x.Count > 0 ? x.AverageOrderValue : 0
+        }).ToList();
 
         return new OrderValueTrendDto { Items = items };
     }
@@ -390,17 +432,12 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var completedOrders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Select(o => new { o.Price, o.UpdatedAt, o.CreatedAt })
-            .ToListAsync();
-
-        var monthly = completedOrders
-            .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfSixMonths)
+        var monthly = await _context.LogoOrders.AsNoTracking()
+            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed && (o.UpdatedAt ?? o.CreatedAt) >= startOfSixMonths)
             .GroupBy(o => new { Year = (o.UpdatedAt ?? o.CreatedAt).Year, Month = (o.UpdatedAt ?? o.CreatedAt).Month })
-            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
             .Select(g => new { g.Key.Year, g.Key.Month, Revenue = g.Sum(x => x.Price) })
-            .ToList();
+            .OrderBy(x => x.Year).ThenBy(x => x.Month)
+            .ToListAsync();
 
         var revenueValues = monthly.Select(x => (double)x.Revenue).ToList();
         var items = new List<FinancialRevenueForecastItemDto>();

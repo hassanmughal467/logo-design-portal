@@ -31,5 +31,7 @@ public class InvoiceOrderConfiguration : IEntityTypeConfiguration<InvoiceOrder>
         // Unique index for (InvoiceId, OrderId) - MySQL doesn't support filtered indexes
         builder.HasIndex(e => new { e.InvoiceId, e.OrderId })
             .IsUnique();
+
+        builder.HasIndex(e => e.OrderId);
     }
 }

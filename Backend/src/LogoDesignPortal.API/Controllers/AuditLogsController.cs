@@ -23,6 +23,7 @@ public class AuditLogsController : ControllerBase
     [ProducesResponseType(typeof(List<AuditLogResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAuditLogs([FromQuery] string? entityType = null, [FromQuery] Guid? entityId = null, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50)
     {
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var logs = await _auditLogService.GetAuditLogsAsync(entityType, entityId, pageNumber, pageSize);
         return Ok(logs);
     }

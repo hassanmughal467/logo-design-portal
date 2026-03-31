@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
+import { SharedListDataService } from '@core/services/shared-list-data.service';
 import { MessageService } from 'primeng/api';
 import { Subject, forkJoin } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -29,7 +30,6 @@ export interface Client {
 export class ClientDetailComponent implements OnInit, OnDestroy {
   clientId: string | null = null;
   client: Client | null = null;
-  loading = false;
   loadFailed = false;
   errorMessage = '';
   activeTab: number = 0;
@@ -101,7 +101,8 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private router: Router,
     private apiService: ApiService,
-    private messageService: MessageService
+    private messageService: MessageService,
+    private sharedListData: SharedListDataService
   ) {}
 
   ngOnInit(): void {
@@ -121,7 +122,6 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
   }
 
   loadClient(): void {
-    this.loading = true;
     this.loadFailed = false;
     this.errorMessage = '';
     // Use new comprehensive client detail endpoint
@@ -156,7 +156,6 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
             this.invoicesLoading = false;
             this.filesLoading = false;
             this.buildAnalytics();
-            this.loading = false;
           } else {
             this.messageService.add({
               severity: 'error',
@@ -191,7 +190,6 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
               createdAt: new Date(user.createdAt),
               status: 'Active'
             };
-            this.loading = false;
             this.loadOrders();
             this.loadInvoices();
             this.loadFiles();
@@ -212,7 +210,6 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
             summary: 'Error',
             detail: this.errorMessage
           });
-          this.loading = false;
         }
       });
   }
@@ -220,11 +217,12 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
   loadOrders(): void {
     if (this.orders.length > 0) return; // Already loaded from detail endpoint
     this.ordersLoading = true;
-    this.apiService.get<any>('orders?page=1&pageSize=500')
+    this.sharedListData
+      .fetchAllOrdersUncached()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response) => {
-          const orders = ApiService.extractItems<Order>(response);
+        next: (ordersRaw) => {
+          const orders = ordersRaw as Order[];
           this.orders = orders.filter(o => (o as any).clientId === this.clientId);
           if (this.client) {
             this.client.totalOrders = this.orders.length;

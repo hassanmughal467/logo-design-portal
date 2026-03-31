@@ -2,6 +2,8 @@ using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Mappings;
 using LogoDesignPortal.Application.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Options;
 
 namespace LogoDesignPortal.Application;
 
@@ -41,8 +43,14 @@ public static class DependencyInjection
         services.AddScoped<IDesignerLogoPricingService, DesignerLogoPricingService>();
         services.AddScoped<IQuoteService, QuoteService>();
         
-        // Add HttpClient for PaymentService
-        services.AddHttpClient();
+        services.AddHttpClient(Options.DefaultName, client => client.Timeout = TimeSpan.FromSeconds(120))
+            .AddStandardResilienceHandler(options =>
+            {
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(30);
+                // Options validation: sampling duration must be >= 2 × attempt timeout (default was 30s each → startup crash).
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(60);
+            });
 
         return services;
     }

@@ -1,57 +1,78 @@
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Logging;
 
 namespace LogoDesignPortal.Application.Services;
 
 public class AnalyticsService : IAnalyticsService
 {
     private readonly IApplicationDbContext _context;
+    private readonly IDistributedCache _distributedCache;
+    private readonly IReadModelCacheVersions _cacheVersions;
+    private readonly ILogger<AnalyticsService> _logger;
 
-    private static string GetPackageFromPriceForRevenue(decimal price)
-    {
-        if (price < 200) return "Basic";
-        if (price < 500) return "Standard";
-        if (price < 1000) return "Premium";
-        return "Custom";
-    }
-
-    public AnalyticsService(IApplicationDbContext context)
+    public AnalyticsService(
+        IApplicationDbContext context,
+        IDistributedCache distributedCache,
+        IReadModelCacheVersions cacheVersions,
+        ILogger<AnalyticsService> logger)
     {
         _context = context;
+        _distributedCache = distributedCache;
+        _cacheVersions = cacheVersions;
+        _logger = logger;
     }
 
     public async Task<AnalyticsOverviewDto> GetOverviewAsync()
+    {
+        // Dashboard aggregate: 5–10 min TTL; invalidated via IReadModelCacheVersions on writes.
+        var cacheKey = $"ldp:cache:analytics:overview:e{_cacheVersions.AnalyticsEpoch}";
+        var cached = await DistributedJsonCache.GetSafeAsync<AnalyticsOverviewDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
+
+        var dto = await BuildOverviewUncachedAsync();
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
+        return dto;
+    }
+
+    /// <summary>
+    /// Computes overview using DB aggregates and projections (avoids materializing all orders).
+    /// </summary>
+    private async Task<AnalyticsOverviewDto> BuildOverviewUncachedAsync()
     {
         var now = DateTime.UtcNow;
         var startOfToday = new DateTime(now.Year, now.Month, now.Day, 0, 0, 0, DateTimeKind.Utc);
         var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var startOfYear = new DateTime(now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var orders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted)
-            .ToListAsync();
+        var q = _context.LogoOrders.AsNoTracking().Where(o => !o.IsDeleted);
 
-        var completedOrders = orders.Where(o => o.Status == OrderStatus.Completed).ToList();
-        var totalRevenue = completedOrders.Sum(o => o.Price);
-        var totalOrders = orders.Count;
-        var completedCount = completedOrders.Count;
+        var totalOrders = await q.CountAsync();
+        var completedCount = await q.CountAsync(o => o.Status == OrderStatus.Completed);
+        var totalRevenue = completedCount == 0
+            ? 0m
+            : await q.Where(o => o.Status == OrderStatus.Completed).SumAsync(o => o.Price);
 
         var averageDeliveryTime = 0.0;
-        var completedWithDates = completedOrders
-            .Where(o => o.UpdatedAt.HasValue || o.CreatedAt != default)
-            .ToList();
-        if (completedWithDates.Count > 0)
+        var completedForAvg = q
+            .Where(o => o.Status == OrderStatus.Completed)
+            .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= o.CreatedAt);
+        if (await completedForAvg.AnyAsync().ConfigureAwait(false))
         {
-            var times = completedWithDates.Select(o =>
-            {
-                var completed = o.UpdatedAt ?? o.CreatedAt;
-                return (completed - o.CreatedAt).TotalDays;
-            }).Where(d => d >= 0).ToList();
-            if (times.Count > 0)
-                averageDeliveryTime = times.Average();
+            // Fetch timestamps only; compute duration in memory — EF cannot translate TimeSpan.TotalDays reliably (throws DateTime vs TimeSpan? coercion on some providers).
+            var deliveryRows = await completedForAvg
+                .Select(o => new { o.CreatedAt, End = o.UpdatedAt ?? o.CreatedAt })
+                .Where(x => x.End >= x.CreatedAt)
+                .ToListAsync()
+                .ConfigureAwait(false);
+            if (deliveryRows.Count > 0)
+                averageDeliveryTime = deliveryRows.Average(x => (x.End - x.CreatedAt).TotalDays);
         }
 
         var ordersWithRevisions = await _context.OrderRevisions
@@ -62,9 +83,9 @@ public class AnalyticsService : IAnalyticsService
         var revisionRate = totalOrders > 0 ? (decimal)ordersWithRevisions / totalOrders * 100 : 0;
         var approvalRate = totalOrders > 0 ? (decimal)completedCount / totalOrders * 100 : 0;
 
-        var monthlyRevenue = completedOrders
-            .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfMonth)
-            .Sum(o => o.Price);
+        var monthlyRevenue = await q
+            .Where(o => o.Status == OrderStatus.Completed && (o.UpdatedAt ?? o.CreatedAt) >= startOfMonth)
+            .SumAsync(o => o.Price);
 
         var totalClients = await _context.ClientProfiles.CountAsync(c => !c.IsDeleted);
         var activeDesigners = await _context.LogoOrders
@@ -73,18 +94,19 @@ public class AnalyticsService : IAnalyticsService
             .Distinct()
             .CountAsync();
 
-        var pendingOrders = orders.Count(o => o.Status == OrderStatus.WaitingForAdminApproval);
-        var inProgress = orders.Count(o => o.Status == OrderStatus.InProgress || o.Status == OrderStatus.RevisionRequested);
-        var awaitingAdminReview = orders.Count(o => o.Status == OrderStatus.WaitingForAdminApproval || o.Status == OrderStatus.PriceApprovalPending);
-        var awaitingClientApproval = orders.Count(o => o.Status == OrderStatus.PreviewDelivered);
-        var overdueOrders = orders.Count(o => o.Deadline.HasValue && o.Deadline.Value < now && o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled);
+        var pendingOrders = await q.CountAsync(o => o.Status == OrderStatus.WaitingForAdminApproval);
+        var inProgress = await q.CountAsync(o => o.Status == OrderStatus.InProgress || o.Status == OrderStatus.RevisionRequested);
+        var awaitingAdminReview = await q.CountAsync(o => o.Status == OrderStatus.WaitingForAdminApproval || o.Status == OrderStatus.PriceApprovalPending);
+        var awaitingClientApproval = await q.CountAsync(o => o.Status == OrderStatus.PreviewDelivered);
+        var overdueOrders = await q.CountAsync(o =>
+            o.Deadline.HasValue && o.Deadline.Value < now && o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled);
 
         return new AnalyticsOverviewDto
         {
             TotalOrders = totalOrders,
-            OrdersToday = orders.Count(o => o.CreatedAt >= startOfToday),
-            OrdersThisMonth = orders.Count(o => o.CreatedAt >= startOfMonth),
-            OrdersThisYear = orders.Count(o => o.CreatedAt >= startOfYear),
+            OrdersToday = await q.CountAsync(o => o.CreatedAt >= startOfToday),
+            OrdersThisMonth = await q.CountAsync(o => o.CreatedAt >= startOfMonth),
+            OrdersThisYear = await q.CountAsync(o => o.CreatedAt >= startOfYear),
             TotalRevenue = totalRevenue,
             MonthlyRevenue = monthlyRevenue,
             AverageOrderValue = completedCount > 0 ? totalRevenue / completedCount : 0,
@@ -103,27 +125,31 @@ public class AnalyticsService : IAnalyticsService
 
     public async Task<OrderAnalyticsDto> GetOrderAnalyticsAsync()
     {
-        var orders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted)
-            .Select(o => new { o.Id, o.CreatedAt, o.Status, o.ClientId, o.DesignerId })
-            .ToListAsync();
+        var cacheKey = $"ldp:cache:analytics:orders:e{_cacheVersions.AnalyticsEpoch}";
+        var cached = await DistributedJsonCache.GetSafeAsync<OrderAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
+
+        var q = _context.LogoOrders.AsNoTracking().Where(o => !o.IsDeleted);
 
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var trendRaw = orders
+        var trendRows = await q
             .Where(o => o.CreatedAt >= startOfSixMonths)
-            .GroupBy(o => new { Year = o.CreatedAt.Year, Month = o.CreatedAt.Month })
+            .GroupBy(o => new { o.CreatedAt.Year, o.CreatedAt.Month })
             .Select(g => new
             {
-                MonthKey = $"{g.Key.Year}-{g.Key.Month:D2}",
-                Month = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM yyyy"),
+                g.Key.Year,
+                g.Key.Month,
                 Count = g.Count(),
                 CompletedCount = g.Count(x => x.Status == OrderStatus.Completed)
             })
-            .ToDictionary(x => x.MonthKey);
+            .ToListAsync();
+        var trendRaw = trendRows.ToDictionary(
+            x => $"{x.Year}-{x.Month:D2}",
+            x => (Month: new DateTime(x.Year, x.Month, 1).ToString("MMM yyyy"), x.Count, x.CompletedCount));
 
-        // Ensure all 6 months are present (even if empty)
         var trend = new List<OrdersTrendItemDto>();
         for (var i = 5; i >= 0; i--)
         {
@@ -135,80 +161,99 @@ public class AnalyticsService : IAnalyticsService
             trend.Add(item);
         }
 
-        var byStatus = orders
-            .GroupBy(o => o.Status.ToString())
-            .Select(g => new OrdersByStatusItemDto { Status = g.Key, Count = g.Count() })
+        var byStatus = await q
+            .GroupBy(o => o.Status)
+            .Select(g => new OrdersByStatusItemDto { Status = g.Key.ToString(), Count = g.Count() })
             .OrderByDescending(x => x.Count)
-            .ToList();
+            .ToListAsync();
 
-        var byPackage = orders
-            .GroupBy(_ => "Standard")
-            .Select(g => new OrdersByPackageItemDto { Package = g.Key, Count = g.Count() })
-            .ToList();
+        var totalForPackage = await q.CountAsync();
+        var byPackage = new List<OrdersByPackageItemDto>
+        {
+            new() { Package = "Standard", Count = totalForPackage }
+        };
 
-        var byDayOfWeek = orders
+        var byDayOfWeek = await q
             .GroupBy(o => (int)o.CreatedAt.DayOfWeek)
             .Select(g => new OrdersByDayOfWeekItemDto
             {
                 DayIndex = g.Key,
-                DayOfWeek = Enum.GetName(typeof(DayOfWeek), g.Key) ?? "",
+                DayOfWeek = "",
                 Count = g.Count()
             })
             .OrderBy(x => x.DayIndex)
-            .ToList();
+            .ToListAsync();
+        foreach (var x in byDayOfWeek)
+            x.DayOfWeek = Enum.GetName(typeof(DayOfWeek), x.DayIndex) ?? "";
 
-        var byHour = orders
+        var byHour = await q
             .GroupBy(o => o.CreatedAt.Hour)
             .Select(g => new OrdersByHourItemDto { Hour = g.Key, Count = g.Count() })
             .OrderBy(x => x.Hour)
-            .ToList();
+            .ToListAsync();
 
         var last30Days = DateTime.UtcNow.AddDays(-30);
-        var ordersTrendDaily = orders
+        var dailyTrendRaw = await q
             .Where(o => o.CreatedAt >= last30Days)
             .GroupBy(o => o.CreatedAt.Date)
-            .OrderBy(g => g.Key)
-            .Select(g => new OrdersTrendDailyItemDto
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .OrderBy(x => x.Date)
+            .ToListAsync();
+        var ordersTrendDaily = dailyTrendRaw
+            .Select(x => new OrdersTrendDailyItemDto
             {
-                DateKey = g.Key.ToString("yyyy-MM-dd"),
-                Date = g.Key.ToString("MMM d"),
-                Count = g.Count()
+                DateKey = x.Date.ToString("yyyy-MM-dd"),
+                Date = x.Date.ToString("MMM d"),
+                Count = x.Count
             })
             .ToList();
 
-        var ordersByClient = await _context.LogoOrders
-            .Where(o => !o.IsDeleted)
-            .Include(o => o.Client)
-            .ThenInclude(c => c!.User)
+        var clientAgg = await q
             .GroupBy(o => o.ClientId)
-            .Select(g => new OrdersByClientItemDto
-            {
-                ClientId = g.Key,
-                ClientName = g.First().Client != null
-                    ? (g.First().Client!.User != null ? $"{g.First().Client!.User!.FirstName} {g.First().Client!.User!.LastName} ({g.First().Client!.CompanyName})" : g.First().Client!.CompanyName)
-                    : "Unknown",
-                OrderCount = g.Count()
-            })
+            .Select(g => new { ClientId = g.Key, OrderCount = g.Count() })
             .OrderByDescending(x => x.OrderCount)
             .Take(15)
             .ToListAsync();
+        var clientIds = clientAgg.Select(x => x.ClientId).ToList();
+        var clientsInfo = await _context.ClientProfiles.AsNoTracking()
+            .Where(c => clientIds.Contains(c.Id) && !c.IsDeleted)
+            .Select(c => new { c.Id, c.CompanyName, c.User!.FirstName, c.User.LastName })
+            .ToListAsync();
+        var clientLookup = clientsInfo.ToDictionary(
+            x => x.Id,
+            x => string.IsNullOrWhiteSpace($"{x.FirstName} {x.LastName}".Trim())
+                ? (x.CompanyName ?? "Unknown")
+                : $"{x.FirstName} {x.LastName} ({x.CompanyName})");
+        var ordersByClient = clientAgg
+            .Select(x => new OrdersByClientItemDto
+            {
+                ClientId = x.ClientId,
+                ClientName = clientLookup.TryGetValue(x.ClientId, out var cn) ? cn : "Unknown",
+                OrderCount = x.OrderCount
+            })
+            .ToList();
 
-        var ordersByDesigner = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.DesignerId.HasValue)
-            .Include(o => o.Designer)
-            .ThenInclude(d => d!.User)
+        var designerAgg = await q
+            .Where(o => o.DesignerId.HasValue)
             .GroupBy(o => o.DesignerId!.Value)
-            .Select(g => new OrdersByDesignerItemDto
-            {
-                DesignerId = g.Key,
-                DesignerName = g.First().Designer != null && g.First().Designer!.User != null
-                    ? $"{g.First().Designer!.User!.FirstName} {g.First().Designer!.User!.LastName}"
-                    : "Unknown",
-                OrderCount = g.Count()
-            })
+            .Select(g => new { DesignerId = g.Key, OrderCount = g.Count() })
             .OrderByDescending(x => x.OrderCount)
             .Take(15)
             .ToListAsync();
+        var designerIds = designerAgg.Select(x => x.DesignerId).ToList();
+        var designersInfo = await _context.DesignerProfiles.AsNoTracking()
+            .Where(d => designerIds.Contains(d.Id) && !d.IsDeleted)
+            .Select(d => new { d.Id, d.User!.FirstName, d.User.LastName })
+            .ToListAsync();
+        var designerLookup = designersInfo.ToDictionary(x => x.Id, x => $"{x.FirstName} {x.LastName}".Trim());
+        var ordersByDesigner = designerAgg
+            .Select(x => new OrdersByDesignerItemDto
+            {
+                DesignerId = x.DesignerId,
+                DesignerName = designerLookup.TryGetValue(x.DesignerId, out var dn) && !string.IsNullOrWhiteSpace(dn) ? dn : "Unknown",
+                OrderCount = x.OrderCount
+            })
+            .ToList();
 
         var last14Days = DateTime.UtcNow.AddDays(-14);
         var filesByDay = await _context.LogoFiles
@@ -228,10 +273,12 @@ public class AnalyticsService : IAnalyticsService
             .Select(g => new { Date = g.Key, Count = g.Count() })
             .ToListAsync();
 
-        var ordersByDay = orders
+        var ordersByDayList = await q
             .Where(o => o.CreatedAt >= last14Days)
             .GroupBy(o => o.CreatedAt.Date)
-            .ToDictionary(g => g.Key, g => g.Count());
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .ToListAsync();
+        var ordersByDay = ordersByDayList.ToDictionary(x => x.Date, x => x.Count);
 
         var dailyActivity = new List<DailyActivityItemDto>();
         for (var i = 13; i >= 0; i--)
@@ -253,7 +300,7 @@ public class AnalyticsService : IAnalyticsService
             });
         }
 
-        return new OrderAnalyticsDto
+        var dto = new OrderAnalyticsDto
         {
             OrdersTrend = trend,
             OrdersTrendDaily = ordersTrendDaily,
@@ -265,113 +312,120 @@ public class AnalyticsService : IAnalyticsService
             OrdersByDesigner = ordersByDesigner,
             DailyActivity = dailyActivity
         };
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
+        return dto;
     }
 
     public async Task<RevenueAnalyticsDto> GetRevenueAnalyticsAsync()
     {
+        var cacheKey = $"ldp:cache:analytics:revenue:e{_cacheVersions.AnalyticsEpoch}";
+        var cached = await DistributedJsonCache.GetSafeAsync<RevenueAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
+
         var now = DateTime.UtcNow;
         var sixMonthsAgo = now.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var last30Days = now.AddDays(-30);
+        var prevMonth = now.AddMonths(-1);
+        var prevMonthStart = new DateTime(prevMonth.Year, prevMonth.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var completedOrders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Include(o => o.Client)
-            .ThenInclude(c => c!.User)
-            .Select(o => new { o.Price, o.CreatedAt, o.UpdatedAt, o.ClientId, o.Client })
-            .ToListAsync();
+        var q = _context.LogoOrders.AsNoTracking().Where(o => o.Status == OrderStatus.Completed);
 
-        var revenueTrend = completedOrders
+        var revenueTrendRaw = await q
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfSixMonths)
-            .GroupBy(o => new { Year = (o.UpdatedAt ?? o.CreatedAt).Year, Month = (o.UpdatedAt ?? o.CreatedAt).Month })
-            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
-            .Select(g => new RevenueTrendItemDto
-            {
-                MonthKey = $"{g.Key.Year}-{g.Key.Month:D2}",
-                Month = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM yyyy"),
-                Revenue = g.Sum(x => x.Price)
-            })
-            .ToList();
+            .GroupBy(o => new { Y = (o.UpdatedAt ?? o.CreatedAt).Year, M = (o.UpdatedAt ?? o.CreatedAt).Month })
+            .Select(g => new { g.Key.Y, g.Key.M, Revenue = g.Sum(x => x.Price) })
+            .OrderBy(x => x.Y).ThenBy(x => x.M)
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var revenueTrend = revenueTrendRaw.Select(g => new RevenueTrendItemDto
+        {
+            MonthKey = $"{g.Y}-{g.M:D2}",
+            Month = new DateTime(g.Y, g.M, 1).ToString("MMM yyyy"),
+            Revenue = g.Revenue
+        }).ToList();
 
-        // Group revenue by package type: Basic < 200, Standard < 500, Premium < 1000, Custom >= 1000
-        var revenueByPackageRaw = completedOrders
-            .GroupBy(o => GetPackageFromPriceForRevenue(o.Price))
-            .ToDictionary(g => g.Key, g => g.Sum(x => x.Price));
-        var packageOrder = new[] { "Basic", "Standard", "Premium", "Custom" };
-        var revenueByPackage = packageOrder
-            .Select(p => new RevenueByPackageItemDto { Package = p, Revenue = revenueByPackageRaw.GetValueOrDefault(p, 0) })
-            .ToList();
+        var basicRev = await q.Where(o => o.Price < 200m).SumAsync(o => o.Price).ConfigureAwait(false);
+        var stdRev = await q.Where(o => o.Price >= 200m && o.Price < 500m).SumAsync(o => o.Price).ConfigureAwait(false);
+        var premRev = await q.Where(o => o.Price >= 500m && o.Price < 1000m).SumAsync(o => o.Price).ConfigureAwait(false);
+        var customRev = await q.Where(o => o.Price >= 1000m).SumAsync(o => o.Price).ConfigureAwait(false);
+        var revenueByPackage = new List<RevenueByPackageItemDto>
+        {
+            new() { Package = "Basic", Revenue = basicRev },
+            new() { Package = "Standard", Revenue = stdRev },
+            new() { Package = "Premium", Revenue = premRev },
+            new() { Package = "Custom", Revenue = customRev }
+        };
 
-        var aovTrend = completedOrders
+        var aovRaw = await q
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfSixMonths)
-            .GroupBy(o => new { Year = (o.UpdatedAt ?? o.CreatedAt).Year, Month = (o.UpdatedAt ?? o.CreatedAt).Month })
-            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
-            .Select(g => new AverageOrderValueTrendItemDto
-            {
-                MonthKey = $"{g.Key.Year}-{g.Key.Month:D2}",
-                Month = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM yyyy"),
-                AverageOrderValue = g.Count() > 0 ? g.Average(x => x.Price) : 0
-            })
-            .ToList();
+            .GroupBy(o => new { Y = (o.UpdatedAt ?? o.CreatedAt).Year, M = (o.UpdatedAt ?? o.CreatedAt).Month })
+            .Select(g => new { g.Key.Y, g.Key.M, AverageOrderValue = g.Average(x => x.Price) })
+            .OrderBy(x => x.Y).ThenBy(x => x.M)
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var aovTrend = aovRaw.Select(g => new AverageOrderValueTrendItemDto
+        {
+            MonthKey = $"{g.Y}-{g.M:D2}",
+            Month = new DateTime(g.Y, g.M, 1).ToString("MMM yyyy"),
+            AverageOrderValue = g.AverageOrderValue
+        }).ToList();
 
-        var topClients = completedOrders
+        var topClientRows = await q
             .GroupBy(o => o.ClientId)
-            .Select(g =>
-            {
-                var first = g.First();
-                var client = first.Client;
-                var clientName = client != null
-                    ? (client.User != null ? $"{client.User.FirstName} {client.User.LastName} ({client.CompanyName})" : client.CompanyName)
-                    : "Unknown";
-                return new
-                {
-                    ClientId = g.Key,
-                    Revenue = g.Sum(x => x.Price),
-                    OrderCount = g.Count(),
-                    ClientName = clientName
-                };
-            })
+            .Select(g => new { ClientId = g.Key, Revenue = g.Sum(x => x.Price), OrderCount = g.Count() })
             .OrderByDescending(x => x.Revenue)
             .Take(10)
-            .Select(x => new TopClientByRevenueDto
-            {
-                ClientId = x.ClientId,
-                ClientName = x.ClientName,
-                Revenue = x.Revenue,
-                OrderCount = x.OrderCount
-            })
-            .ToList();
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var topClientIds = topClientRows.Select(x => x.ClientId).ToList();
+        var topClientNames = await _context.ClientProfiles.AsNoTracking()
+            .Where(c => topClientIds.Contains(c.Id))
+            .Select(c => new { c.Id, c.CompanyName, c.User!.FirstName, c.User.LastName })
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var topNameLookup = topClientNames.ToDictionary(
+            x => x.Id,
+            x => string.IsNullOrWhiteSpace($"{x.FirstName} {x.LastName}".Trim())
+                ? (x.CompanyName ?? "Unknown")
+                : $"{x.FirstName} {x.LastName} ({x.CompanyName})");
+        var topClients = topClientRows.Select(x => new TopClientByRevenueDto
+        {
+            ClientId = x.ClientId,
+            ClientName = topNameLookup.TryGetValue(x.ClientId, out var nm) ? nm : "Unknown",
+            Revenue = x.Revenue,
+            OrderCount = x.OrderCount
+        }).ToList();
 
-        var last30Days = DateTime.UtcNow.AddDays(-30);
-        var revenueTrendDaily = completedOrders
+        var dailyRaw = await q
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= last30Days)
             .GroupBy(o => (o.UpdatedAt ?? o.CreatedAt).Date)
-            .OrderBy(g => g.Key)
-            .Select(g => new RevenueTrendDailyItemDto
-            {
-                DateKey = g.Key.ToString("yyyy-MM-dd"),
-                Date = g.Key.ToString("MMM d"),
-                Revenue = g.Sum(x => x.Price)
-            })
-            .ToList();
+            .Select(g => new { Date = g.Key, Revenue = g.Sum(x => x.Price) })
+            .OrderBy(x => x.Date)
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var revenueTrendDaily = dailyRaw.Select(g => new RevenueTrendDailyItemDto
+        {
+            DateKey = g.Date.ToString("yyyy-MM-dd"),
+            Date = g.Date.ToString("MMM d"),
+            Revenue = g.Revenue
+        }).ToList();
 
-        var prevMonth = DateTime.UtcNow.AddMonths(-1);
-        var prevMonthStart = new DateTime(prevMonth.Year, prevMonth.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-        var thisMonthRevenue = completedOrders
+        var thisMonthRevenue = await q
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfMonth)
-            .Sum(o => o.Price);
-        var lastMonthRevenue = completedOrders
-            .Where(o =>
-            {
-                var d = o.UpdatedAt ?? o.CreatedAt;
-                return d >= prevMonthStart && d < startOfMonth;
-            })
-            .Sum(o => o.Price);
+            .SumAsync(o => o.Price)
+            .ConfigureAwait(false);
+        var lastMonthRevenue = await q
+            .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= prevMonthStart && (o.UpdatedAt ?? o.CreatedAt) < startOfMonth)
+            .SumAsync(o => o.Price)
+            .ConfigureAwait(false);
         var revenueGrowthRate = lastMonthRevenue > 0
             ? (decimal)((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue * 100)
             : 0;
 
-        return new RevenueAnalyticsDto
+        var dto = new RevenueAnalyticsDto
         {
             RevenueTrend = revenueTrend,
             RevenueTrendDaily = revenueTrendDaily,
@@ -380,89 +434,111 @@ public class AnalyticsService : IAnalyticsService
             TopClientsByRevenue = topClients,
             RevenueGrowthRate = Math.Round(revenueGrowthRate, 1)
         };
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
+        return dto;
     }
 
     public async Task<DesignerAnalyticsDto> GetDesignerAnalyticsAsync()
     {
-        var designers = await _context.DesignerProfiles
-            .Where(d => !d.IsDeleted)
-            .Include(d => d.User)
-            .ToListAsync();
+        var cacheKey = $"ldp:cache:analytics:designers:e{_cacheVersions.AnalyticsEpoch}";
+        var cached = await DistributedJsonCache.GetSafeAsync<DesignerAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
 
-        var ordersByDesigner = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.DesignerId.HasValue)
-            .Select(o => new { o.DesignerId, o.Status, o.CreatedAt, o.UpdatedAt, o.Id })
-            .ToListAsync();
+        var designers = await _context.DesignerProfiles.AsNoTracking()
+            .Select(d => new { d.Id, FirstName = d.User != null ? d.User.FirstName : "", LastName = d.User != null ? d.User.LastName : "" })
+            .ToListAsync()
+            .ConfigureAwait(false);
 
-        var revisionsByOrder = await _context.OrderRevisions
-            .Where(r => !r.IsDeleted)
-            .GroupBy(r => r.OrderId)
-            .Select(g => new { OrderId = g.Key, Count = g.Count() })
-            .ToListAsync();
-        var revDict = revisionsByOrder.ToDictionary(x => x.OrderId, x => x.Count);
+        var stats = await _context.LogoOrders.AsNoTracking()
+            .Where(o => o.DesignerId.HasValue)
+            .GroupBy(o => o.DesignerId!.Value)
+            .Select(g => new
+            {
+                DesignerId = g.Key,
+                TotalAssigned = g.Count(),
+                Completed = g.Count(x => x.Status == OrderStatus.Completed),
+                Workload = g.Count(x => x.Status != OrderStatus.Completed && x.Status != OrderStatus.Cancelled)
+            })
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var statsDict = stats.ToDictionary(x => x.DesignerId);
+
+        var withRev = await _context.LogoOrders.AsNoTracking()
+            .Where(o => o.DesignerId.HasValue)
+            .Where(o => _context.OrderRevisions.Any(r => r.OrderId == o.Id && !r.IsDeleted))
+            .GroupBy(o => o.DesignerId!.Value)
+            .Select(g => new { DesignerId = g.Key, WithRevisions = g.Count() })
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var withRevDict = withRev.ToDictionary(x => x.DesignerId, x => x.WithRevisions);
+
+        var avgDict = await _context.GetDesignerAverageCompletionDaysByDesignerAsync()
+            .ConfigureAwait(false);
 
         var result = new List<DesignerPerformanceItemDto>();
         foreach (var d in designers)
         {
-            var assigned = ordersByDesigner.Where(o => o.DesignerId == d.Id).ToList();
-            var completed = assigned.Where(o => o.Status == OrderStatus.Completed).ToList();
-            var withRevisions = assigned.Count(o => revDict.TryGetValue(o.Id, out var c) && c > 0);
-            var approvalRate = assigned.Count > 0 ? (decimal)completed.Count / assigned.Count * 100 : 0;
-            var revisionRate = assigned.Count > 0 ? (decimal)withRevisions / assigned.Count * 100 : 0;
-            var avgCompletion = completed.Count > 0
-                ? completed.Average(o =>
-                {
-                    var end = o.UpdatedAt ?? o.CreatedAt;
-                    return (end - o.CreatedAt).TotalDays;
-                })
-                : 0;
-            var workload = assigned.Count(o => o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled);
+            statsDict.TryGetValue(d.Id, out var s);
+            var total = s?.TotalAssigned ?? 0;
+            var completedCnt = s?.Completed ?? 0;
+            var withRevisionOrders = withRevDict.TryGetValue(d.Id, out var wr) ? wr : 0;
+            var approvalRate = total > 0 ? (decimal)completedCnt / total * 100 : 0;
+            var revisionRate = total > 0 ? (decimal)withRevisionOrders / total * 100 : 0;
+            avgDict.TryGetValue(d.Id, out var avgCompletion);
 
             result.Add(new DesignerPerformanceItemDto
             {
                 DesignerId = d.Id,
-                DesignerName = d.User != null ? $"{d.User.FirstName} {d.User.LastName}" : "Unknown",
-                OrdersCompleted = completed.Count,
+                DesignerName = !string.IsNullOrWhiteSpace($"{d.FirstName} {d.LastName}".Trim())
+                    ? $"{d.FirstName} {d.LastName}".Trim()
+                    : "Unknown",
+                OrdersCompleted = completedCnt,
                 ApprovalRate = Math.Round(approvalRate, 0),
                 RevisionRate = Math.Round(revisionRate, 0),
                 AverageCompletionTimeDays = Math.Round(avgCompletion, 1),
-                CurrentWorkload = workload
+                CurrentWorkload = s?.Workload ?? 0
             });
         }
 
         var last14Days = DateTime.UtcNow.AddDays(-14);
-        var completedByDesignerDay = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.DesignerId.HasValue && o.Status == OrderStatus.Completed)
+        var timelineAgg = await _context.LogoOrders.AsNoTracking()
+            .Where(o => o.DesignerId.HasValue && o.Status == OrderStatus.Completed)
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= last14Days)
-            .Select(o => new { Date = (o.UpdatedAt ?? o.CreatedAt).Date, o.DesignerId })
-            .ToListAsync();
+            .GroupBy(o => new { Date = (o.UpdatedAt ?? o.CreatedAt).Date, DesignerId = o.DesignerId!.Value })
+            .Select(g => new { g.Key.Date, g.Key.DesignerId, OrdersCompleted = g.Count() })
+            .OrderBy(x => x.Date).ThenBy(x => x.DesignerId)
+            .ToListAsync()
+            .ConfigureAwait(false);
 
-        var designerIds = completedByDesignerDay.Select(x => x.DesignerId!.Value).Distinct().ToList();
-        var designerNameDict = new Dictionary<Guid, string>();
-        if (designerIds.Count > 0)
+        var timelineDesignerIds = timelineAgg.Select(x => x.DesignerId).Distinct().ToList();
+        Dictionary<Guid, string> timelineNames = new();
+        if (timelineDesignerIds.Count > 0)
         {
-            var designersForNames = await _context.DesignerProfiles
-                .Where(d => designerIds.Contains(d.Id) && !d.IsDeleted)
-                .Include(d => d.User)
-                .ToListAsync();
-            foreach (var d in designersForNames)
-            {
-                designerNameDict[d.Id] = d.User != null ? $"{d.User.FirstName} {d.User.LastName}" : "Unknown";
-            }
+            var timelineRows = await _context.DesignerProfiles.AsNoTracking()
+                .Where(d => timelineDesignerIds.Contains(d.Id))
+                .Select(d => new
+                {
+                    d.Id,
+                    FirstName = d.User != null ? d.User.FirstName : "",
+                    LastName = d.User != null ? d.User.LastName : ""
+                })
+                .ToListAsync()
+                .ConfigureAwait(false);
+            timelineNames = timelineRows.ToDictionary(x => x.Id, x => $"{x.FirstName} {x.LastName}".Trim());
         }
 
-        var designerActivityList = completedByDesignerDay
-            .GroupBy(x => new { x.Date, DesignerId = x.DesignerId!.Value })
-            .Select(g =>
+        var designerActivityList = timelineAgg
+            .Select(x =>
             {
-                var name = designerNameDict.TryGetValue(g.Key.DesignerId, out var n) ? n : "Unknown";
+                var name = timelineNames.TryGetValue(x.DesignerId, out var n) && !string.IsNullOrWhiteSpace(n) ? n : "Unknown";
                 return new DesignerActivityTimelineItemDto
                 {
-                    DateKey = g.Key.Date.ToString("yyyy-MM-dd"),
-                    Date = g.Key.Date.ToString("MMM d"),
-                    DesignerId = g.Key.DesignerId,
+                    DateKey = x.Date.ToString("yyyy-MM-dd"),
+                    Date = x.Date.ToString("MMM d"),
+                    DesignerId = x.DesignerId,
                     DesignerName = name,
-                    OrdersCompleted = g.Count(),
+                    OrdersCompleted = x.OrdersCompleted,
                     FilesUploaded = 0
                 };
             })
@@ -470,42 +546,57 @@ public class AnalyticsService : IAnalyticsService
             .Take(50)
             .ToList();
 
-        return new DesignerAnalyticsDto
+        var dto = new DesignerAnalyticsDto
         {
             DesignerPerformance = result.OrderByDescending(x => x.OrdersCompleted).ToList(),
             DesignerActivityTimeline = designerActivityList
         };
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
+        return dto;
     }
 
     public async Task<ClientAnalyticsDto> GetClientAnalyticsAsync()
     {
+        var cacheKey = $"ldp:cache:analytics:clients:e{_cacheVersions.AnalyticsEpoch}";
+        var cached = await DistributedJsonCache.GetSafeAsync<ClientAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
+
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var clients = await _context.ClientProfiles
-            .Where(c => !c.IsDeleted)
-            .Include(c => c.User)
-            .Include(c => c.Orders.Where(o => !o.IsDeleted))
-            .ToListAsync();
-
-        var firstOrderByClient = await _context.LogoOrders
-            .Where(o => !o.IsDeleted)
+        var totalClients = await _context.ClientProfiles.CountAsync().ConfigureAwait(false);
+        var newClients = await _context.LogoOrders.AsNoTracking()
             .GroupBy(o => o.ClientId)
-            .Select(g => new { ClientId = g.Key, FirstOrder = g.Min(o => o.CreatedAt) })
-            .ToListAsync();
-        var firstOrderDict = firstOrderByClient.ToDictionary(x => x.ClientId, x => x.FirstOrder);
+            .Where(g => g.Min(o => o.CreatedAt) >= startOfSixMonths)
+            .CountAsync()
+            .ConfigureAwait(false);
+        var returningClients = Math.Max(0, totalClients - newClients);
 
-        var newClients = clients.Count(c => firstOrderDict.TryGetValue(c.Id, out var first) && first >= startOfSixMonths);
-        var returningClients = clients.Count - newClients;
-
-        var ordersPerClient = clients
-            .Select(c => new OrdersPerClientItemDto
-            {
-                ClientName = c.User != null ? $"{c.User.FirstName} {c.User.LastName} ({c.CompanyName})" : c.CompanyName,
-                OrderCount = c.Orders.Count
-            })
+        var clientAgg = await _context.LogoOrders.AsNoTracking()
+            .GroupBy(o => o.ClientId)
+            .Select(g => new { ClientId = g.Key, OrderCount = g.Count() })
             .OrderByDescending(x => x.OrderCount)
             .Take(15)
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var clientIds = clientAgg.Select(x => x.ClientId).ToList();
+        var clientsInfo = await _context.ClientProfiles.AsNoTracking()
+            .Where(c => clientIds.Contains(c.Id))
+            .Select(c => new { c.Id, c.CompanyName, c.User!.FirstName, c.User.LastName })
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var clientLookup = clientsInfo.ToDictionary(
+            d => d.Id,
+            d => string.IsNullOrWhiteSpace($"{d.FirstName} {d.LastName}".Trim())
+                ? (d.CompanyName ?? "Unknown")
+                : $"{d.FirstName} {d.LastName} ({d.CompanyName})");
+        var ordersPerClient = clientAgg
+            .Select(x => new OrdersPerClientItemDto
+            {
+                ClientName = clientLookup.TryGetValue(x.ClientId, out var cn) ? cn : "Unknown",
+                OrderCount = x.OrderCount
+            })
             .ToList();
 
         var retentionTrend = new List<ClientRetentionTrendItemDto>();
@@ -513,10 +604,15 @@ public class AnalyticsService : IAnalyticsService
         {
             var monthStart = startOfSixMonths.AddMonths(i);
             var monthEnd = monthStart.AddMonths(1);
-            var newInMonth = firstOrderByClient.Count(x => x.FirstOrder >= monthStart && x.FirstOrder < monthEnd);
-            var ordersInMonth = await _context.LogoOrders
-                .Where(o => !o.IsDeleted && o.CreatedAt >= monthStart && o.CreatedAt < monthEnd)
-                .CountAsync();
+            var newInMonth = await _context.LogoOrders.AsNoTracking()
+                .GroupBy(o => o.ClientId)
+                .Where(g => g.Min(o => o.CreatedAt) >= monthStart && g.Min(o => o.CreatedAt) < monthEnd)
+                .CountAsync()
+                .ConfigureAwait(false);
+            var ordersInMonth = await _context.LogoOrders.AsNoTracking()
+                .Where(o => o.CreatedAt >= monthStart && o.CreatedAt < monthEnd)
+                .CountAsync()
+                .ConfigureAwait(false);
             var returningInMonth = Math.Max(0, ordersInMonth - newInMonth);
             retentionTrend.Add(new ClientRetentionTrendItemDto
             {
@@ -527,44 +623,41 @@ public class AnalyticsService : IAnalyticsService
             });
         }
 
-        var topClientsByOrders = clients
-            .Select(c => new TopClientByOrdersItemDto
-            {
-                ClientId = c.Id,
-                ClientName = c.User != null ? $"{c.User.FirstName} {c.User.LastName} ({c.CompanyName})" : c.CompanyName,
-                OrderCount = c.Orders.Count
-            })
-            .OrderByDescending(x => x.OrderCount)
-            .Take(10)
-            .ToList();
+        var topClientsByOrders = clientAgg.Take(10).Select(x => new TopClientByOrdersItemDto
+        {
+            ClientId = x.ClientId,
+            ClientName = clientLookup.TryGetValue(x.ClientId, out var cn) ? cn : "Unknown",
+            OrderCount = x.OrderCount
+        }).ToList();
 
-        var completedWithRevenue = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Include(o => o.Client)
-            .ThenInclude(c => c!.User)
-            .Select(o => new { o.ClientId, o.Price, o.Client })
-            .ToListAsync();
-        var clientLifetimeValue = completedWithRevenue
+        var ltvAgg = await _context.LogoOrders.AsNoTracking()
+            .Where(o => o.Status == OrderStatus.Completed)
             .GroupBy(o => o.ClientId)
-            .Select(g =>
-            {
-                var first = g.First();
-                var name = first.Client != null
-                    ? (first.Client.User != null ? $"{first.Client.User.FirstName} {first.Client.User.LastName} ({first.Client.CompanyName})" : first.Client.CompanyName)
-                    : "Unknown";
-                return new ClientLifetimeValueItemDto
-                {
-                    ClientId = g.Key,
-                    ClientName = name,
-                    Revenue = g.Sum(x => x.Price),
-                    OrderCount = g.Count()
-                };
-            })
+            .Select(g => new { ClientId = g.Key, Revenue = g.Sum(x => x.Price), OrderCount = g.Count() })
             .OrderByDescending(x => x.Revenue)
             .Take(10)
-            .ToList();
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var ltvIds = ltvAgg.Select(x => x.ClientId).ToList();
+        var ltvClientsInfo = await _context.ClientProfiles.AsNoTracking()
+            .Where(c => ltvIds.Contains(c.Id))
+            .Select(c => new { c.Id, c.CompanyName, c.User!.FirstName, c.User.LastName })
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var ltvLookup = ltvClientsInfo.ToDictionary(
+            d => d.Id,
+            d => string.IsNullOrWhiteSpace($"{d.FirstName} {d.LastName}".Trim())
+                ? (d.CompanyName ?? "Unknown")
+                : $"{d.FirstName} {d.LastName} ({d.CompanyName})");
+        var clientLifetimeValue = ltvAgg.Select(x => new ClientLifetimeValueItemDto
+        {
+            ClientId = x.ClientId,
+            ClientName = ltvLookup.TryGetValue(x.ClientId, out var nm) ? nm : "Unknown",
+            Revenue = x.Revenue,
+            OrderCount = x.OrderCount
+        }).ToList();
 
-        return new ClientAnalyticsDto
+        var dto = new ClientAnalyticsDto
         {
             NewClients = newClients,
             ReturningClients = returningClients,
@@ -573,13 +666,18 @@ public class AnalyticsService : IAnalyticsService
             TopClientsByOrders = topClientsByOrders,
             ClientLifetimeValue = clientLifetimeValue
         };
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
+        return dto;
     }
 
     public async Task<WorkflowAnalyticsDto> GetWorkflowAnalyticsAsync()
     {
-        var orders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted)
-            .ToListAsync();
+        var cacheKey = $"ldp:cache:analytics:workflow:e{_cacheVersions.AnalyticsEpoch}";
+        var cached = await DistributedJsonCache.GetSafeAsync<WorkflowAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
+
+        var q = _context.LogoOrders.AsNoTracking().Where(o => !o.IsDeleted);
 
         var ordersWithRevisions = await _context.OrderRevisions
             .Where(r => !r.IsDeleted)
@@ -589,22 +687,27 @@ public class AnalyticsService : IAnalyticsService
 
         var funnel = new OrderFunnelDto
         {
-            OrdersCreated = orders.Count,
-            AssignedToDesigner = orders.Count(o => o.DesignerId.HasValue),
-            DesignSubmitted = orders.Count(o => o.Status == OrderStatus.PreviewDelivered || o.Status == OrderStatus.RevisionRequested || o.Status == OrderStatus.Completed),
+            OrdersCreated = await q.CountAsync(),
+            AssignedToDesigner = await q.CountAsync(o => o.DesignerId.HasValue),
+            DesignSubmitted = await q.CountAsync(o =>
+                o.Status == OrderStatus.PreviewDelivered || o.Status == OrderStatus.RevisionRequested || o.Status == OrderStatus.Completed),
             RevisionRequested = ordersWithRevisions,
-            ClientApproval = orders.Count(o => o.Status == OrderStatus.PreviewDelivered || o.Status == OrderStatus.ClientApproved),
-            Completed = orders.Count(o => o.Status == OrderStatus.Completed)
+            ClientApproval = await q.CountAsync(o =>
+                o.Status == OrderStatus.PreviewDelivered || o.Status == OrderStatus.ClientApproved),
+            Completed = await q.CountAsync(o => o.Status == OrderStatus.Completed)
         };
 
-        var completedOrders = orders.Where(o => o.Status == OrderStatus.Completed).ToList();
-        var avgCompletion = completedOrders.Count > 0
-            ? completedOrders.Average(o =>
-            {
-                var end = o.UpdatedAt ?? o.CreatedAt;
-                return (end - o.CreatedAt).TotalDays;
-            })
-            : 0;
+        var completedForAvg = q.Where(o => o.Status == OrderStatus.Completed && (o.UpdatedAt ?? o.CreatedAt) >= o.CreatedAt);
+        double avgCompletion = 0;
+        if (await completedForAvg.AnyAsync())
+        {
+            var deliveryRows = await completedForAvg
+                .Select(o => new { o.CreatedAt, End = o.UpdatedAt ?? o.CreatedAt })
+                .Where(x => x.End >= x.CreatedAt)
+                .ToListAsync();
+            if (deliveryRows.Count > 0)
+                avgCompletion = deliveryRows.Average(x => (x.End - x.CreatedAt).TotalDays);
+        }
 
         var revisionCounts = await _context.OrderRevisions
             .Where(r => !r.IsDeleted)
@@ -618,27 +721,27 @@ public class AnalyticsService : IAnalyticsService
             .OrderBy(x => x.RevisionCount)
             .ToList();
 
-        var orderIds = orders.Select(o => o.Id).ToHashSet();
-        var relevantRevisions = revisionCounts.Where(x => orderIds.Contains(x.OrderId)).ToList();
-        var avgRevisions = orders.Count > 0 && relevantRevisions.Count > 0
+        var totalOrders = await q.CountAsync();
+        var relevantRevisions = revisionCounts;
+        var avgRevisions = totalOrders > 0 && relevantRevisions.Count > 0
             ? relevantRevisions.Average(x => (double)x.Count)
             : 0;
 
         var revCountDict = relevantRevisions.ToDictionary(x => x.OrderId, x => x.Count);
-        var ordersWithNoRevisions = orders.Count(o => !revCountDict.ContainsKey(o.Id) || revCountDict[o.Id] == 0);
-        var ordersWith1Revision = orders.Count(o => revCountDict.TryGetValue(o.Id, out var c) && c == 1);
-        var ordersWith2PlusRevisions = orders.Count(o => revCountDict.TryGetValue(o.Id, out var c) && c >= 2);
+        var ordersWith1Revision = revCountDict.Count(x => x.Value == 1);
+        var ordersWith2PlusRevisions = revCountDict.Count(x => x.Value >= 2);
+        var ordersWithNoRevisions = Math.Max(0, totalOrders - revCountDict.Count);
 
         var ordersStuckInStage = new List<OrdersStuckInStageItemDto>
         {
-            new() { Stage = "Awaiting Admin Review", Count = orders.Count(o => o.Status == OrderStatus.WaitingForAdminApproval || o.Status == OrderStatus.PriceApprovalPending) },
-            new() { Stage = "Unassigned", Count = orders.Count(o => !o.DesignerId.HasValue && o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled) },
-            new() { Stage = "In Progress", Count = orders.Count(o => o.Status == OrderStatus.InProgress) },
-            new() { Stage = "Revision Requested", Count = orders.Count(o => o.Status == OrderStatus.RevisionRequested) },
-            new() { Stage = "Awaiting Client Approval", Count = orders.Count(o => o.Status == OrderStatus.PreviewDelivered) }
+            new() { Stage = "Awaiting Admin Review", Count = await q.CountAsync(o => o.Status == OrderStatus.WaitingForAdminApproval || o.Status == OrderStatus.PriceApprovalPending) },
+            new() { Stage = "Unassigned", Count = await q.CountAsync(o => !o.DesignerId.HasValue && o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled) },
+            new() { Stage = "In Progress", Count = await q.CountAsync(o => o.Status == OrderStatus.InProgress) },
+            new() { Stage = "Revision Requested", Count = await q.CountAsync(o => o.Status == OrderStatus.RevisionRequested) },
+            new() { Stage = "Awaiting Client Approval", Count = await q.CountAsync(o => o.Status == OrderStatus.PreviewDelivered) }
         }.Where(x => x.Count > 0).ToList();
 
-        return new WorkflowAnalyticsDto
+        var dto = new WorkflowAnalyticsDto
         {
             OrderFunnel = funnel,
             AverageOrderCompletionTimeDays = Math.Round(avgCompletion, 1),
@@ -652,6 +755,8 @@ public class AnalyticsService : IAnalyticsService
             },
             OrdersStuckInStage = ordersStuckInStage
         };
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
+        return dto;
     }
 
     public async Task<SystemAnalyticsDto> GetSystemAnalyticsAsync()
@@ -743,31 +848,43 @@ public class AnalyticsService : IAnalyticsService
 
     public async Task<ForecastAnalyticsDto> GetForecastAnalyticsAsync()
     {
-        var orders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted)
-            .Select(o => new { o.CreatedAt })
-            .ToListAsync();
-        var completedOrders = await _context.LogoOrders
-            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Select(o => new { o.Price, o.CreatedAt, o.UpdatedAt })
-            .ToListAsync();
+        // Longer TTL than other admin charts: forecast is expensive to aggregate and tolerates slightly staler data.
+        var cacheKey = $"ldp:cache:analytics:forecast:e{_cacheVersions.AnalyticsEpoch}";
+        var cached = await DistributedJsonCache.GetSafeAsync<ForecastAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
 
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var orderTrend = orders
+        var orderTrendRaw = await _context.LogoOrders.AsNoTracking()
             .Where(o => o.CreatedAt >= startOfSixMonths)
             .GroupBy(o => new { o.CreatedAt.Year, o.CreatedAt.Month })
-            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
-            .Select(g => new { MonthKey = $"{g.Key.Year}-{g.Key.Month:D2}", Month = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM yyyy"), Count = g.Count() })
-            .ToList();
+            .Select(g => new { Y = g.Key.Year, M = g.Key.Month, Count = g.Count() })
+            .OrderBy(x => x.Y).ThenBy(x => x.M)
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var orderTrend = orderTrendRaw.Select(g => new
+        {
+            Count = g.Count,
+            MonthKey = $"{g.Y}-{g.M:D2}",
+            Month = new DateTime(g.Y, g.M, 1).ToString("MMM yyyy")
+        }).ToList();
 
-        var revenueTrend = completedOrders
+        var qCompleted = _context.LogoOrders.AsNoTracking().Where(o => o.Status == OrderStatus.Completed);
+        var revenueTrendRaw = await qCompleted
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfSixMonths)
-            .GroupBy(o => new { Year = (o.UpdatedAt ?? o.CreatedAt).Year, Month = (o.UpdatedAt ?? o.CreatedAt).Month })
-            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
-            .Select(g => new { MonthKey = $"{g.Key.Year}-{g.Key.Month:D2}", Month = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM yyyy"), Revenue = g.Sum(x => x.Price) })
-            .ToList();
+            .GroupBy(o => new { Y = (o.UpdatedAt ?? o.CreatedAt).Year, M = (o.UpdatedAt ?? o.CreatedAt).Month })
+            .Select(g => new { g.Key.Y, g.Key.M, Revenue = g.Sum(x => x.Price) })
+            .OrderBy(x => x.Y).ThenBy(x => x.M)
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var revenueTrend = revenueTrendRaw.Select(g => new
+        {
+            Revenue = g.Revenue,
+            MonthKey = $"{g.Y}-{g.M:D2}",
+            Month = new DateTime(g.Y, g.M, 1).ToString("MMM yyyy")
+        }).ToList();
 
         var orderValues = orderTrend.Select(x => (double)x.Count).ToList();
         var revenueValues = revenueTrend.Select(x => (double)x.Revenue).ToList();
@@ -832,71 +949,109 @@ public class AnalyticsService : IAnalyticsService
             });
         }
 
-        return new ForecastAnalyticsDto
+        var dto = new ForecastAnalyticsDto
         {
             OrderGrowthPrediction = orderPrediction,
             RevenueForecast = revenuePrediction
         };
+        await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(15), _logger).ConfigureAwait(false);
+        return dto;
     }
 
     public async Task<InsightsAnalyticsDto> GetInsightsAsync()
+    {
+        var cacheKey = $"ldp:cache:analytics:insights:e{_cacheVersions.AnalyticsEpoch}";
+        var cached = await DistributedJsonCache.GetAsync<InsightsAnalyticsDto>(_distributedCache, cacheKey).ConfigureAwait(false);
+        if (cached != null)
+            return cached;
+
+        var dto = await BuildInsightsUncachedAsync().ConfigureAwait(false);
+        await DistributedJsonCache.SetAsync(_distributedCache, cacheKey, dto, TimeSpan.FromSeconds(45)).ConfigureAwait(false);
+        return dto;
+    }
+
+    /// <summary>
+    /// Insights without loading full order/designer graphs; uses counts and grouped projections.
+    /// </summary>
+    private async Task<InsightsAnalyticsDto> BuildInsightsUncachedAsync()
     {
         var insights = new List<string>();
         var now = DateTime.UtcNow;
         var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var startOfLastMonth = startOfMonth.AddMonths(-1);
 
-        var orders = await _context.LogoOrders.Where(o => !o.IsDeleted).ToListAsync();
-        var ordersThisMonth = orders.Count(o => o.CreatedAt >= startOfMonth);
-        var ordersLastMonth = orders.Count(o => o.CreatedAt >= startOfLastMonth && o.CreatedAt < startOfMonth);
+        var q = _context.LogoOrders.AsNoTracking().Where(o => !o.IsDeleted);
+
+        var ordersThisMonth = await q.CountAsync(o => o.CreatedAt >= startOfMonth).ConfigureAwait(false);
+        var ordersLastMonth = await q.CountAsync(o => o.CreatedAt >= startOfLastMonth && o.CreatedAt < startOfMonth).ConfigureAwait(false);
         if (ordersLastMonth > 0)
         {
             var pctChange = (ordersThisMonth - ordersLastMonth) * 100.0 / ordersLastMonth;
             insights.Add($"Orders {(pctChange >= 0 ? "increased" : "decreased")} {Math.Abs(Math.Round(pctChange, 0))}% this month compared to last month.");
         }
 
-        var completedOrders = orders.Where(o => o.Status == OrderStatus.Completed).ToList();
-        var totalRevenue = completedOrders.Sum(o => o.Price);
-        var revenueThisMonth = completedOrders.Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfMonth).Sum(o => o.Price);
-        var revenueLastMonth = completedOrders.Where(o =>
-        {
-            var d = o.UpdatedAt ?? o.CreatedAt;
-            return d >= startOfLastMonth && d < startOfMonth;
-        }).Sum(o => o.Price);
+        var totalRevenue = await q.Where(o => o.Status == OrderStatus.Completed).SumAsync(o => o.Price).ConfigureAwait(false);
+        var revenueThisMonth = await q
+            .Where(o => o.Status == OrderStatus.Completed && (o.UpdatedAt ?? o.CreatedAt) >= startOfMonth)
+            .SumAsync(o => o.Price)
+            .ConfigureAwait(false);
+        var revenueLastMonth = await q
+            .Where(o => o.Status == OrderStatus.Completed
+                        && (o.UpdatedAt ?? o.CreatedAt) >= startOfLastMonth
+                        && (o.UpdatedAt ?? o.CreatedAt) < startOfMonth)
+            .SumAsync(o => o.Price)
+            .ConfigureAwait(false);
         if (revenueLastMonth > 0)
         {
             var pctChange = (double)((revenueThisMonth - revenueLastMonth) / revenueLastMonth * 100);
             insights.Add($"Revenue {(pctChange >= 0 ? "increased" : "decreased")} {Math.Abs(Math.Round(pctChange, 0))}% this month.");
         }
 
-        var designerProfiles = await _context.DesignerProfiles.Where(d => !d.IsDeleted).Include(d => d.User).ToListAsync();
-        var ordersByDesigner = orders.Where(o => o.DesignerId.HasValue).GroupBy(o => o.DesignerId!.Value).ToDictionary(g => g.Key, g => g.ToList());
-        var revisionCounts = await _context.OrderRevisions.Where(r => !r.IsDeleted).GroupBy(r => r.OrderId).Select(g => new { OrderId = g.Key, Count = g.Count() }).ToListAsync();
-        var revDict = revisionCounts.ToDictionary(x => x.OrderId, x => x.Count);
-
-        DesignerProfile? topDesigner = null;
-        decimal topApprovalRate = 0;
-        foreach (var d in designerProfiles)
-        {
-            if (!ordersByDesigner.TryGetValue(d.Id, out var assigned)) continue;
-            var completed = assigned.Count(o => o.Status == OrderStatus.Completed);
-            if (assigned.Count > 0)
+        var designerAgg = await q
+            .Where(o => o.DesignerId.HasValue)
+            .GroupBy(o => o.DesignerId!.Value)
+            .Select(g => new
             {
-                var rate = (decimal)completed / assigned.Count * 100;
-                if (rate > topApprovalRate && assigned.Count >= 3)
-                {
-                    topApprovalRate = rate;
-                    topDesigner = d;
-                }
+                DesignerId = g.Key,
+                Total = g.Count(),
+                Completed = g.Count(x => x.Status == OrderStatus.Completed)
+            })
+            .Where(x => x.Total >= 3)
+            .ToListAsync()
+            .ConfigureAwait(false);
+
+        var topEntry = designerAgg
+            .Select(x => new
+            {
+                x.DesignerId,
+                Rate = x.Total > 0 ? (decimal)x.Completed / x.Total * 100 : 0m,
+                x.Total
+            })
+            .OrderByDescending(x => x.Rate)
+            .FirstOrDefault();
+
+        if (topEntry != null)
+        {
+            var topName = await _context.DesignerProfiles
+                .AsNoTracking()
+                .Where(d => d.Id == topEntry.DesignerId && !d.IsDeleted)
+                .Select(d => new { d.User!.FirstName, d.User!.LastName })
+                .FirstOrDefaultAsync()
+                .ConfigureAwait(false);
+            if (topName != null)
+            {
+                insights.Add($"{topName.FirstName} {topName.LastName} has the highest approval rate ({Math.Round(topEntry.Rate, 0)}%) among designers with 3+ orders.");
             }
         }
-        if (topDesigner != null && topDesigner.User != null)
-        {
-            insights.Add($"{topDesigner.User.FirstName} {topDesigner.User.LastName} has the highest approval rate ({Math.Round(topApprovalRate, 0)}%) among designers with 3+ orders.");
-        }
 
-        var ordersWithRevisions = revDict.Count;
-        var revisionPct = orders.Count > 0 ? (decimal)ordersWithRevisions / orders.Count * 100 : 0;
+        var ordersWithRevisions = await _context.OrderRevisions
+            .Where(r => !r.IsDeleted)
+            .Select(r => r.OrderId)
+            .Distinct()
+            .CountAsync()
+            .ConfigureAwait(false);
+        var totalOrders = await q.CountAsync().ConfigureAwait(false);
+        var revisionPct = totalOrders > 0 ? (decimal)ordersWithRevisions / totalOrders * 100 : 0;
         insights.Add($"{Math.Round(revisionPct, 0)}% of orders require revisions.");
 
         if (revenueThisMonth > 0 && totalRevenue > 0)

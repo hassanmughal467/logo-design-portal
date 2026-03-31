@@ -1,0 +1,236 @@
+Test Case ID,Module,Title,Preconditions,Test Steps,Expected Result,Priority,Type
+TC-001,Authentication,Successful login with valid Super Admin credentials,Super Admin account exists; API reachable,1) Navigate to /auth/login 2) Enter valid email and password 3) Click Login,User lands on /dashboard; header shows user menu; no console auth errors,High,Functional
+TC-002,Authentication,Successful login with valid Admin credentials,Admin account exists,1) Open login 2) Enter Admin email/password 3) Submit,Redirect to dashboard; menu includes Orders and Users; Permissions absent if not Super Admin,High,Functional
+TC-003,Authentication,Successful login as Client,Client account exists,1) Login as Client,Dashboard shows client-specific actions; My Orders available,High,Functional
+TC-004,Authentication,Successful login as Designer,Designer account exists,1) Login as Designer,Orders and Designer Payout visible; Users and Clients absent,High,Functional
+TC-005,Authentication,Reject login with incorrect password,Known user email,1) Enter valid email and wrong password 2) Submit,Inline error shown; remains on login; no token stored,High,Negative
+TC-006,Authentication,Reject login with unknown email,N/A,1) Enter non-registered email and any password 2) Submit,Generic failure message; no account enumeration via different error text (policy check),Medium,Security
+TC-007,Authentication,Email field required validation,On login form,1) Leave email empty 2) Touch field or submit,Required validation message for email,Medium,Negative
+TC-008,Authentication,Password field required validation,On login form,1) Enter email only 2) Submit,Password required message,Medium,Negative
+TC-009,Authentication,Invalid email format rejected,On login form,1) Enter not-an-email in email field 2) Submit or blur,Invalid email format message,Medium,Negative
+TC-010,Authentication,Password minimum length enforcement,Form shows min length rule,1) Enter password shorter than minimum 2) Submit,Validation error before API call,Medium,Negative
+TC-011,Authentication,Unauthenticated access to dashboard redirects,Browser cleared storage,1) While logged out navigate to /dashboard,Redirect to login or /auth/login,High,Security
+TC-012,Authentication,Unauthenticated access to /orders redirects,Logged out,1) Go to /orders,Auth guard blocks; login presented,High,Security
+TC-013,Authentication,Logout clears session,Logged in,1) Open user menu 2) Logout 3) Attempt /dashboard,Requires login again,High,Functional
+TC-014,Authentication,Back button after logout does not show cached protected page,Logged in then logged out,1) Logout 2) Browser back,No sensitive data without re-auth (verify network or blank state),Medium,Security
+TC-015,Authentication,Register page loads and validates required fields,Registration enabled,1) Open /auth/register 2) Submit empty form,Field errors; no user created,Medium,Functional
+TC-016,Authentication,Forgot password accepts email and shows confirmation,Mail or mock configured,1) Open forgot password 2) Submit valid-format email,Success or neutral confirmation per policy,Medium,Functional
+TC-017,Authentication,Reset password page handles invalid token,If applicable,1) Open /auth/reset-password with bad token,Clear error; no password change,Medium,Negative
+TC-018,Authentication,Concurrent login from two browsers same user,Same valid user,1) Login in Browser A 2) Login in Browser B,Both sessions behave per policy (parallel allowed or invalidate prior),Low,Edge
+TC-019,Navigation,Sidebar matches Super Admin menu,Super Admin login,1) Compare sidebar to spec: Operations Analytics Financial Administration,All expected entries present including Permissions,High,Functional
+TC-020,Navigation,Sidebar matches Client menu,Client login,1) Verify no Users Clients Designers Reviews Client Intelligence,Forbidden links absent,High,Security
+TC-021,Navigation,Sidebar matches Designer menu,Designer login,1) Verify Financial has Designer Payout only not full Financial Overview,Menu matches role matrix,High,Functional
+TC-022,Navigation,Global search as Admin navigates to orders with query,Admin; data exists,1) Type keyword in global search 2) Submit,URL includes search param on /orders; results filtered,Medium,Functional
+TC-023,Navigation,Global search as Client scopes to own orders,Client with orders,1) Search own order title,Only own orders considered,Medium,Functional
+TC-024,Navigation,Notification panel opens and lists items,User with notifications,1) Click bell 2) Review list,Items load; mark read updates count,Medium,Functional
+TC-025,Navigation,Breadcrumb home navigates to dashboard,Any authenticated page with breadcrumb,1) Click home in breadcrumb if visible,Lands on /dashboard,Low,UI
+TC-026,Navigation,Deep link /notifications loads Notifications page,Logged in,1) Navigate /notifications,Page title Notifications; back works,Medium,Functional
+TC-027,Navigation,Unknown path handling per routing policy,Logged in,1) Navigate /this-route-does-not-exist,Graceful redirect to dashboard or error page,Low,UI
+TC-028,Navigation,Sidebar collapse/expand on narrow viewport,Responsive viewport,1) Resize below breakpoint 2) Toggle menu,Content accessible; no hidden primary actions,Medium,UI
+TC-029,Navigation,Double-click navigation item does not duplicate route errors,Logged in,1) Double-click same sidebar link rapidly,Single stable navigation; no duplicate API storm,Low,Edge
+TC-030,Navigation,Keyboard focus visible on main menu items,Logged in,1) Tab through sidebar,Focus ring visible; Enter activates link,Low,UI
+TC-031,Dashboard,Dashboard loads without errors for Admin,Admin login,1) Open /dashboard 2) Open devtools console,No unhandled errors; widgets render,High,Functional
+TC-032,Dashboard,Client Create New Order opens modal,Client,1) Click Create New Order,Create New Order dialog visible,High,Functional
+TC-033,Dashboard,Client Get a Quote opens flow,Client,1) Click Get a Quote,Quote dialog or navigation starts,High,Functional
+TC-034,Dashboard,Admin quick nav to Users,Admin,1) Click Users quick button,Users Management page loads,Medium,Functional
+TC-035,Dashboard,Super Admin quick nav to Permissions,Super Admin,1) Click Permissions,Permissions Management loads,Medium,Functional
+TC-036,Dashboard,Client dashboard gallery section empty state,Client with no gallery files,1) Scroll to gallery,Empty state message not spinner forever,Medium,UI
+TC-037,Dashboard,Client gallery search filters items,Client with 3+ gallery items,1) Type substring of one filename,Only matching items shown,Medium,Functional
+TC-038,Dashboard,Dashboard loading spinner dismissed after API,Slow network throttled,1) Hard refresh dashboard,Spinner hides; content or error toast,Medium,UI
+TC-039,Dashboard,Designer dashboard has no client-only CTAs,Designer,1) Verify no Create New Order for client,Absent,High,Security
+TC-040,Dashboard,Invoice summary on dashboard matches list count sample,Role with invoices,1) Note dashboard count 2) Open Invoices compare,Counts consistent for sample,Medium,Functional
+TC-041,Dashboard,Welcome text includes user first name,User with profile,1) Read header subtitle,Name appears correctly,Low,UI
+TC-042,Dashboard,Rapid switch Dashboard to Orders and back,Logged in,1) Navigate away and back,No layout duplication or memory leak symptoms,Low,Performance
+TC-043,Dashboard,Dashboard with API failure shows user-safe message,Mock 500 on dashboard API if possible,1) Load dashboard,Toast or banner; no raw stack,Medium,Negative
+TC-044,Dashboard,Client dashboard order history paginates,Many orders,1) Scroll/use pagination if present,Performance acceptable,Low,Performance
+TC-045,Orders,Client opens My Orders page,Client login,1) Sidebar My Orders,Title My Orders; subtitle track and manage,High,Functional
+TC-046,Orders,Admin opens Orders Management,Admin,1) Orders,Title Orders Management,High,Functional
+TC-047,Orders,Designer sees assigned orders only,Designer with and without assignments,1) Open Orders 2) Compare to admin list,No unassigned peer orders visible,High,Security
+TC-048,Orders,Client creates order with valid title and description,Client,1) Create Order 2) Fill fields 3) Submit,Modal closes; row in grid; status pending or per workflow,High,Functional
+TC-049,Orders,Client create order rejects empty title,Client,1) Open create 2) Leave title empty 3) Submit,Validation error,High,Negative
+TC-050,Orders,Client create order rejects empty description,Client,1) Fill title only 2) Submit,Validation error,High,Negative
+TC-051,Orders,Client create order description below minimum length,If min length enforced,1) Enter short description 2) Submit,Error referencing length,Medium,Negative
+TC-052,Orders,Admin opens order detail from grid,Admin; pending order exists,1) Click row,Detail modal opens with Approve when applicable,High,Functional
+TC-053,Orders,Admin approves order,Pending order,1) Open detail 2) Approve Order,Status updates; success feedback,High,Functional
+TC-054,Orders,Admin assigns designer to approved order,Approved unassigned order,1) Assign designer in UI,Designer sees order,High,Functional
+TC-055,Orders,Designer marks preview delivered,Assigned order in correct state,1) Open order 2) Trigger deliver preview action,Status PreviewDelivered or equivalent,High,Functional
+TC-056,Orders,Client requests revision with comment,Order in client review state,1) Request revision 2) Enter comment 3) Submit,Revision recorded; designer notified if applicable,High,Functional
+TC-057,Orders,Second revision round after another preview,Order with revision history,1) Request second revision after another preview,Round increments correctly,Medium,Edge
+TC-058,Orders,Client approves logo when preview acceptable,Correct state,1) Approve logo/final,State advances per workflow,High,Functional
+TC-059,Orders,Admin marks order completed,Order ready for completion,1) Set completed,Status Completed; financial eligibility if tied,High,Functional
+TC-060,Orders,KPI summary cards filter grid when clicked,Admin; mixed statuses,1) Click a KPI card,Table filters to matching subset,Medium,Functional
+TC-061,Orders,Quick filter chips toggle active state,Orders page,1) Click chip 2) Click again,Active styling and data match,Medium,UI
+TC-062,Orders,Orders table pagination changes page,>10 orders,1) Change page 2) Change rows per page,Correct slice shown,Medium,Functional
+TC-063,Orders,Sort by created date descending default,Multiple orders,1) Verify newest first,Order correct,Low,Functional
+TC-064,Orders,Client cannot approve own order as admin action,Client,1) Open own order detail,No Approve Order control,High,Security
+TC-065,Orders,Designer cannot approve order,Designer,1) Open assigned order,Approve absent,High,Security
+TC-066,Orders,Admin Add Completed Order dialog opens,Admin with permission,1) Click Add Completed Order,Dialog opens,Medium,Functional
+TC-067,Orders,Client Get a Quote from orders header,Client,1) Click Get a Quote on orders page,Quote flow opens,Medium,Functional
+TC-068,Orders,Search query from URL pre-filters table,Admin,1) Navigate /orders?search=test,Rows filtered to match,Medium,Functional
+TC-069,Orders,Order detail closes on cancel without persisting draft,Admin,1) Open detail 2) Cancel,Grid unchanged,Low,Functional
+TC-070,Orders,Concurrent two admins open same order,Two admin sessions,1) Both approve or status change,Conflict handling explicit or last wins documented,Medium,Edge
+TC-071,Orders,Very long order title display in table,Create order with 200 char title,1) View grid,Ellipsis or wrap without layout break,Low,UI
+TC-072,Orders,Unicode and special characters in description,Client,1) Paste unicode text 2) Save,Stored and displayed correctly,Medium,Edge
+TC-073,Orders,XSS attempt in order title sanitized,Security test env,1) Enter script tag in title 2) Save 3) View list,Rendered as text not executable,High,Security
+TC-074,Orders,Order list load time under SLA with 200 rows,Seed data,1) Measure load to interactive,Meets agreed threshold e.g. under 3s,Medium,Performance
+TC-075,Orders,Rapid double submit on create order,Client,1) Double-click submit,Single order created,Medium,Edge
+TC-076,Orders,Network timeout on order list shows retry or error,Throttle to timeout,1) Load orders,User-safe message,Medium,Negative
+TC-077,Orders,Client cannot see another client order by direct ID,Client A; Order belongs to B,1) Craft URL or API if exposed,403 or not found,High,Security
+TC-078,Orders,Designer cannot unassign self if forbidden,Designer,1) Attempt unassign if UI exists,Action absent or denied,Medium,Security
+TC-079,Orders,Admin filters combined KPI and chip,Admin,1) Apply KPI then chip,AND logic matches spec,Low,Functional
+TC-080,Orders,Export or print if present does not leak PII,If feature exists,1) Export,Only authorized columns,Medium,Security
+TC-081,Orders,Order price field validation on create if shown,Client or admin form,1) Enter negative price,Rejected,Medium,Negative
+TC-082,Orders,Order price accepts decimal per locale,Form with price,1) Enter valid decimal,Accepted,Low,Functional
+TC-083,Orders,Mobile orders table horizontal scroll,Narrow viewport,1) Open orders,All columns reachable,Medium,UI
+TC-084,Orders,Heading hierarchy accessible,Accessibility check,1) Run axe or manual,Logical H1 and regions,Low,UI
+TC-085,Orders,Revise after order completed blocked,Completed order,1) Open completed 2) Attempt revision,Disabled or error,Medium,Negative
+TC-086,Orders,Assign designer before approve blocked if business rule,Pending unapproved,1) Try assign,Validation message,Medium,Functional
+TC-087,Orders,Reassign designer mid-flight updates workload,Admin,1) Reassign,Old designer loses; new gains,Medium,Functional
+TC-088,Orders,Order activity or timeline shows key events,Order with history,1) Open detail audit tab if any,Events ordered,Low,Functional
+TC-089,Orders,Bulk status change if feature exists,Admin multi-select,1) Select 5 rows 2) Bulk action,All update or partial failure reported,Medium,Functional
+TC-090,Orders,Client order list default sort by recent,Client many orders,1) Open My Orders,Newest on top,Low,Functional
+TC-091,Orders,Empty orders state CTA for client,New client,1) Open My Orders,Helpful empty state with create,Low,UI
+TC-092,Orders,Admin global filter search in table,Admin,1) Use table search,Matches across columns per spec,Medium,Functional
+TC-093,Orders,Designer order view masks client PII per policy,Designer,1) Open order,Sensitive fields masked or hidden,High,Security
+TC-094,Orders,Copy order reference from detail if shown,User,1) Copy ID,Clipboard value correct,Low,UI
+TC-095,Orders,Refresh mid-modal does not orphan ghost modal,Admin,1) Open detail 2) F5,Clean state after reload,Low,Edge
+TC-096,Orders,Logout while order modal open,Admin,1) Open modal 2) Logout from menu,Session cleared; modal gone,Low,Edge
+TC-097,Quotes,Quotes page loads for Client,Client,1) Open Quotes,Header Quotes with subtitle,High,Functional
+TC-098,Quotes,Quotes page loads for Admin,Admin,1) Open Quotes,List loads,High,Functional
+TC-099,Quotes,Designer cannot access /quotes,Designer,1) Navigate /quotes,Blocked or redirect,High,Security
+TC-100,Quotes,Open quote detail shows logo name in title,Quote exists,1) Click quote,Title Quote: name,Medium,Functional
+TC-101,Quotes,Create quote request validation,Client,1) Open create 2) Submit empty,Errors shown,Medium,Negative
+TC-102,Quotes,Admin responds to quote,Workflow dependent,1) Enter response 2) Save,Client sees update,High,Functional
+TC-103,Quotes,Quote list pagination,Many quotes,1) Page through,Stable,Low,Functional
+TC-104,Quotes,Search quotes caption,Admin,1) Type in search,Filters,Medium,Functional
+TC-105,Quotes,Quote detail back navigation,Client,1) Open detail 2) Back,Returns to list,Low,UI
+TC-106,Quotes,Quote concurrent edit,Two admins,1) Edit same quote,Conflict or merge policy,Low,Edge
+TC-107,Users,Users Management visible Admin,Admin,1) Open /users,Heading Users Management,High,Functional
+TC-108,Users,Users Management forbidden Client,Client,1) Go /users,Redirect or forbidden,High,Security
+TC-109,Users,Create User opens dialog,Admin,1) Create User,Dialog visible,High,Functional
+TC-110,Users,Create Designer with all required fields,Admin,1) Fill email names password role Designer 2) Submit,Row appears,High,Functional
+TC-111,Users,Create Client with extended fields,Admin,1) Role Client 2) Fill invoice email company phone 3) Submit,User created,High,Functional
+TC-112,Users,Duplicate email rejected,Admin,1) Create user with existing email,Error,Medium,Negative
+TC-113,Users,Weak password rejected if policy,Admin,1) Short simple password,Validation,Medium,Negative
+TC-114,Users,Users table pagination server-side,Many users,1) Next page,New rows; no dupes,Medium,Functional
+TC-115,Users,Edit user if available,Admin,1) Open edit 2) Change name 3) Save,Persisted,Medium,Functional
+TC-116,Users,Deactivate user if available,Admin,1) Deactivate,Cannot login,Medium,Functional
+TC-117,Permissions,Super Admin opens Permissions,Super Admin,1) /permissions,Permissions Management,High,Functional
+TC-118,Permissions,Admin blocked from Permissions,Admin without super,1) /permissions,Access denied,High,Security
+TC-119,Permissions,Permission Matrix toggle,Super Admin,1) Click Permission Matrix 2) Hide Matrix,Matrix shows then hides,Medium,Functional
+TC-120,Permissions,Search permissions table,Super Admin,1) Search by resource,Filters,Low,Functional
+TC-121,Permissions,Direct URL /permissions as Client,Client,1) Navigate,Blocked,High,Security
+TC-122,Permissions,Change permission persists,Super Admin,1) Toggle if editable 2) Save,API 200; reload reflects,High,Functional
+TC-123,Clients,Clients Management loads,Admin,1) Open Clients,Title and table,High,Functional
+TC-124,Clients,Search clients filters,Admin,1) Search partial company,Rows match,Medium,Functional
+TC-125,Clients,Client detail from row,Admin,1) Click row,Detail page,Medium,Functional
+TC-126,Clients,Client route as Designer blocked,Designer,1) /clients,Denied,High,Security
+TC-127,Clients,Pagination clients,Admin,1) Change page,Works,Low,Functional
+TC-128,Projects,Logo Projects list Admin,Admin,1) Open Projects,Loads all,High,Functional
+TC-129,Projects,Logo Projects Client scope,Client,1) Open My Projects,Only own,High,Security
+TC-130,Projects,Project detail opens,User with access,1) Click project,Detail without error,Medium,Functional
+TC-131,Projects,Project search by title,User,1) Search,Filters,Low,Functional
+TC-132,Designers,Designers list Admin,Admin,1) Open Designers,Designers heading,High,Functional
+TC-133,Designers,Designer detail,Admin,1) Open designer,Profile fields,Medium,Functional
+TC-134,Designers,Designer list as Client blocked,Client,1) /designers,Denied,High,Security
+TC-135,Projects,Designer sees My Projects,Designer,1) Open,Assigned or relevant only per spec,Medium,Functional
+TC-136,Clients,Export clients if exists,Admin,1) Export,File valid,Low,Functional
+TC-137,Projects,Create project if UI exists,Admin,1) Create flow,Record created,Medium,Functional
+TC-138,Designers,Designer availability flag if field exists,Admin,1) Toggle 2) Save,Persisted,Low,Functional
+TC-139,Clients,Inactive client badge if exists,Admin,1) View inactive,Visual indicator,Low,UI
+TC-140,Projects,Link from order to project if integrated,Admin,1) From order open project,Navigation works,Low,Functional
+TC-141,Messages,Messages page loads,Any role with access,1) Open Messages,Table and search,High,Functional
+TC-142,Messages,Unread badge count,User with unread,1) Compare badge to list,Matches,Medium,Functional
+TC-143,Messages,Open thread,User,1) Click message,Content visible,High,Functional
+TC-144,Messages,Send empty message blocked,User,1) Send without text,Validation,Medium,Negative
+TC-145,Messages,Send message over max length,User,1) Paste long text,Truncation or error,Medium,Edge
+TC-146,Messages,Mark as read updates count,User,1) Open thread,Unread decreases,Medium,Functional
+TC-147,Messages,Client cannot read other client thread,Client A,1) Attempt direct message id of B,403,High,Security
+TC-148,Messages,XSS in message content sanitized,Test env,1) Send script 2) View,Escaped,High,Security
+TC-149,Messages,Real-time refresh or poll,Two users,1) B sends while A on list,A sees new per spec,Low,Functional
+TC-150,Messages,Attachment in message if supported,User,1) Attach valid file,Delivered,Medium,Functional
+TC-151,Reviews,Reviews loads Admin,Admin,1) Open Reviews,Reviews and Feedback,High,Functional
+TC-152,Reviews,Reviews blocked Designer,Designer,1) /reviews,Denied,High,Security
+TC-153,Reviews,Search reviews,Admin,1) Search comment,Filters,Medium,Functional
+TC-154,Reviews,Pagination reviews,Admin,1) Next page,Works,Low,Functional
+TC-155,Files,Files Management loads,User with access,1) Open Files,Header and subtitle by role,High,Functional
+TC-156,Files,Toggle Grid vs Table view,User,1) Click toggle,Layout changes,Medium,UI
+TC-157,Files,Upload valid file type,User with upload,1) Select allowed file 2) Upload,Success; appears in list,High,Functional
+TC-158,Files,Upload disallowed extension,User,1) Select blocked type e.g. .exe if policy,Rejected with reason,High,Negative
+TC-159,Files,Upload file near max size limit,User,1) Upload boundary size,Success or clear limit error,Medium,Edge
+TC-160,Files,Upload extremely large file,User,1) Upload over max,Rejected; UI responsive,Medium,Performance
+TC-161,Files,Super Admin global file search,Super Admin,1) Enter client keyword,Results scoped per policy,High,Functional
+TC-162,Files,Download file authorized,User,1) Download,File opens; HTTP success,High,Functional
+TC-163,Files,Direct download URL without token fails,Anonymous,1) Paste file URL from network tab,401/403,High,Security
+TC-164,Files,Delete file if permitted,Admin,1) Delete,Removed from list,Medium,Functional
+TC-165,Gallery,Client /gallery loads,Client,1) Navigate /gallery,My Gallery heading,High,Functional
+TC-166,Gallery,Admin /gallery denied,Admin,1) /gallery,Redirect or error,High,Security
+TC-167,Gallery,Preview gallery item,Client,1) Click preview,Modal or viewer,Medium,Functional
+TC-168,Gallery,Download from gallery,Client,1) Download,File received,Medium,Functional
+TC-169,Gallery,Empty gallery state,Client no files,1) Open gallery,No files message,Low,UI
+TC-170,Files,Multiple simultaneous uploads,User,1) Queue 5 files,All complete or clear progress,Medium,Performance
+TC-171,Analytics,Detail Analytics Admin,Admin,1) Open /analytics,Sections load,High,Functional
+TC-172,Analytics,Detail Analytics Client scoped,Client,1) Open,Usage overview; no other clients data,High,Security
+TC-173,Analytics,Designer blocked Detail Analytics,Designer,1) /analytics,Denied,High,Security
+TC-174,Analytics,Charts render with zero data,User,1) New tenant,Empty state not broken charts,Medium,UI
+TC-175,Analytics,Date range filter if present,Admin,1) Change range,Data refreshes,Medium,Functional
+TC-176,Client Intelligence,Overview tab loads,Admin,1) Client Intelligence Overview,Dashboard widgets,High,Functional
+TC-177,Client Intelligence,Churn tab loads,Admin,1) Churn Prediction tab,Content loads,High,Functional
+TC-178,Client Intelligence,Client blocked,Client,1) /client-intelligence,Denied,High,Security
+TC-179,Client Intelligence,Tab switch clears previous errors,Admin,1) Induce error on one tab 2) Switch tab,Clean state,Low,UI
+TC-180,Analytics,Export chart if exists,Admin,1) Export,File valid,Low,Functional
+TC-181,Analytics,API slow analytics shows loader,Throttle,1) Load analytics,Spinner then content,Medium,UI
+TC-182,Client Intelligence,Drill-down to client if link exists,Admin,1) Click client from risk table,Navigates,Low,Functional
+TC-183,Invoices,Invoices Management loads,Admin,1) Open Invoices,Header,High,Functional
+TC-184,Invoices,Client sees own invoices,Client,1) Open Invoices,Only own,High,Security
+TC-185,Invoices,Designer blocked invoices,Designer,1) /invoices,Denied,High,Security
+TC-186,Invoices,Open invoice detail,User,1) Click row,Line items readable,Medium,Functional
+TC-187,Invoices,Flexible Invoice Builder opens,Admin,1) Navigate builder,Page loads,Medium,Functional
+TC-188,Invoices,Builder date range validation,Admin,1) End before start,Error,Medium,Negative
+TC-189,Invoices,Create invoice from completed orders,Admin,1) Select orders 2) Generate,Invoice created,High,Functional
+TC-190,Financial,Financial Overview loads,Admin Client,1) Open,Aggregates visible,High,Functional
+TC-191,Financial,Designer Financial Overview blocked,Designer,1) Navigate /financial root,Denied or redirect to allowed child only,High,Security
+TC-192,Designer Payout,Admin payout KPI cards,Admin,1) Open Designer Payout,Summary numbers,Medium,Functional
+TC-193,Designer Payout,Designer sees own payouts,Designer,1) Open payout,No other designer data,High,Security
+TC-194,Designer Payout,Generate monthly payout if action exists,Admin,1) Generate,Invoices or records created,High,Functional
+TC-195,Designer Payout,Invoice detail from payout,Admin,1) Open invoice link,Detail page,Medium,Functional
+TC-196,Client Pricing,Select client dropdown,Admin,1) Choose client,Grid loads,High,Functional
+TC-197,Client Pricing,Save pricing invalid negative,Admin,1) Enter negative price,Error,Medium,Negative
+TC-198,Client Pricing,Save valid pricing,Admin,1) Enter valid 2) Save,Success,High,Functional
+TC-199,Designer Pricing,Select designer,Admin,1) Choose designer,Rules load,High,Functional
+TC-200,Designer Pricing,PKR field non-numeric,Admin,1) Enter abc,Validation,Medium,Negative
+TC-201,Invoices,Duplicate invoice for same order blocked if rule,Admin,1) Try duplicate,Error,Medium,Negative
+TC-202,Financial,Currency display consistent,User,1) Check amounts,Format matches locale spec,Low,UI
+TC-203,Designer Payout,Bulk eligible orders count performance,Large dataset,1) Load payout,Loads under SLA,Medium,Performance
+TC-204,Client Pricing,Concurrent save two admins,Two browsers,1) Both save,Last wins or conflict,Low,Edge
+TC-205,Notifications,Notifications list loads,User,1) /notifications,Items,High,Functional
+TC-206,Notifications,Mark all read,User with unread,1) Mark All Read,Count zero,High,Functional
+TC-207,Notifications,Click notification navigates entity,If implemented,1) Click item,Correct page,Medium,Functional
+TC-208,Notifications,Back button from notifications,User,1) Back,Previous page,Low,UI
+TC-209,Settings,Settings tabs visible,User,1) Open Settings,Business Info tab,High,Functional
+TC-210,Settings,Save business name required,User,1) Clear name 2) Save,Validation,Medium,Negative
+TC-211,Settings,Save valid business info,User,1) Fill required 2) Save,Toast success; reload persists,High,Functional
+TC-212,Settings,Invalid business email format,User,1) bad email 2) Save,Error,Medium,Negative
+TC-213,Settings,Other settings tabs load without error,User,1) Click each tab,No console errors,Medium,Functional
+TC-214,Settings,Unauthorized settings API,Tamper token,1) Save,401 handling,Medium,Security
+TC-215,Security,JWT expired mid-session,Short lived token,1) Wait expiry 2) Action,Redirect login,High,Security
+TC-216,Security,Role change on server invalidates old permissions,Admin demotes user,1) Continue as old session,Actions fail gracefully,Medium,Security
+TC-217,Performance,Lighthouse performance score baseline,Staging,1) Run Lighthouse on dashboard,Score meets minimum,Low,Performance
+TC-218,Performance,API burst 20 rapid navigations,Logged in,1) Click 20 nav links fast,No crash; debounce works,Medium,Performance
+TC-219,UI,Theme contrast WCAG spot check,N/A,1) Check primary buttons and links,Readable,Low,UI
+TC-220,UI,Toast stacking multiple errors,Induce errors,1) Trigger 3 errors,All visible or queued sanely,Low,UI
+TC-221,Orders,Admin rejects or cancels order if workflow supports,Cancellable order,1) Open detail 2) Cancel/Reject,Status and audit trail updated,Medium,Functional
+TC-222,Quotes,Quote expiry or stale state display,Expired quote seed,1) Open quote,Clear stale indicator,Low,UI
+TC-223,Users,Super Admin creates Admin user,Super Admin,1) Create user role Admin,Login works with new Admin,High,Functional
+TC-224,Files,Virus scan or async processing state,If integrated,1) Upload 2) Observe status,Processing then ready or failed message,Medium,Functional
+TC-225,Invoices,Invoice PDF download if exists,User,1) Download PDF,Valid PDF,Medium,Functional
+TC-226,Messages,Rate limit or spam throttle,If implemented,1) Send 50 messages rapidly,Throttle message,Low,Security
+TC-227,Dashboard,Notification preview on dashboard,User with notifications,1) Open dashboard panel,Recent notifications listed,Low,Functional
+TC-228,Authentication,Remember me not storing password in localStorage,Security review,1) Inspect storage after login,No plaintext password,High,Security
+TC-229,Analytics,Cross-tenant metric leak attempt,Two tenants if multi-tenant,1) Manipulate API params,Only own tenant data,High,Security
+TC-230,Designer Payout,Payout invoice number uniqueness,Admin,1) Generate two payouts same period,Unique numbers or business rule error,Medium,Edge
+TC-231,Settings,Timezone or locale setting affects date display,If setting exists,1) Change timezone 2) View orders,Dates shift consistently,Low,Functional
+TC-232,Projects,Project status transition,Admin,1) Change status on project,Persisted and visible to client if shared,Medium,Functional
+TC-233,Reviews,Submit review as Client if UI exists,Client completed order,1) Submit review,Appears in Admin reviews,Medium,Functional
+TC-234,Navigation,Deep link /settings with hash fragment,Logged in,1) Open /settings#tab,Correct tab opens,Low,Edge
+TC-235,Orders,Order internal notes admin-only,Admin and Client,1) Client views order 2) Admin views,Notes hidden from client,High,Security

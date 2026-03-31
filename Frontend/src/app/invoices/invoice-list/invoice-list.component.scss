@@ -1,6 +1,11 @@
 .invoices-page {
   padding: 0;
 
+  &--refreshing {
+    opacity: 0.9;
+    transition: opacity 0.2s ease;
+  }
+
   .page-header {
     display: flex;
     justify-content: space-between;

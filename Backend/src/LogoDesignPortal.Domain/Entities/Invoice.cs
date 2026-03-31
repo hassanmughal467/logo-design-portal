@@ -19,6 +19,9 @@ public class Invoice : BaseEntity
     /// <summary>Billing period for display (e.g. "March 2026", "Week of 2026-03-09").</summary>
     public string? BillingPeriod { get; set; }
 
+    /// <summary>EF Core optimistic concurrency token (MySQL <c>timestamp(6)</c>, database-generated).</summary>
+    public DateTime RowVersion { get; set; }
+
     // Navigation properties
     public ClientProfile Client { get; set; } = null!;
     public ICollection<InvoiceOrder> InvoiceOrders { get; set; } = new List<InvoiceOrder>(); // Support multiple orders per invoice

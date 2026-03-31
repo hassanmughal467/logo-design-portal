@@ -1,21 +1,40 @@
+using Hangfire;
+using Hangfire.Dashboard;
+using HealthChecks.Redis;
+using LogoDesignPortal.API.Health;
 using LogoDesignPortal.Application;
+using LogoDesignPortal.Application.BackgroundJobs;
 using LogoDesignPortal.Application.Configuration;
-using LogoDesignPortal.Application.Interfaces.Persistence;
+using LogoDesignPortal.API.BackgroundJobs;
+using LogoDesignPortal.API.Configuration;
+using LogoDesignPortal.API.Hosting;
 using LogoDesignPortal.API.Middleware;
-using LogoDesignPortal.Domain.Constants;
-using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Infrastructure;
 using LogoDesignPortal.Infrastructure.Persistence;
+using StackExchange.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using System.Security.Claims;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, services, loggerConfiguration) =>
+{
+    loggerConfiguration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .Enrich.WithMachineName()
+        .Enrich.WithEnvironmentName();
+});
 
 // Validate connection string in Production - fail fast with clear message (common IIS 500.30 cause)
 if (!builder.Environment.IsDevelopment())
@@ -121,27 +140,69 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// SignalR for real-time notifications and entity updates
-builder.Services.AddSignalR();
+var redisConnectionForSignalR =
+    builder.Configuration.GetConnectionString("Redis")
+    ?? builder.Configuration["Redis:Configuration"];
+
+using (var scalabilityLoggerFactory = LoggerFactory.Create(b => b.AddConfiguration(builder.Configuration.GetSection("Logging")).AddConsole()))
+{
+    var scalabilityLogger = scalabilityLoggerFactory.CreateLogger("Scalability");
+    var redisOk = ScalabilityServiceRegistration.AddDistributedCacheEpochsAndRateLimiter(
+        builder.Services,
+        builder.Configuration,
+        builder.Environment,
+        scalabilityLogger);
+    builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection(RateLimitingOptions.SectionName));
+    ScalabilityServiceRegistration.AddHangfireForPortal(builder.Services, builder.Configuration, builder.Environment, redisOk);
+
+    var signalR = builder.Services.AddSignalR();
+    if (redisOk && !string.IsNullOrWhiteSpace(redisConnectionForSignalR) && !builder.Environment.IsEnvironment("Testing"))
+    {
+        signalR.AddStackExchangeRedis(redisConnectionForSignalR, options =>
+        {
+            options.Configuration.ChannelPrefix = RedisChannel.Literal("ldp:signalr");
+        });
+    }
+}
+
 builder.Services.AddSingleton<LogoDesignPortal.Application.Interfaces.IRealtimeNotificationSender, LogoDesignPortal.API.Services.SignalRRealtimeNotificationSender>();
 builder.Services.AddSingleton<LogoDesignPortal.Application.Interfaces.IRealtimeEntityUpdateSender, LogoDesignPortal.API.Services.SignalRRealtimeEntityUpdateSender>();
+
+builder.Services.Configure<DatabaseInitializationOptions>(
+    builder.Configuration.GetSection(DatabaseInitializationOptions.SectionName));
+builder.Services.AddHostedService<DatabaseInitializationHostedService>();
 
 // Production safety kill-switch configuration
 builder.Services.Configure<ProductionSafetyOptions>(
     builder.Configuration.GetSection(ProductionSafetyOptions.SectionName));
 
+// Background jobs: must register before AddApplication (Auth/Notification require IBackgroundJobScheduler).
+if (builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddSingleton<IBackgroundJobScheduler, NullBackgroundJobScheduler>();
+else
+    builder.Services.AddSingleton<IBackgroundJobScheduler, HangfireBackgroundJobScheduler>();
+builder.Services.AddTransient<EmailHangfireJobs>();
+builder.Services.AddTransient<MaintenanceHangfireJobs>();
+
 // Add Application and Infrastructure layers
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+builder.Services.AddSingleton<DatabaseSchemaReadinessHealthCheck>();
+var healthChecks = builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseSchemaReadinessHealthCheck>("database_schema", tags: new[] { "ready", "db" })
+    .AddCheck<HangfireStorageHealthCheck>("hangfire", tags: new[] { "ready" });
+
+var redisHealth = builder.Configuration.GetConnectionString("Redis") ?? builder.Configuration["Redis:Configuration"];
+if (!string.IsNullOrWhiteSpace(redisHealth))
+    healthChecks.AddRedis(redisHealth, name: "redis", tags: new[] { "ready" });
+
 // File storage initialization at startup (ensures directories exist before first upload)
 builder.Services.AddSingleton<LogoDesignPortal.API.Services.FileStorageInitializer>();
 
-// Orphan file cleanup - runs every 24 hours, scans preview (Temporary) storage only
-builder.Services.AddHostedService<LogoDesignPortal.API.Services.OrphanFileCleanupService>();
-
-// Billing auto-invoice - runs daily, generates invoices for Weekly (Mondays) and Monthly (1st) clients
-builder.Services.AddHostedService<LogoDesignPortal.API.Services.BillingAutoInvoiceService>();
+// Scheduled maintenance (Hangfire recurring jobs — not IHostedService — avoids duplicate work per instance when Redis is used).
+builder.Services.AddSingleton<LogoDesignPortal.API.Services.OrphanFileCleanupService>();
+builder.Services.AddSingleton<LogoDesignPortal.API.Services.BillingAutoInvoiceService>();
 
 // CORS - allow frontend domain (admin.hawkmerchandising.com) and local dev origins
 // OPTIONS preflight is handled by CORS middleware; UseCors must run before UseAuthentication
@@ -185,6 +246,21 @@ app.UseForwardedHeaders();
 // CORS must run BEFORE authentication so preflight OPTIONS requests succeed without 401
 app.UseCors("AllowAdmin");
 
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<SlowRequestPerformanceMiddleware>();
+
+app.UseSerilogRequestLogging(options =>
+{
+    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+    {
+        var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        diagnosticContext.Set("UserId", string.IsNullOrEmpty(userId) ? null : userId);
+        diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+    };
+    options.MessageTemplate =
+        "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms; UserId={UserId}";
+});
+
 // Global Exception Handler
 app.UseMiddleware<ExceptionMiddleware>();
 
@@ -197,6 +273,11 @@ if (!app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireDashboardAuthorizationFilter() }
+});
+
 // Security Middleware (after CORS and auth to allow preflight requests)
 app.UseMiddleware<RateLimitingMiddleware>();
 // InputSanitizationMiddleware temporarily disabled - re-enable after proper stream handling implementation
@@ -205,196 +286,30 @@ app.UseMiddleware<RateLimitingMiddleware>();
 app.MapControllers();
 app.MapHub<LogoDesignPortal.API.Hubs.NotificationHub>("/hubs/notifications");
 
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready"),
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
+});
+
 // Initialize file storage directories at startup (Files, Files/Temporary, Files/Permanent)
 var fileStorageInitializer = app.Services.GetRequiredService<LogoDesignPortal.API.Services.FileStorageInitializer>();
 fileStorageInitializer.Initialize();
 
-// Apply migrations and seed data BEFORE accepting requests (prevents 500s from incomplete schema)
-using (var scope = app.Services.CreateScope())
+// Recurring jobs (skipped in test environment).
+ScalabilityServiceRegistration.AddRecurringJobsIfEnabled(app.Environment);
+
+try
 {
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
-    try
-    {
-        logger.LogInformation("Initializing database...");
-
-        // Relational providers (MySQL / SQL Server): apply EF migrations. InMemory (integration tests) cannot use migration APIs.
-        if (context.Database.IsRelational())
-        {
-            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-            if (pendingMigrations.Any())
-            {
-                logger.LogInformation("Applying pending migrations: {Migrations}", string.Join(", ", pendingMigrations));
-                await context.Database.MigrateAsync();
-                logger.LogInformation("Migrations applied successfully.");
-            }
-            else
-            {
-                logger.LogInformation("Database is up to date.");
-            }
-        }
-        else
-        {
-            await context.Database.EnsureCreatedAsync();
-            logger.LogInformation("Non-relational provider: schema ensured via EnsureCreated (e.g. integration test host).");
-        }
-
-        // Standard roles (fixed GUIDs) — SuperAdmin, Admin, Designer, Client.
-        await EnsureStandardRolesAsync(context, logger);
-
-        // Seed payment settings with dummy values if they don't exist
-        await SeedPaymentSettingsAsync(context, logger);
-
-        // Seed or reset SuperAdmin user
-        var superAdminRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
-        if (superAdminRole != null)
-        {
-            var superAdmin = await context.Users.FirstOrDefaultAsync(u => u.Email == "superadmin@logodesign.com");
-            if (superAdmin == null)
-            {
-                superAdmin = new User
-                {
-                    Id = Guid.NewGuid(),
-                    Email = "superadmin@logodesign.com",
-                    FirstName = "Super",
-                    LastName = "Admin",
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("SuperAdmin@123"),
-                    RoleId = superAdminRole.Id,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-                context.Users.Add(superAdmin);
-                await context.SaveChangesAsync();
-                logger.LogInformation("SuperAdmin user created.");
-            }
-        }
-
-        logger.LogInformation("Database initialization completed.");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Database initialization failed. Application will not start.");
-        logger.LogWarning("Ensure MySQL is running and connection string in appsettings.json (or env) is correct.");
-        throw; // Fail startup - do not serve requests with incomplete/missing schema
-    }
+    app.Run();
 }
-
-app.Run();
-
-static async Task EnsureStandardRolesAsync(ApplicationDbContext context, ILogger logger)
+finally
 {
-    var standardRoles = new (Guid Id, string Name, string Description)[]
-    {
-        (SeededRoleIds.SuperAdmin, "SuperAdmin", "Full system access with all permissions"),
-        (SeededRoleIds.Admin, "Admin", "Administrative access with restricted client data access"),
-        (SeededRoleIds.Designer, "Designer", "Designer access without client identity information"),
-        (SeededRoleIds.Client, "Client", "Client access to their own data")
-    };
-
-    foreach (var (id, name, description) in standardRoles)
-    {
-        var byId = await context.Roles.FirstOrDefaultAsync(r => r.Id == id);
-        if (byId != null)
-        {
-            if (byId.IsDeleted)
-            {
-                byId.IsDeleted = false;
-                byId.DeletedAt = null;
-                byId.DeletedBy = null;
-                await context.SaveChangesAsync();
-                logger.LogInformation("Restored soft-deleted role {RoleName}.", name);
-            }
-            continue;
-        }
-
-        var byName = await context.Roles.FirstOrDefaultAsync(r => r.Name == name);
-        if (byName != null)
-        {
-            if (byName.IsDeleted)
-            {
-                byName.IsDeleted = false;
-                byName.DeletedAt = null;
-                byName.DeletedBy = null;
-                await context.SaveChangesAsync();
-                logger.LogInformation("Restored soft-deleted role {RoleName} (matched by name).", name);
-            }
-            else
-                logger.LogWarning("Role {RoleName} exists with non-standard Id {RoleId}. Skipping insert by reserved id.", name, byName.Id);
-            continue;
-        }
-
-        context.Roles.Add(new Role
-        {
-            Id = id,
-            Name = name,
-            Description = description,
-            CreatedAt = DateTime.UtcNow,
-            IsDeleted = false
-        });
-        await context.SaveChangesAsync();
-        logger.LogInformation("Seeded standard role {RoleName}.", name);
-    }
-}
-
-// Helper method to seed payment settings
-static async Task SeedPaymentSettingsAsync(ApplicationDbContext context, ILogger logger)
-{
-    try
-    {
-        var superAdmin = await context.Users.FirstOrDefaultAsync(u => u.Email == "superadmin@logodesign.com");
-        var createdBy = superAdmin?.Id ?? Guid.Empty;
-
-        // Payment settings to seed
-        var paymentSettings = new[]
-        {
-            // PayPal Settings
-            new { Key = "PayPalClientId", Value = "DUMMY_PAYPAL_CLIENT_ID_FOR_TESTING", Category = "Payment" },
-            new { Key = "PayPalClientSecret", Value = "DUMMY_PAYPAL_CLIENT_SECRET_FOR_TESTING", Category = "Payment" },
-            new { Key = "PayPalUseSandbox", Value = "true", Category = "Payment" },
-            new { Key = "PayPalWebhookId", Value = "", Category = "Payment" },
-            
-            // Wise Settings
-            new { Key = "WiseApiKey", Value = "DUMMY_WISE_API_KEY_FOR_TESTING", Category = "Payment" },
-            new { Key = "WiseProfileId", Value = "DUMMY_WISE_PROFILE_ID_FOR_TESTING", Category = "Payment" },
-            
-            // Bank Details
-            new { Key = "BankName", Value = "Demo Bank", Category = "Payment" },
-            new { Key = "AccountHolderName", Value = "Hawk Merchandising", Category = "Payment" },
-            new { Key = "AccountNumber", Value = "1234567890", Category = "Payment" },
-            new { Key = "IBAN", Value = "GB82WEST12345698765432", Category = "Payment" },
-            new { Key = "SWIFT", Value = "DEMOBANK123", Category = "Payment" },
-            new { Key = "RoutingNumber", Value = "123456789", Category = "Payment" },
-            new { Key = "BranchAddress", Value = "123 Main Street, City, Country", Category = "Payment" },
-            new { Key = "BankCurrency", Value = "USD", Category = "Payment" }
-        };
-
-        foreach (var setting in paymentSettings)
-        {
-            var existing = await context.Settings
-                .FirstOrDefaultAsync(s => s.Key == setting.Key && s.Category == setting.Category && !s.IsDeleted);
-
-            if (existing == null)
-            {
-                context.Settings.Add(new Settings
-                {
-                    Id = Guid.NewGuid(),
-                    Key = setting.Key,
-                    Value = setting.Value,
-                    Category = setting.Category,
-                    Description = $"Dummy {setting.Key} for testing purposes",
-                    CreatedBy = createdBy,
-                    CreatedAt = DateTime.UtcNow
-                });
-                logger.LogInformation($"Seeded payment setting: {setting.Key}");
-            }
-        }
-
-        await context.SaveChangesAsync();
-        logger.LogInformation("Payment settings seeded successfully.");
-    }
-    catch (Exception ex)
-    {
-        logger.LogWarning(ex, "Error seeding payment settings. They may need to be configured manually.");
-    }
+    Log.CloseAndFlush();
 }

@@ -39,7 +39,6 @@ export interface DesignerDetail {
 export class DesignerDetailComponent implements OnInit, OnDestroy {
   designerId: string | null = null;
   designer: DesignerDetail | null = null;
-  loading = false;
   loadFailed = false;
   errorMessage = '';
   activeTab: number = 0;
@@ -71,7 +70,6 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
   }
 
   loadDesigner(): void {
-    this.loading = true;
     this.loadFailed = false;
     this.errorMessage = '';
     this.apiService.get<DesignerDetail>(`users/designers/${this.designerId}/detail`)
@@ -80,13 +78,11 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
         next: (designerDetail) => {
           this.designer = designerDetail;
           this.orders = designerDetail.assignedOrders || [];
-          this.loading = false;
           this.ordersLoading = false;
           this.loadFailed = false;
           this.cdr.markForCheck();
         },
         error: (err) => {
-          this.loading = false;
           this.ordersLoading = false;
           this.loadFailed = true;
           this.errorMessage = err.error?.error || 'Failed to load designer details';

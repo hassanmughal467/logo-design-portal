@@ -30,14 +30,17 @@
     </div>
   </app-page-header>
 
-  <!-- Loading -->
-  <div *ngIf="loading" class="loading-container">
-    <p-progressSpinner strokeWidth="4" animationDuration="1s" [style]="{width: '50px', height: '50px'}"></p-progressSpinner>
-    <p class="loading-text">Loading dashboard data...</p>
-  </div>
+  <app-skeleton-dashboard
+    *ngIf="showDashboardSkeleton"
+    [variant]="user?.role === 'Client' ? 'client' : 'admin'"
+    [kpiCount]="user?.role === 'Client' ? 5 : 5">
+  </app-skeleton-dashboard>
 
   <!-- Dashboard Content -->
-  <div *ngIf="!loading" class="dashboard-content">
+  <div
+    class="dashboard-content fade-in-content"
+    *ngIf="!showDashboardSkeleton"
+    [class.is-refreshing]="isDashboardLoading && hasDashboardLoadedOnce">
 
     <!-- ═══ CLIENT DASHBOARD (Quick Operational Overview) ═══ -->
     <ng-container *ngIf="user?.role === 'Client'">
@@ -167,7 +170,7 @@
         </div>
         <div class="order-history-table-wrapper" *ngIf="filteredOrders.length > 0">
           <p-table [value]="filteredOrders" [paginator]="true" [rows]="10" [rowsPerPageOptions]="[5, 10, 25]"
-            styleClass="p-datatable-sm order-history-table" [responsive]="true">
+            styleClass="p-datatable-sm order-history-table">
           <ng-template pTemplate="header">
             <tr>
               <th>Title</th>
@@ -683,7 +686,7 @@
               <p class="empty-subtext">Orders will appear here once they are created.</p>
             </div>
             <p-table *ngIf="dashboardData && dashboardData.recentOrders.length > 0" [value]="dashboardData.recentOrders"
-              [paginator]="false" [rows]="10" styleClass="p-datatable-sm recent-orders-table" [responsive]="true">
+              [paginator]="false" [rows]="10" styleClass="p-datatable-sm recent-orders-table">
               <ng-template pTemplate="header">
                 <tr>
                   <th>Title</th>

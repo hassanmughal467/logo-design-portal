@@ -33,8 +33,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
   ];
 
   logoCategoryOptions = [
-    { label: 'Embroidery', value: 'embroidery' },
-    { label: 'Digitizing', value: 'digitizing' },
+    { label: 'Embroidery / Digitizing', value: 'embroideryDigitizing' },
     { label: 'Vector/Screen Printing', value: 'vector' },
     { label: 'Custom Patch', value: 'customPatch' }
   ];
@@ -104,7 +103,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
       price: data.price || 0,
       priority: data.priority || 2,
       deadline: today,
-      logoCategory: data.logoCategory || null,
+      logoCategory: this.normalizeLogoCategoryForForm(data.logoCategory),
       placement: data.placement || null,
       requiredFormats: data.requiredFormats || '',
       colorPreferences: data.colorPreferences || '',
@@ -150,14 +149,21 @@ export class OrderCreateComponent implements OnInit, OnChanges {
     }
   }
 
+  private normalizeLogoCategoryForForm(value: string | null | undefined): string | null {
+    if (value === 'embroidery' || value === 'digitizing' || value === 'embroideryDigitizing') {
+      return 'embroideryDigitizing';
+    }
+    return value ?? null;
+  }
+
   private updatePlacementVisibility(): void {
     const category = this.orderForm.get('logoCategory')?.value;
-    this.showPlacementDropdown = category === 'embroidery' || category === 'customPatch';
+    this.showPlacementDropdown = category === 'embroideryDigitizing' || category === 'customPatch';
   }
 
   private updateStylePreferencesVisibility(): void {
     const category = this.orderForm.get('logoCategory')?.value;
-    this.showStylePreferencesDropdown = category === 'embroidery' || category === 'digitizing';
+    this.showStylePreferencesDropdown = category === 'embroideryDigitizing';
     const styleControl = this.orderForm.get('stylePreferences');
     if (styleControl) {
       if (this.showStylePreferencesDropdown) {
@@ -217,6 +223,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
     const placement = formValue.placement;
     if (logoCategory) {
       const categoryMap: Record<string, number> = {
+        embroideryDigitizing: DesignCategory.EmbroideryDigitizing,
         embroidery: DesignCategory.EmbroideryDigitizing,
         digitizing: DesignCategory.EmbroideryDigitizing,
         vector: DesignCategory.VectorScreenPrinting,

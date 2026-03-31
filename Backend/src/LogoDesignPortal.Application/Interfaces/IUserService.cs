@@ -20,4 +20,7 @@ public interface IUserService
     Task<List<DesignerProfileResponseDto>> GetAllDesignerProfilesAsync();
     Task<ClientDetailDto?> GetClientDetailAsync(Guid clientId);
     Task<DesignerDetailDto?> GetDesignerDetailAsync(Guid designerId);
+
+    /// <summary>Debounce-friendly search for user pickers (max 20 hits).</summary>
+    Task<IReadOnlyList<UserTypeaheadDto>> SearchUsersForTypeaheadAsync(string? query, string? roleName, int limit, CancellationToken cancellationToken = default);
 }

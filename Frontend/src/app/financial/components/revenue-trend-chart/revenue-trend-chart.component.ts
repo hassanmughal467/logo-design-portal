@@ -8,7 +8,6 @@ import { RevenueTrendItem } from '@core/services/financial-analytics.service';
 })
 export class RevenueTrendChartComponent implements OnChanges {
   @Input() items: RevenueTrendItem[] = [];
-  @Input() loading = false;
 
   chartOptions: any = null;
 

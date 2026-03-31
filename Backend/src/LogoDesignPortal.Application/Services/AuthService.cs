@@ -1,4 +1,5 @@
 using BCrypt.Net;
+using LogoDesignPortal.Application.BackgroundJobs;
 using LogoDesignPortal.Application.DTOs.Auth;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Authentication;
@@ -14,22 +15,22 @@ public class AuthService : IAuthService
 {
     private readonly IApplicationDbContext _context;
     private readonly IJwtTokenService _jwtTokenService;
-    private readonly IEmailService _emailService;
     private readonly INotificationService _notificationService;
     private readonly IConfiguration _configuration;
+    private readonly IBackgroundJobScheduler _backgroundJobs;
 
     public AuthService(
         IApplicationDbContext context,
         IJwtTokenService jwtTokenService,
-        IEmailService emailService,
         INotificationService notificationService,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IBackgroundJobScheduler backgroundJobs)
     {
         _context = context;
         _jwtTokenService = jwtTokenService;
-        _emailService = emailService;
         _notificationService = notificationService;
         _configuration = configuration;
+        _backgroundJobs = backgroundJobs;
     }
 
     public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request)
@@ -362,25 +363,26 @@ public class AuthService : IAuthService
         var frontendUrl = _configuration["Email:FrontendUrl"] ?? "http://localhost:4200";
         var resetLink = $"{frontendUrl}/auth/reset-password?email={Uri.EscapeDataString(user.Email)}&token={Uri.EscapeDataString(token)}";
 
-        // Send email with reset link
-        var emailSent = await _emailService.SendPasswordResetEmailAsync(
-            user.Email,
-            resetLink,
-            $"{user.FirstName} {user.LastName}");
+        var smtpConfigured = !string.IsNullOrWhiteSpace(_configuration["Email:SmtpServer"])
+            && !string.IsNullOrWhiteSpace(_configuration["Email:SmtpUsername"])
+            && !string.IsNullOrWhiteSpace(_configuration["Email:SmtpPassword"]);
 
-        // For development: If email fails, still return the link in response
-        var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development" || 
-                           string.IsNullOrEmpty(_configuration["Email:SmtpServer"]);
+        // Non-blocking: password reset mail is sent by Hangfire worker.
+        if (smtpConfigured)
+            _backgroundJobs.EnqueuePasswordResetEmail(user.Email, resetLink, $"{user.FirstName} {user.LastName}".Trim());
+        var emailQueued = smtpConfigured;
+
+        var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development"
+            || string.IsNullOrEmpty(_configuration["Email:SmtpServer"]);
 
         return new ForgotPasswordResponseDto
         {
-            Message = emailSent 
-                ? "Password reset link has been sent to your email address." 
+            Message = emailQueued
+                ? "Password reset link has been sent to your email address."
                 : "Password reset link generated. Please check the link below (email sending is not configured).",
-            // Only include these in development or if email failed
-            ResetToken = isDevelopment || !emailSent ? token : null,
-            Email = isDevelopment || !emailSent ? user.Email : null,
-            ResetLink = isDevelopment || !emailSent ? resetLink : null
+            ResetToken = isDevelopment || !emailQueued ? token : null,
+            Email = isDevelopment || !emailQueued ? user.Email : null,
+            ResetLink = isDevelopment || !emailQueued ? resetLink : null
         };
     }
 

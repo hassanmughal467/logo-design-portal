@@ -41,7 +41,6 @@ export class PermissionListComponent implements OnInit, OnDestroy {
   roles: Role[] = [];
   rolePermissions: Map<string, Set<string>> = new Map(); // roleId -> Set of permissionIds
   checkboxStates: Map<string, boolean> = new Map(); // "roleId-permissionId" -> boolean
-  loading = false;
   loadingMatrix = false;
   globalFilter = '';
   first = 0;
@@ -82,13 +81,11 @@ export class PermissionListComponent implements OnInit, OnDestroy {
   }
 
   loadPermissions(): void {
-    this.loading = true;
     this.apiService.get<Permission[]>('permissions')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (permissions) => {
           this.permissions = permissions || [];
-          this.loading = false;
           if (this.permissions.length === 0) {
             this.messageService.add({
               severity: 'info',
@@ -103,7 +100,6 @@ export class PermissionListComponent implements OnInit, OnDestroy {
         error: (error) => {
           console.error('Error loading permissions:', error);
           this.permissions = [];
-          this.loading = false;
           
           // Show error message (403 errors are handled silently by interceptor, but we can still show info)
           if (error?.status === 403) {

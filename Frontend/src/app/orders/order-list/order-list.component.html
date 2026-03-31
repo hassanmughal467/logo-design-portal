@@ -1,4 +1,4 @@
-<div class="orders-page">
+<div class="orders-page" [class.orders-page--refreshing]="isOrdersLoading && hasOrdersLoadedOnce">
   <app-page-header [title]="pageTitle" [subtitle]="pageSubtitle">
     <div actions>
       <p-button
@@ -28,14 +28,10 @@
     </div>
   </app-page-header>
 
-  <!-- Loading State -->
-  <div *ngIf="loading" class="loading-container">
-    <i class="pi pi-spin pi-spinner" style="font-size: 2rem; color: var(--primary-color);"></i>
-    <p>Loading orders...</p>
-  </div>
+  <app-skeleton-dashboard *ngIf="showOrdersSkeleton" variant="table" [kpiCount]="4"></app-skeleton-dashboard>
 
   <!-- Dashboard Content -->
-  <ng-container *ngIf="!loading">
+  <ng-container *ngIf="!showOrdersSkeleton">
 
     <!-- Role-Specific Summary Cards -->
     <div class="kpi-grid" *ngIf="orders.length > 0">
@@ -67,7 +63,6 @@
       <app-data-table-wrapper>
       <p-table
         [value]="filteredOrders"
-        [loading]="loading"
         [paginator]="filteredOrders.length > 0"
         [rows]="rows"
         [first]="first"
@@ -76,7 +71,6 @@
         [sortField]="'createdAt'"
         [sortOrder]="-1"
         styleClass="p-datatable-sm p-datatable-striped"
-        [responsive]="true"
         [lazy]="false">
 
         <!-- Table Toolbar -->
@@ -324,8 +318,17 @@
 
       <div class="form-group" *ngIf="!quickCompletedUseNewClient">
         <label>Client <span class="required">*</span></label>
-        <p-dropdown [options]="clientOptions" [(ngModel)]="quickCompletedModel.clientUserId" optionLabel="label" optionValue="value"
-          placeholder="Select client" styleClass="w-full" [filter]="true" appendTo="body"></p-dropdown>
+        <p-autoComplete
+          [(ngModel)]="selectedQuickClient"
+          [suggestions]="quickClientSuggestions"
+          (completeMethod)="onQuickClientComplete($event)"
+          field="label"
+          [dropdown]="true"
+          placeholder="Search client (type to load)"
+          styleClass="w-full"
+          appendTo="body"
+          inputStyleClass="w-full">
+        </p-autoComplete>
       </div>
 
       <div *ngIf="quickCompletedUseNewClient" class="form-grid">
@@ -354,8 +357,17 @@
         </div>
         <div class="form-group">
           <label>Designer <span class="required">*</span></label>
-          <p-dropdown [options]="designerOptions" [(ngModel)]="quickCompletedModel.designerUserId" optionLabel="label" optionValue="value"
-            placeholder="Select designer" styleClass="w-full" [filter]="true" appendTo="body"></p-dropdown>
+          <p-autoComplete
+            [(ngModel)]="selectedQuickDesigner"
+            [suggestions]="quickDesignerSuggestions"
+            (completeMethod)="onQuickDesignerComplete($event)"
+            field="label"
+            [dropdown]="true"
+            placeholder="Search designer"
+            styleClass="w-full"
+            appendTo="body"
+            inputStyleClass="w-full">
+          </p-autoComplete>
         </div>
         <div class="form-group">
           <label>Price <span class="required">*</span></label>
@@ -414,30 +426,26 @@
     <div class="dialog-content">
       <div class="form-group">
         <label for="designer-select">Select Designer <span class="required">*</span></label>
-        <p-dropdown
+        <p-autoComplete
           id="designer-select"
-          [options]="availableDesigners"
-          [(ngModel)]="selectedDesignerId"
-          optionLabel="label"
-          optionValue="value"
-          placeholder="Select a designer"
-          [filter]="true"
-          filterPlaceholder="Search designer..."
-          [showClear]="true"
+          [(ngModel)]="selectedAssignDesigner"
+          [suggestions]="assignDesignerSuggestions"
+          (completeMethod)="onAssignDesignerComplete($event)"
+          field="label"
+          [dropdown]="true"
+          placeholder="Type to search designers..."
           appendTo="body"
-          [scrollHeight]="'300px'"
-          styleClass="w-full">
-        </p-dropdown>
-        <small class="p-help" *ngIf="availableDesigners.length === 0">
-          No designers available. Please create a designer account first.
-        </small>
+          styleClass="w-full"
+          inputStyleClass="w-full">
+        </p-autoComplete>
+        <small class="p-help">Loads designers from the server as you type (no full list download).</small>
       </div>
     </div>
     <ng-template pTemplate="footer">
       <p-button label="Cancel" icon="pi pi-times"
         (onClick)="showAssignDialog = false" styleClass="p-button-outlined p-button-secondary modal-footer-btn"></p-button>
       <p-button label="Assign" icon="pi pi-check"
-        (onClick)="assignDesigner()" [disabled]="!selectedDesignerId" styleClass="p-button-primary modal-footer-btn"></p-button>
+        (onClick)="assignDesigner()" [disabled]="!selectedAssignDesigner?.id" styleClass="p-button-primary modal-footer-btn"></p-button>
     </ng-template>
   </p-dialog>
 

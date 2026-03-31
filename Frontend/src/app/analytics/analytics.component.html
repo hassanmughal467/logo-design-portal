@@ -1,4 +1,4 @@
-<div class="analytics-page">
+<div class="analytics-page" [class.analytics-page--refreshing]="isAnalyticsLoading && hasAnalyticsLoadedOnce">
   <div class="page-header">
     <div class="header-content">
       <h1 class="page-title">Detail Analytics</h1>
@@ -6,13 +6,10 @@
     </div>
   </div>
 
-  <div *ngIf="loading" class="loading-container">
-    <p-progressSpinner strokeWidth="4" [style]="{width: '50px', height: '50px'}"></p-progressSpinner>
-    <p>Loading analytics data...</p>
-  </div>
+  <app-skeleton-dashboard *ngIf="showAnalyticsSkeleton && isClient" variant="client" [kpiCount]="4"></app-skeleton-dashboard>
 
   <!-- Client: Usage Insights (Usage Overview, Order Trends, Service Usage, Performance Metrics) -->
-  <div *ngIf="!loading && isClient" class="analytics-content client-analytics-view">
+  <div *ngIf="isClient && !showAnalyticsSkeleton" class="analytics-content client-analytics-view fade-in-content">
     <!-- Section 1: Usage Overview -->
     <section class="analytics-section">
       <h2 class="section-header"><i class="pi pi-chart-bar"></i> Usage Overview</h2>
@@ -97,13 +94,13 @@
     </section>
   </div>
 
-  <div *ngIf="!loading && !isAdmin && !isClient" class="empty-state">
+  <div *ngIf="!isAdmin && !isClient" class="empty-state">
     <i class="pi pi-lock empty-icon"></i>
     <p class="empty-text">Access Restricted</p>
     <p class="empty-subtext">Analytics are available only for Super Admin, Admin, and Client roles.</p>
   </div>
 
-  <div *ngIf="apiError && isAdmin" class="api-error-banner">
+  <div *ngIf="apiError && isAdmin && !showAnalyticsSkeleton" class="api-error-banner">
     <i class="pi pi-exclamation-triangle"></i>
     <div>
       <strong>Analytics API unavailable.</strong> Ensure the backend is running and points to the correct API URL.
@@ -111,7 +108,9 @@
     </div>
   </div>
 
-  <div *ngIf="!loading && isAdmin" class="analytics-content">
+  <app-skeleton-dashboard *ngIf="showAnalyticsSkeleton && isAdmin" variant="analytics" [kpiCount]="5"></app-skeleton-dashboard>
+
+  <div *ngIf="isAdmin && !showAnalyticsSkeleton" class="analytics-content fade-in-content">
     <!-- Row 1: KPI Cards + Insights -->
     <app-dashboard-analytics [overview]="overview" [recentOrders]="recentOrders" [apiError]="apiError"
       [insights]="insightsAnalytics?.insights ?? []"></app-dashboard-analytics>

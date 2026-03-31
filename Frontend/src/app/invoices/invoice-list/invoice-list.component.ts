@@ -4,8 +4,8 @@ import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { BillingService, BillingQueueOverview, BillingEligibleOrder } from '@core/services/billing.service';
 import { MessageService } from 'primeng/api';
-import { Subject, firstValueFrom } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Subject, firstValueFrom, forkJoin, of } from 'rxjs';
+import { takeUntil, catchError, finalize } from 'rxjs/operators';
 
 export interface InvoiceItem {
   id: string;
@@ -46,7 +46,6 @@ export interface Invoice {
 })
 export class InvoiceListComponent implements OnInit, OnDestroy {
   invoices: Invoice[] = [];
-  loading = false;
   globalFilter = '';
   selectedStatus: string | null = null;
   first = 0;
@@ -104,6 +103,14 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
 
+  isInvoicesLoading = false;
+  isInvoicesRefreshing = false;
+  hasInvoicesLoadedOnce = false;
+
+  get showInvoiceSkeleton(): boolean {
+    return this.isInvoicesLoading && !this.hasInvoicesLoadedOnce;
+  }
+
   constructor(
     private apiService: ApiService,
     private authService: AuthService,
@@ -126,8 +133,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.loadInvoices();
-    this.loadStatistics();
+    this.loadInvoiceData();
   }
 
   /** Open invoice detail when navigated via /invoices/:id (e.g. from notification click) */
@@ -149,11 +155,46 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     }
   }
 
-  loadStatistics(): void {
-    this.apiService.get<any>('invoices/statistics')
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (stats) => {
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  /** Loads invoices and statistics together; keeps layout on refresh with a light dim. */
+  loadInvoiceData(): void {
+    if (!this.hasInvoicesLoadedOnce) {
+      this.isInvoicesLoading = true;
+    } else {
+      this.isInvoicesRefreshing = true;
+    }
+
+    forkJoin({
+      invoices: this.apiService.get<Invoice[]>('invoices').pipe(
+        catchError((error) => {
+          console.error('Error loading invoices:', error);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Failed to Load Invoices',
+            detail: error?.error?.error || 'Could not load invoices. Please try again.',
+            life: 5000
+          });
+          return of([] as Invoice[]);
+        })
+      ),
+      stats: this.apiService.get<any>('invoices/statistics').pipe(catchError(() => of(null)))
+    })
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => {
+          this.isInvoicesLoading = false;
+          this.isInvoicesRefreshing = false;
+          this.hasInvoicesLoadedOnce = true;
+          this.cdr.markForCheck();
+        })
+      )
+      .subscribe(({ invoices, stats }) => {
+        this.invoices = invoices;
+        if (stats) {
           this.invoiceStats = {
             total: stats.totalInvoices || 0,
             paid: stats.paidInvoices || 0,
@@ -163,45 +204,11 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
             paidAmount: stats.paidAmount || 0,
             pendingAmount: (stats.dueAmount || 0) + (stats.overdueAmount || 0)
           };
-          this.cdr.markForCheck();
-        },
-        error: () => {
-          // Statistics will be calculated from invoices if endpoint fails
-        }
-      });
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-  }
-
-  loadInvoices(): void {
-    this.loading = true;
-    // Try to fetch invoices (will fail gracefully if endpoint doesn't exist)
-    this.apiService.get<Invoice[]>('invoices')
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (invoices) => {
-          this.invoices = invoices;
+        } else {
           this.calculateStats(invoices);
-          this.loading = false;
-          this.cdr.markForCheck();
-          this.openInvoiceFromRoute();
-        },
-        error: (error) => {
-          console.error('Error loading invoices:', error);
-          this.invoices = [];
-          this.loading = false;
-          this.cdr.markForCheck();
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Failed to Load Invoices',
-            detail: error?.error?.error || 'Could not load invoices. Please try again.',
-            life: 5000
-          });
-          this.cdr.markForCheck();
         }
+        this.cdr.markForCheck();
+        this.openInvoiceFromRoute();
       });
   }
 
@@ -397,8 +404,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
             detail: 'Invoice generated successfully'
           });
           this.showGenerateDialog = false;
-          this.loadInvoices();
-          this.loadStatistics();
+          this.loadInvoiceData();
           this.cdr.markForCheck();
         },
         error: (error) => {
@@ -423,8 +429,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
             detail: 'Invoice sent successfully'
           });
           this.showDetailDialog = false;
-          this.loadInvoices();
-          this.loadStatistics();
+          this.loadInvoiceData();
           this.cdr.markForCheck();
         },
         error: () => {
@@ -513,8 +518,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
                   detail: 'Invoice updated successfully'
                 });
                 this.showEditDialog = false;
-                this.loadInvoices();
-                this.loadStatistics();
+                this.loadInvoiceData();
               },
               error: (error) => {
                 this.messageService.add({
@@ -533,8 +537,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
             detail: 'Invoice updated successfully'
           });
           this.showEditDialog = false;
-          this.loadInvoices();
-          this.loadStatistics();
+          this.loadInvoiceData();
         },
         error: (error) => {
           this.messageService.add({
@@ -666,8 +669,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         this.showPaymentDialog = false;
         this.selectedInvoices = [];
         this.paymentMethod = '';
-        this.loadInvoices();
-        this.loadStatistics();
+        this.loadInvoiceData();
         this.cdr.markForCheck();
       })
       .catch((error) => {
@@ -684,8 +686,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.showPaymentDialog = false;
     this.selectedInvoices = [];
     this.paymentMethod = '';
-    this.loadInvoices();
-    this.loadStatistics();
+    this.loadInvoiceData();
     this.cdr.markForCheck();
   }
 

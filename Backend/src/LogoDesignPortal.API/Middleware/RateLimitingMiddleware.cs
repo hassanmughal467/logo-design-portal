@@ -1,80 +1,122 @@
-using System.Collections.Concurrent;
 using System.Net;
+using System.Security.Claims;
+using System.Text.Json;
+using LogoDesignPortal.API.Configuration;
+using LogoDesignPortal.API.Extensions;
+using LogoDesignPortal.API.Infrastructure;
+using Microsoft.Extensions.Options;
 
 namespace LogoDesignPortal.API.Middleware;
 
+/// <summary>
+/// Cluster-aware rate limiting when Redis is registered; otherwise in-process.
+/// Sensitive routes use stricter buckets (auth, order mutations, file uploads).
+/// </summary>
 public class RateLimitingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<RateLimitingMiddleware> _logger;
-    private static readonly ConcurrentDictionary<string, RateLimitInfo> _requestCounts = new();
-    private const int MaxRequestsPerMinute = 60;
-    private const int MaxAuthRequestsPerMinute = 5; // Stricter for auth endpoints
+    private readonly IDistributedRateLimiter _limiter;
+    private readonly RateLimitingOptions _options;
+    private readonly bool _disabled;
 
-    private readonly bool _isRateLimitDisabled;
-
-    public RateLimitingMiddleware(RequestDelegate next, ILogger<RateLimitingMiddleware> logger, IWebHostEnvironment env)
+    public RateLimitingMiddleware(
+        RequestDelegate next,
+        ILogger<RateLimitingMiddleware> logger,
+        IDistributedRateLimiter limiter,
+        IOptions<RateLimitingOptions> options,
+        IWebHostEnvironment env)
     {
         _next = next;
         _logger = logger;
-        _isRateLimitDisabled = env.IsDevelopment()
+        _limiter = limiter;
+        _options = options.Value;
+        _disabled = env.IsDevelopment()
             || env.IsEnvironment("Testing")
             || string.Equals(Environment.GetEnvironmentVariable("DISABLE_RATE_LIMIT"), "true", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (_isRateLimitDisabled)
+        if (_disabled)
         {
-            await _next(context);
+            await _next(context).ConfigureAwait(false);
             return;
         }
 
-        // Skip rate limiting for CORS preflight requests
         if (context.Request.Method == "OPTIONS")
         {
-            await _next(context);
+            await _next(context).ConfigureAwait(false);
             return;
         }
 
-        var path = context.Request.Path.Value?.ToLower() ?? "";
-        var isAuthEndpoint = path.Contains("/api/auth/") || path.Contains("/api/auth/login") || path.Contains("/api/auth/register");
-        var maxRequests = isAuthEndpoint ? MaxAuthRequestsPerMinute : MaxRequestsPerMinute;
-
-        var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var key = $"{clientIp}:{path}";
-
-        var now = DateTime.UtcNow;
-        var rateLimitInfo = _requestCounts.GetOrAdd(key, _ => new RateLimitInfo { ResetTime = now.AddMinutes(1) });
-
-        // Reset if time window has passed
-        if (now > rateLimitInfo.ResetTime)
+        var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
+        if (path.StartsWith("/health", StringComparison.Ordinal) ||
+            path.StartsWith("/swagger", StringComparison.Ordinal))
         {
-            rateLimitInfo.Count = 0;
-            rateLimitInfo.ResetTime = now.AddMinutes(1);
+            await _next(context).ConfigureAwait(false);
+            return;
+        }
+        var method = context.Request.Method;
+
+        var (bucket, limit) = Classify(path, method, context);
+        if (limit <= 0)
+        {
+            await _next(context).ConfigureAwait(false);
+            return;
         }
 
-        // Check rate limit
-        if (rateLimitInfo.Count >= maxRequests)
+        var identity = ResolveIdentity(context, bucket);
+        var compositeKey = $"{bucket}:{identity}";
+        var (allowed, retry) = await _limiter.TryAcquireAsync(compositeKey, limit, context.RequestAborted).ConfigureAwait(false);
+
+        if (!allowed)
         {
-            _logger.LogWarning($"Rate limit exceeded for {clientIp} on {path}");
+            _logger.LogWarning(
+                "Rate limit exceeded bucket={Bucket} identity={Identity} path={Path} correlationId={CorrelationId}",
+                bucket, identity, path, context.GetCorrelationId());
             context.Response.StatusCode = (int)HttpStatusCode.TooManyRequests;
+            context.Response.Headers.Append("Retry-After", Math.Max(1, retry).ToString());
             context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(new
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
             {
-                error = "Rate limit exceeded. Please try again later.",
-                retryAfter = (int)(rateLimitInfo.ResetTime - now).TotalSeconds
-            }));
+                message = "Rate limit exceeded. Please try again later.",
+                correlationId = context.GetCorrelationId(),
+                retryAfterSeconds = retry
+            })).ConfigureAwait(false);
             return;
         }
 
-        rateLimitInfo.Count++;
-        await _next(context);
+        await _next(context).ConfigureAwait(false);
     }
 
-    private class RateLimitInfo
+    private (string Bucket, int Limit) Classify(string path, string method, HttpContext context)
     {
-        public int Count { get; set; }
-        public DateTime ResetTime { get; set; }
+        if (path.Contains("/api/auth/login") || path.Contains("/api/auth/register") || path.Contains("/api/auth/forgot-password"))
+            return ("auth", _options.AuthPerMinute);
+
+        if (!HttpMethods.IsGet(method) && path.StartsWith("/api/orders", StringComparison.Ordinal))
+            return ("orders", _options.OrdersMutationsPerMinute);
+
+        if (HttpMethods.IsPost(method) && path.StartsWith("/api/files", StringComparison.Ordinal))
+        {
+            var ct = context.Request.ContentType ?? "";
+            if (ct.Contains("multipart/form-data", StringComparison.OrdinalIgnoreCase))
+                return ("files", _options.FileUploadPerMinute);
+        }
+
+        return ("general", _options.GeneralPerMinute);
+    }
+
+    private static string ResolveIdentity(HttpContext context, string bucket)
+    {
+        if (bucket is "orders" or "files")
+        {
+            var uid = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrEmpty(uid))
+                return $"u:{uid}";
+        }
+
+        return $"ip:{context.GetRateLimitClientId()}";
     }
 }

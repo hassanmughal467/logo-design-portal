@@ -8,7 +8,6 @@ import { OrderValueTrendItem } from '@core/services/financial-analytics.service'
 })
 export class OrderValueChartComponent implements OnChanges {
   @Input() items: OrderValueTrendItem[] = [];
-  @Input() loading = false;
 
   chartOptions: any = null;
 

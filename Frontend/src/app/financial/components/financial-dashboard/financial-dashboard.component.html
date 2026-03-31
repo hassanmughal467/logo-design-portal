@@ -1,7 +1,7 @@
 <div class="financial-dashboard">
   <!-- Row 1: KPI Cards -->
   <div class="dashboard-row">
-    <app-financial-kpi-cards [data]="overview" [loading]="loading"></app-financial-kpi-cards>
+    <app-financial-kpi-cards [data]="overview"></app-financial-kpi-cards>
   </div>
 
   <div *ngIf="apiError" class="api-error-banner">
@@ -12,7 +12,7 @@
     </div>
   </div>
 
-  <div *ngIf="!loading && !apiError" class="dashboard-charts">
+  <div *ngIf="!apiError" class="dashboard-charts">
     <!-- Row 2: Billing Queue (Admin) -->
     <div class="dashboard-row full-width">
       <app-billing-queue></app-billing-queue>

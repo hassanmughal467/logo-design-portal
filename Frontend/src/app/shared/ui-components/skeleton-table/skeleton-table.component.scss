@@ -1,0 +1,61 @@
+@import '../skeleton-shimmer.scss';
+
+.skeleton-table-wrap {
+  border: 1px solid var(--surface-border, var(--p-border-color, #dee2e6));
+  border-radius: 10px;
+  background: var(--surface-card, var(--p-surface-0, #fff));
+  overflow: hidden;
+}
+
+.sk-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--surface-border, var(--p-border-color, #dee2e6));
+}
+
+.sk-toolbar-chip {
+  @include skeleton-shimmer-block;
+  height: 34px;
+  width: 140px;
+  border-radius: 8px;
+
+  &--wide {
+    flex: 1;
+    max-width: 280px;
+  }
+}
+
+.sk-table {
+  padding: 0.5rem 0 0.75rem;
+}
+
+.sk-thead {
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.5rem 1rem 0.75rem;
+}
+
+.sk-th {
+  @include skeleton-shimmer-block;
+  height: 12px;
+  border-radius: 4px;
+}
+
+.sk-row {
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.55rem 1rem;
+  align-items: center;
+}
+
+.sk-cell {
+  @include skeleton-shimmer-block;
+  height: 14px;
+  border-radius: 4px;
+  opacity: 0.92;
+}
+
+.sk-row:nth-child(even) .sk-cell {
+  opacity: 0.85;
+}

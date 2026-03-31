@@ -1,0 +1,14 @@
+<div class="skeleton-table-wrap" role="status" aria-live="polite" aria-busy="true">
+  <div *ngIf="showToolbar" class="sk-toolbar">
+    <div class="sk-toolbar-chip"></div>
+    <div class="sk-toolbar-chip sk-toolbar-chip--wide"></div>
+  </div>
+  <div class="sk-table">
+    <div class="sk-thead">
+      <span *ngFor="let c of colIndices" class="sk-th" [style.flex]="c === 0 ? '1.2' : '1'"></span>
+    </div>
+    <div *ngFor="let r of rowIndices" class="sk-row">
+      <span *ngFor="let c of colIndices" class="sk-cell" [style.flex]="c === 0 ? '1.2' : '1'"></span>
+    </div>
+  </div>
+</div>

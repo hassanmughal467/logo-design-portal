@@ -1,9 +1,10 @@
 import { Injectable } from '@angular/core';
 import { Observable, forkJoin, of } from 'rxjs';
-import { map, catchError } from 'rxjs/operators';
+import { map, catchError, shareReplay, timeout } from 'rxjs/operators';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
+import { SharedListDataService } from './shared-list-data.service';
 import { Order, OrderStatus } from '@shared/models/order.model';
 
 export interface DashboardStats {
@@ -51,16 +52,24 @@ export interface DashboardData {
   providedIn: 'root'
 })
 export class DashboardService {
+  private dashboardDataCache: { key: string; stream$: Observable<DashboardData> } | null = null;
+
   constructor(
     private apiService: ApiService,
     private authService: AuthService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private sharedListData: SharedListDataService
   ) {}
 
   getDashboardData(): Observable<DashboardData> {
     const user = this.authService.getCurrentUser();
     if (!user) {
       return of(this.getEmptyDashboardData());
+    }
+
+    const cacheKey = `${user.id}:${user.role}`;
+    if (this.dashboardDataCache?.key === cacheKey) {
+      return this.dashboardDataCache.stream$;
     }
 
     // Fetch orders based on user role
@@ -75,8 +84,9 @@ export class DashboardService {
         break;
       case 'SuperAdmin':
       case 'Admin':
-        orders$ = this.apiService.get<any>('orders?page=1&pageSize=500').pipe(
-          map(res => ApiService.extractItems<Order>(res))
+        // Paginated full scan via shared stream (backend caps pageSize at 100).
+        orders$ = this.sharedListData.getAllOrdersAdmin().pipe(
+          map((items) => items as Order[])
         );
         break;
       default:
@@ -90,9 +100,11 @@ export class DashboardService {
     let notifications$: Observable<any[]> = of([]);
     
     if (user.role === 'SuperAdmin' || user.role === 'Admin') {
-      // Try to fetch clients (if endpoint exists)
-      clients$ = this.apiService.get<any>('users?page=1&pageSize=500').pipe(
-        map(res => ApiService.extractItems<any>(res).filter((u: any) => u.role === 'Client' || u.roleName === 'Client')),
+      // Reuse shared users fetch; filter to clients for dashboard stats.
+      clients$ = this.sharedListData.getAllUsers().pipe(
+        map((list) =>
+          (list as any[]).filter((u: any) => u.role === 'Client' || u.roleName === 'Client')
+        ),
         catchError(() => of([]))
       );
       
@@ -120,20 +132,32 @@ export class DashboardService {
       );
     }
 
-    return forkJoin({
+    // forkJoin waits for every source to complete; a single hung HTTP would spin the UI forever.
+    const stream$ = forkJoin({
       orders: orders$,
       clients: clients$,
       invoices: invoices$,
       galleryItems: galleryItems$,
       notifications: notifications$
     }).pipe(
-      map(({ orders, clients, invoices, galleryItems, notifications }) => 
+      timeout(120000),
+      map(({ orders, clients, invoices, galleryItems, notifications }) =>
         this.processDashboardData(orders, clients, invoices, galleryItems, notifications, user.role)
       ),
       catchError(() => {
         return of(this.getEmptyDashboardData());
-      })
+      }),
+      shareReplay({ bufferSize: 1, refCount: true })
     );
+
+    this.dashboardDataCache = { key: cacheKey, stream$ };
+    return stream$;
+  }
+
+  /** Call after mutations that should refresh admin dashboard aggregates (optional; TTL/cache refCount also clears). */
+  invalidateDashboardCache(): void {
+    this.dashboardDataCache = null;
+    this.sharedListData.clearAll();
   }
 
   private processDashboardData(

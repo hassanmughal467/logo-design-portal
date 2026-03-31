@@ -10,7 +10,6 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 })
 export class BillingQueueComponent implements OnInit {
   queue: BillingQueueOverview[] = [];
-  loading = false;
   selectedClient: BillingQueueOverview | null = null;
   eligibleOrders: BillingEligibleOrder[] = [];
   ordersLoading = false;
@@ -31,14 +30,11 @@ export class BillingQueueComponent implements OnInit {
   }
 
   loadQueue(): void {
-    this.loading = true;
     this.billingService.getBillingQueue().subscribe({
       next: (data) => {
         this.queue = data;
-        this.loading = false;
       },
       error: () => {
-        this.loading = false;
         this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load billing queue.' });
       }
     });

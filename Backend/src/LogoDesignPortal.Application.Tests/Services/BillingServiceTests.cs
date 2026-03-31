@@ -217,6 +217,7 @@ public class BillingServiceTests
             Mock.Of<INotificationService>(),
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Microsoft.Extensions.Options.Options.Create(new ProductionSafetyOptions()),
+            Mock.Of<LogoDesignPortal.Application.Caching.IReadModelCacheVersions>(),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<InvoiceService>>());
 
         var safetyOptions = new ProductionSafetyOptions { DisableBillingGeneration = false };

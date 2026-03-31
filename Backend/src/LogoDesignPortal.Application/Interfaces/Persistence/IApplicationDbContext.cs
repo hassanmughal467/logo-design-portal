@@ -44,4 +44,10 @@ public interface IApplicationDbContext
     /// Required for MySQL with retry-on-failure: user-initiated transactions must run inside CreateExecutionStrategy().
     /// </summary>
     Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Average completion interval (days) per designer for completed orders. Implemented with SQL on MySQL;
+    /// falls back to an in-memory aggregate for SQLite / InMemory providers.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, double>> GetDesignerAverageCompletionDaysByDesignerAsync(CancellationToken cancellationToken = default);
 }

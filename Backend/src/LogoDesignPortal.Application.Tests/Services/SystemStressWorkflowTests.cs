@@ -2,11 +2,14 @@ using System.Diagnostics;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 using LogoDesignPortal.Application;
+using LogoDesignPortal.Application.BackgroundJobs;
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Revisions;
 using LogoDesignPortal.Application.Interfaces;
@@ -59,6 +62,9 @@ public class SystemStressWorkflowTests : IAsyncDisposable
             }!)
             .Build();
         services.AddSingleton<IConfiguration>(config);
+        services.AddDistributedMemoryCache();
+        services.AddSingleton<IReadModelCacheVersions, ReadModelCacheVersions>();
+        services.AddSingleton<IBackgroundJobScheduler, NullBackgroundJobScheduler>();
 
         services.AddApplication();
         services.AddScoped<INotificationService>(_ => Mock.Of<INotificationService>());

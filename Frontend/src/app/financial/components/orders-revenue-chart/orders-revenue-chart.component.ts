@@ -8,7 +8,6 @@ import { OrdersVsRevenueItem } from '@core/services/financial-analytics.service'
 })
 export class OrdersRevenueChartComponent implements OnChanges {
   @Input() items: OrdersVsRevenueItem[] = [];
-  @Input() loading = false;
 
   chartOptions: any = null;
 

@@ -1,0 +1,33 @@
+<div
+  class="skeleton-dashboard"
+  [class.skeleton-dashboard--client]="variant === 'client'"
+  [class.skeleton-dashboard--analytics]="variant === 'analytics'"
+  [class.skeleton-dashboard--table]="variant === 'table'"
+  data-testid="scoped-page-skeleton"
+  role="status"
+  aria-live="polite"
+  aria-busy="true">
+  <div class="sk-kpi-grid">
+    <div *ngFor="let _ of kpiIndices" class="sk-kpi">
+      <div class="sk-kpi-icon"></div>
+      <div class="sk-kpi-body">
+        <div class="sk-kpi-value"></div>
+        <div class="sk-kpi-label"></div>
+      </div>
+    </div>
+  </div>
+
+  <ng-container *ngIf="variant === 'table'">
+    <app-skeleton-table [rows]="10" [columns]="6" [showToolbar]="true"></app-skeleton-table>
+  </ng-container>
+
+  <ng-container *ngIf="variant !== 'table'">
+    <div *ngFor="let _ of sectionIndices" class="sk-section">
+      <div class="sk-section-title"></div>
+      <div class="sk-section-body" [class.sk-section-body--split]="variant === 'analytics' || variant === 'admin'">
+        <div class="sk-chart"></div>
+        <div *ngIf="variant === 'analytics' || variant === 'admin'" class="sk-chart sk-chart--secondary"></div>
+      </div>
+    </div>
+  </ng-container>
+</div>

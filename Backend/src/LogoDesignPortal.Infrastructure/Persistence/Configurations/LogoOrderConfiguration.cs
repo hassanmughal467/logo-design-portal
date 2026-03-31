@@ -165,9 +165,16 @@ public class LogoOrderConfiguration : IEntityTypeConfiguration<LogoOrder>
         builder.HasIndex(e => e.CreatedAt);
         builder.HasIndex(e => e.UpdatedAt);
         builder.HasIndex(e => new { e.Status, e.CreatedAt });
+        // Revenue / completion-time analytics (filter Completed + range on completion timestamp)
+        builder.HasIndex(e => new { e.Status, e.UpdatedAt });
         builder.HasIndex(e => new { e.ClientId, e.CreatedAt });
         builder.HasIndex(e => new { e.ClientId, e.Status });
         builder.HasIndex(e => new { e.DesignerId, e.Status });
+        builder.HasIndex(e => new { e.IsArchived, e.CreatedAt });
         builder.HasIndex(e => e.QuoteId).IsUnique();
+
+        builder.Property(e => e.RowVersion)
+            .IsRowVersion()
+            .IsConcurrencyToken();
     }
 }

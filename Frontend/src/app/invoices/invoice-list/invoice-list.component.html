@@ -1,4 +1,4 @@
-<div class="invoices-page">
+<div class="invoices-page" [class.invoices-page--refreshing]="isInvoicesRefreshing">
   <app-page-header title="Invoices Management" subtitle="Track payments and manage invoices">
     <div actions *ngIf="canManageInvoices">
       <p-button label="Generate Invoice" icon="pi pi-plus" (onClick)="openGenerateDialog()" styleClass="p-button-primary"></p-button>
@@ -6,6 +6,9 @@
     </div>
   </app-page-header>
 
+  <app-skeleton-dashboard *ngIf="showInvoiceSkeleton" variant="table" [kpiCount]="4"></app-skeleton-dashboard>
+
+  <ng-container *ngIf="!showInvoiceSkeleton">
   <!-- Invoice Statistics Cards -->
   <div class="kpi-grid">
     <app-kpi-card label="Total Invoices" [value]="invoiceStats.total" icon="pi pi-file-pdf" variant="primary"></app-kpi-card>
@@ -41,7 +44,7 @@
           <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getUnpaidInvoices().length === 0"
             (onClick)="selectedInvoices = getUnpaidInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
         </div>
-        <p-table [value]="getUnpaidInvoices()" [loading]="loading" [paginator]="true" [rows]="10"
+        <p-table [value]="getUnpaidInvoices()" [paginator]="true" [rows]="10"
           [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
@@ -89,7 +92,7 @@
           <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getPendingInvoices().length === 0"
             (onClick)="selectedInvoices = getPendingInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
         </div>
-        <p-table [value]="getPendingInvoices()" [loading]="loading" [paginator]="true" [rows]="10"
+        <p-table [value]="getPendingInvoices()" [paginator]="true" [rows]="10"
           [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
@@ -131,7 +134,7 @@
           <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getDueInvoices().length === 0"
             (onClick)="selectedInvoices = getDueInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
         </div>
-        <p-table [value]="getDueInvoices()" [loading]="loading" [paginator]="true" [rows]="10"
+        <p-table [value]="getDueInvoices()" [paginator]="true" [rows]="10"
           [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
@@ -169,7 +172,7 @@
         </p-table>
       </p-tabPanel>
       <p-tabPanel header="Paid" leftIcon="pi pi-check-circle">
-        <p-table [value]="getPaidInvoices()" [loading]="loading" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
+        <p-table [value]="getPaidInvoices()" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr><th>Invoice #</th><th>Amount</th><th>Paid Date</th><th>Payment Method</th><th>Actions</th></tr>
           </ng-template>
@@ -198,6 +201,7 @@
       </p-tabPanel>
     </p-tabView>
   </app-card-container>
+  </ng-container>
 
   <!-- Generate Invoice Dialog -->
   <p-dialog 

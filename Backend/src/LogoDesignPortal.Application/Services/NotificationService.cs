@@ -1,5 +1,6 @@
 using AutoMapper;
 using LogoDesignPortal.Application.DTOs.Notifications;
+using LogoDesignPortal.Application.BackgroundJobs;
 using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
@@ -14,19 +15,19 @@ public class NotificationService : INotificationService
 {
     private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
-    private readonly IEmailService _emailService;
     private readonly ISettingsService _settingsService;
     private readonly IRealtimeNotificationSender _realtimeSender;
     private readonly IConfiguration _configuration;
+    private readonly IBackgroundJobScheduler _backgroundJobs;
 
-    public NotificationService(IApplicationDbContext context, IMapper mapper, IEmailService emailService, ISettingsService settingsService, IRealtimeNotificationSender realtimeSender, IConfiguration configuration)
+    public NotificationService(IApplicationDbContext context, IMapper mapper, ISettingsService settingsService, IRealtimeNotificationSender realtimeSender, IConfiguration configuration, IBackgroundJobScheduler backgroundJobs)
     {
         _context = context;
         _mapper = mapper;
-        _emailService = emailService;
         _settingsService = settingsService;
         _realtimeSender = realtimeSender;
         _configuration = configuration;
+        _backgroundJobs = backgroundJobs;
     }
 
     private static readonly TimeSpan DeduplicationWindow = TimeSpan.FromMinutes(5);
@@ -154,7 +155,8 @@ public class NotificationService : INotificationService
 <p><small>This is an automated notification from Hawk Merchandising Web Portal.</small></p>
 </body>
 </html>";
-                    await _emailService.SendEmailAsync(user.Email, title, htmlBody, true);
+                    // Non-blocking: deliver via Hangfire (or no-op in tests).
+                    _backgroundJobs.EnqueueSendEmail(user.Email, title, htmlBody, true);
                 }
             }
         }

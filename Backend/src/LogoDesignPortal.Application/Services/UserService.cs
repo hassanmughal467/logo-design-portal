@@ -1,4 +1,5 @@
 using BCrypt.Net;
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.DTOs.Common;
 using LogoDesignPortal.Application.DTOs.Users;
 using LogoDesignPortal.Application.DTOs.Orders;
@@ -9,6 +10,7 @@ using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace LogoDesignPortal.Application.Services;
 
@@ -19,19 +21,32 @@ public class UserService : IUserService
     private readonly IInvoiceService _invoiceService;
     private readonly IFileService _fileService;
     private readonly IAuditLogService _auditLogService;
+    private readonly IDistributedCache _distributedCache;
+    private readonly IReadModelCacheVersions _readModelCache;
 
     public UserService(
         IApplicationDbContext context,
         IOrderService orderService,
         IInvoiceService invoiceService,
         IFileService fileService,
-        IAuditLogService auditLogService)
+        IAuditLogService auditLogService,
+        IDistributedCache distributedCache,
+        IReadModelCacheVersions readModelCache)
     {
         _context = context;
         _orderService = orderService;
         _invoiceService = invoiceService;
         _fileService = fileService;
         _auditLogService = auditLogService;
+        _distributedCache = distributedCache;
+        _readModelCache = readModelCache;
+    }
+
+    /// <summary>Invalidates cached user lists and admin analytics that depend on client counts.</summary>
+    private void InvalidateUserRelatedReadModels()
+    {
+        _readModelCache.BumpUsers();
+        _readModelCache.BumpAnalytics();
     }
 
     public async Task<UserResponseDto> CreateUserAsync(CreateUserRequestDto request)
@@ -114,6 +129,7 @@ public class UserService : IUserService
         }
 
         await _context.SaveChangesAsync();
+        InvalidateUserRelatedReadModels();
 
         // Load profile information for response
         ClientProfileDto? clientProfileDto = null;
@@ -326,6 +342,11 @@ public class UserService : IUserService
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
+        var cacheKey = $"ldp:cache:users:paged:e{_readModelCache.UsersEpoch}:{page}:{pageSize}";
+        var cachedUsers = await DistributedJsonCache.GetAsync<PagedResultDto<UserResponseDto>>(_distributedCache, cacheKey).ConfigureAwait(false);
+        if (cachedUsers != null)
+            return cachedUsers;
+
         var query = _context.Users
             .Include(u => u.Role)
             .Include(u => u.ClientProfile)
@@ -398,13 +419,61 @@ public class UserService : IUserService
             };
         }).ToList();
 
-        return new PagedResultDto<UserResponseDto>
+        var paged = new PagedResultDto<UserResponseDto>
         {
             Items = items,
             Total = total,
             Page = page,
             PageSize = pageSize
         };
+
+        await DistributedJsonCache.SetAsync(_distributedCache, cacheKey, paged, TimeSpan.FromSeconds(60)).ConfigureAwait(false);
+
+        return paged;
+    }
+
+    public async Task<IReadOnlyList<UserTypeaheadDto>> SearchUsersForTypeaheadAsync(string? query, string? roleName, int limit, CancellationToken cancellationToken = default)
+    {
+        limit = Math.Clamp(limit, 1, 20);
+        var q = _context.Users.AsNoTracking()
+            .Include(u => u.Role)
+            .Include(u => u.ClientProfile)
+            .Where(u => !u.IsDeleted);
+        if (!string.IsNullOrWhiteSpace(roleName))
+            q = q.Where(u => u.Role != null && u.Role.Name == roleName);
+        var term = query?.Trim() ?? string.Empty;
+        if (term.Length > 0)
+        {
+            var t = term.ToLowerInvariant();
+            q = q.Where(u =>
+                u.Email.ToLower().Contains(t) ||
+                u.FirstName.ToLower().Contains(t) ||
+                u.LastName.ToLower().Contains(t) ||
+                (u.ClientProfile != null && u.ClientProfile.CompanyName != null && u.ClientProfile.CompanyName.ToLower().Contains(t)));
+        }
+
+        var rows = await q
+            .OrderBy(u => u.Email)
+            .Take(limit)
+            .Select(u => new UserTypeaheadDto
+            {
+                Id = u.Id,
+                Email = u.Email,
+                FirstName = u.FirstName ?? string.Empty,
+                LastName = u.LastName ?? string.Empty,
+                RoleName = u.Role != null ? u.Role.Name : string.Empty,
+                Label = string.Empty
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var r in rows)
+        {
+            var name = $"{r.FirstName} {r.LastName}".Trim();
+            r.Label = string.IsNullOrEmpty(name) ? r.Email : $"{name} ({r.Email})";
+        }
+
+        return rows;
     }
 
     public async Task<UserResponseDto> UpdateUserAsync(Guid id, UpdateUserRequestDto request, Guid? performedBy = null)
@@ -565,6 +634,7 @@ public class UserService : IUserService
         }
 
         await _context.SaveChangesAsync();
+        InvalidateUserRelatedReadModels();
 
         // Load profile information for response
         ClientProfileDto? clientProfileDto = null;
@@ -751,6 +821,7 @@ public class UserService : IUserService
         }
 
         await _context.SaveChangesAsync();
+        InvalidateUserRelatedReadModels();
 
         // Load updated profile for response
         var updatedClientProfile = await _context.ClientProfiles
@@ -842,6 +913,7 @@ public class UserService : IUserService
 
         await _auditLogService.LogActionAsync("User", user.Id, "DeactivateUser", deactivatedBy, "SuperAdmin", null, null, $"User {user.Email} deactivated.");
         await _context.SaveChangesAsync();
+        InvalidateUserRelatedReadModels();
         return true;
     }
 
@@ -863,6 +935,7 @@ public class UserService : IUserService
         user.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+        InvalidateUserRelatedReadModels();
         return true;
     }
 
@@ -923,6 +996,7 @@ public class UserService : IUserService
 
         await _auditLogService.LogActionAsync("User", user.Id, "DeleteUser", deletedBy, "SuperAdmin", null, null, $"User {user.Email} permanently deleted.");
         await _context.SaveChangesAsync();
+        InvalidateUserRelatedReadModels();
         return true;
     }
 
@@ -965,6 +1039,7 @@ public class UserService : IUserService
 
         _context.DesignerProfiles.Add(designerProfile);
         await _context.SaveChangesAsync();
+        InvalidateUserRelatedReadModels();
 
         return new DesignerProfileResponseDto
         {

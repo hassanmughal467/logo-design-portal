@@ -11,7 +11,6 @@ import { forkJoin, of } from 'rxjs';
   styleUrls: ['./financial-dashboard.component.scss']
 })
 export class FinancialDashboardComponent implements OnInit, OnDestroy {
-  loading = true;
   apiError = false;
   overview: FinancialOverview | null = null;
   revenueTrendItems: any[] = [];
@@ -42,7 +41,6 @@ export class FinancialDashboardComponent implements OnInit, OnDestroy {
   }
 
   loadData(): void {
-    this.loading = true;
     this.apiError = false;
 
     forkJoin({
@@ -76,9 +74,6 @@ export class FinancialDashboardComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.apiError = true;
-        },
-        complete: () => {
-          this.loading = false;
         }
       });
   }

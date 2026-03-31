@@ -8,17 +8,12 @@
       </div>
     </ng-template>
 
-    <div *ngIf="loading" class="loading-row">
-      <p-progressSpinner strokeWidth="4" [style]="{width: '40px', height: '40px'}"></p-progressSpinner>
-      <span>Loading billing queue...</span>
-    </div>
-
-    <div *ngIf="!loading && queue.length === 0" class="empty-state">
+    <div *ngIf="queue.length === 0" class="empty-state">
       <i class="pi pi-check-circle"></i>
       <p>No uninvoiced completed orders. All caught up!</p>
     </div>
 
-    <p-table *ngIf="!loading && queue.length > 0" [value]="queue" [rowHover]="true" styleClass="p-datatable-sm p-datatable-striped">
+    <p-table *ngIf="queue.length > 0" [value]="queue" [rowHover]="true" styleClass="p-datatable-sm p-datatable-striped">
       <ng-template pTemplate="header">
         <tr>
           <th>Client</th>

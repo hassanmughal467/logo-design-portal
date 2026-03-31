@@ -8,7 +8,6 @@ import { FinancialActivityItem } from '@core/services/financial-analytics.servic
 })
 export class FinancialActivityFeedComponent {
   @Input() items: FinancialActivityItem[] = [];
-  @Input() loading = false;
 
   getIcon(type: string): string {
     switch (type) {

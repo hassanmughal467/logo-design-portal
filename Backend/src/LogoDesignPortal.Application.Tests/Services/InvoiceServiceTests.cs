@@ -1,4 +1,5 @@
 using AutoMapper;
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.Configuration;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.Interfaces;
@@ -132,6 +133,7 @@ public class InvoiceServiceTests
             Mock.Of<INotificationService>(),
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Microsoft.Extensions.Options.Options.Create(new ProductionSafetyOptions()),
+            Mock.Of<IReadModelCacheVersions>(),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<InvoiceService>>());
     }
 

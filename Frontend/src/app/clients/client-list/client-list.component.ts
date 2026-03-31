@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
+import { SharedListDataService } from '@core/services/shared-list-data.service';
 import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -26,7 +27,6 @@ export interface Client {
 })
 export class ClientListComponent implements OnInit, OnDestroy {
   clients: Client[] = [];
-  loading = false;
   globalFilter = '';
   first = 0;
   rows = 10;
@@ -37,7 +37,8 @@ export class ClientListComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private authService: AuthService,
     private messageService: MessageService,
-    private router: Router
+    private router: Router,
+    private sharedListData: SharedListDataService
   ) {}
 
   ngOnInit(): void {
@@ -50,13 +51,13 @@ export class ClientListComponent implements OnInit, OnDestroy {
   }
 
   loadClients(): void {
-    this.loading = true;
     // Fetch users with Client role and transform to Client interface
-    this.apiService.get<any>('users?page=1&pageSize=500')
+    this.sharedListData
+      .getAllUsers()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response) => {
-          const users = ApiService.extractItems<any>(response);
+        next: (usersRaw) => {
+          const users = usersRaw as any[];
           // Filter and transform to clients
           this.clients = users
             .filter(u => u.role === 'Client' || u.roleName === 'Client')
@@ -75,22 +76,21 @@ export class ClientListComponent implements OnInit, OnDestroy {
           
           // Load orders to calculate stats
           this.loadClientStats();
-          this.loading = false;
         },
         error: (error) => {
           this.clients = [];
-          this.loading = false;
         }
       });
   }
 
   private loadClientStats(): void {
     // Load orders to calculate client statistics
-    this.apiService.get<any>('orders?page=1&pageSize=500')
+    this.sharedListData
+      .fetchAllOrdersUncached()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response) => {
-          const orders = ApiService.extractItems<any>(response);
+        next: (ordersRaw) => {
+          const orders = ordersRaw as any[];
           // Calculate stats per client
           const clientStats = new Map<string, { orders: number; spent: number; lastOrder?: Date }>();
           
