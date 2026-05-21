@@ -62,7 +62,7 @@ public class InvoicesController : ControllerBase
 
     [HttpGet]
     [ProducesResponseType(typeof(PagedResultDto<InvoiceResponseDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetInvoices([FromQuery] Guid? clientId = null, [FromQuery] DateTime? issueDateFrom = null, [FromQuery] DateTime? issueDateTo = null, [FromQuery] BillingType? billingType = null, [FromQuery] InvoiceStatus? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+    public async Task<IActionResult> GetInvoices([FromQuery] Guid? clientId = null, [FromQuery] DateTime? issueDateFrom = null, [FromQuery] DateTime? issueDateTo = null, [FromQuery] BillingType? billingType = null, [FromQuery] InvoiceStatus? status = null, [FromQuery] bool excludePaid = false, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         var userId = User.GetUserIdOrThrow();
         var userRole = User.FindFirstValue(ClaimTypes.Role);
@@ -72,7 +72,8 @@ public class InvoicesController : ControllerBase
             IssueDateFrom = issueDateFrom,
             IssueDateTo = issueDateTo,
             BillingType = billingType,
-            Status = status
+            Status = status,
+            ExcludePaid = excludePaid
         };
         var invoices = await _invoiceService.GetInvoicesAsync(userId, userRole, filters, page, pageSize);
         return Ok(invoices);

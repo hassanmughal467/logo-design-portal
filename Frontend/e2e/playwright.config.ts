@@ -141,6 +141,12 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
       },
     },
+    {
+      name: 'mobile-chrome',
+      dependencies: [],
+      testMatch: /smoke\/.*\.spec\.ts/,
+      use: { ...devices['Pixel 5'] },
+    },
   ],
 
   webServer: isCi

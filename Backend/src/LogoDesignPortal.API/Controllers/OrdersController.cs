@@ -1,5 +1,6 @@
 using LogoDesignPortal.API.Attributes;
 using LogoDesignPortal.API.Extensions;
+using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.API.Models;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.Exceptions;
@@ -26,6 +27,7 @@ public class OrdersController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = "Client")]
+    [RequirePermission("CreateOrder")]
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequestDto request)
@@ -47,7 +49,7 @@ public class OrdersController : ControllerBase
     [Authorize(Roles = "Client")]
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [RequestSizeLimit(50 * 1024 * 1024)]
+    [RequestSizeLimit(UploadLimits.MaxMultipartBytes)]
     public async Task<IActionResult> CreateOrderWithFiles([FromForm] string order, [FromForm] IFormFileCollection files, [FromForm] string? description = null)
     {
         try
@@ -82,7 +84,7 @@ public class OrdersController : ControllerBase
     [Authorize(Roles = "SuperAdmin,Admin")]
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [RequestSizeLimit(100 * 1024 * 1024)]
+    [RequestSizeLimit(UploadLimits.MaxMultipartBytes)]
     public async Task<IActionResult> CreateManualCompletedOrder([FromForm] string order, [FromForm] IFormFileCollection files)
     {
         try
@@ -125,7 +127,7 @@ public class OrdersController : ControllerBase
         {
             if (User.GetUserId() is not { } userId)
                 return Unauthorized(this.StandardError("User identity could not be determined."));
-            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            var userRole = User.GetUserRole();
             var order = await _orderService.GetOrderByIdAsync(id, userId, userRole);
             
             if (order == null)
@@ -225,6 +227,7 @@ public class OrdersController : ControllerBase
 
     [HttpPut("{id}/status")]
     [Authorize(Roles = "SuperAdmin,Admin,Designer,Client")]
+    [RequirePermission("UpdateOrderStatus")]
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateOrderStatus(Guid id, [FromBody] UpdateOrderStatusRequestDto request)
@@ -321,6 +324,7 @@ public class OrdersController : ControllerBase
 
     [HttpPost("{id}/send-files-to-client")]
     [Authorize(Roles = "SuperAdmin,Admin")]
+    [RequirePermission("UpdateOrderStatus")]
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendFilesToClient(Guid id, [FromBody] List<Guid> fileIds)
@@ -340,6 +344,7 @@ public class OrdersController : ControllerBase
 
     [HttpPost("{id}/send-preview-batch")]
     [Authorize(Roles = "SuperAdmin,Admin")]
+    [RequirePermission("UpdateOrderStatus")]
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendPreviewBatchToClient(Guid id, [FromBody] SendPreviewBatchRequestDto? request)

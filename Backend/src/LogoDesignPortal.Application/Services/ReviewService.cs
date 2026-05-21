@@ -11,11 +11,16 @@ public class ReviewService : IReviewService
 {
     private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
+    private readonly IClientProfileEnsureService _clientProfileEnsure;
 
-    public ReviewService(IApplicationDbContext context, IMapper mapper)
+    public ReviewService(
+        IApplicationDbContext context,
+        IMapper mapper,
+        IClientProfileEnsureService clientProfileEnsure)
     {
         _context = context;
         _mapper = mapper;
+        _clientProfileEnsure = clientProfileEnsure;
     }
 
     public async Task<ReviewResponseDto> CreateReviewAsync(CreateReviewRequestDto request, Guid clientId)
@@ -25,14 +30,7 @@ public class ReviewService : IReviewService
             throw new InvalidOperationException("Rating must be between 1 and 5.");
         }
 
-        var client = await _context.ClientProfiles
-            .Include(c => c.User)
-            .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
-
-        if (client == null)
-        {
-            throw new InvalidOperationException("Client profile not found.");
-        }
+        var client = await _clientProfileEnsure.EnsureForClientUserAsync(clientId);
 
         var order = await _context.LogoOrders
             .FirstOrDefaultAsync(o => o.Id == request.OrderId && !o.IsDeleted);

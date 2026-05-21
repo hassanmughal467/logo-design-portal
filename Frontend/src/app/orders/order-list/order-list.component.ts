@@ -11,6 +11,7 @@ import { Observable, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, finalize, map, switchMap, takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus, OrderPriority, OrderSource } from '@shared/models/order.model';
 import { isOrderLocked as checkOrderLocked } from '@shared/utils/order-locking';
+import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
 
 interface SummaryCard {
   label: string;
@@ -38,6 +39,7 @@ interface UserPickOption {
   styleUrls: ['./order-list.component.scss']
 })
 export class OrderListComponent implements OnInit, OnDestroy {
+  readonly maxUploadFileSize = MAX_UPLOAD_BYTES;
   orders: Order[] = [];
   filteredOrders: Order[] = [];
   selectedStatus: OrderStatus | null = null;
@@ -750,7 +752,19 @@ export class OrderListComponent implements OnInit, OnDestroy {
   onQuickCompletedFileSelect(event: any): void {
     const files: File[] = event.files ? Array.from(event.files) : [];
     const deduped = files.filter(file => !this.quickCompletedFiles.some(f => f.name === file.name && f.size === file.size));
-    this.quickCompletedFiles = [...this.quickCompletedFiles, ...deduped];
+    const tooBig = deduped.filter(f => f.size > MAX_UPLOAD_BYTES);
+    if (tooBig.length > 0) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Each file must be 500MB or smaller.' });
+    }
+    const withinEach = deduped.filter(f => f.size <= MAX_UPLOAD_BYTES);
+    const merged = [...this.quickCompletedFiles, ...withinEach];
+    if (combinedFileBytes(merged) > MAX_UPLOAD_BYTES) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Combined file size cannot exceed 500MB.' });
+      this.quickCompletedFileUpload?.clear();
+      return;
+    }
+    this.quickCompletedFiles = merged;
+    this.quickCompletedFileUpload?.clear();
   }
 
   removeQuickCompletedFile(index: number): void {
@@ -1024,31 +1038,25 @@ export class OrderListComponent implements OnInit, OnDestroy {
     const files: File[] = event.files ? Array.from(event.files) : [];
     if (files.length === 0) return;
 
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    const vectorExtensions = ['.svg', '.pdf', '.ai', '.eps', '.psd'];
-    const embroiderExtensions = ['.pes', '.dst', '.jef', '.exp', '.vp3', '.xxx', '.hus', '.art', '.vip', '.vip3', '.shv', '.pec', '.jpm', '.sew', '.emb', '.csd', '.pcs', '.phb', '.phc', '.stx', '.s10', '.dsb', '.zsk'];
-    const imageMaxBytes = 10 * 1024 * 1024;  // 10MB
-    const vectorMaxBytes = 25 * 1024 * 1024;  // 25MB
-
-    const getMaxSize = (fileName: string): number => {
-      const ext = '.' + (fileName.split('.').pop() || '').toLowerCase();
-      if (imageExtensions.includes(ext)) return imageMaxBytes;
-      if (vectorExtensions.includes(ext) || embroiderExtensions.includes(ext)) return vectorMaxBytes;
-      return imageMaxBytes;
-    };
-
-    const invalidFiles = files.filter(file => file.size > getMaxSize(file.name));
-    if (invalidFiles.length > 0) {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: `${invalidFiles.length} file(s) exceed allowed size (images: 10MB, vector/docs: 25MB)` });
+    const oversizeEach = files.filter(file => file.size > MAX_UPLOAD_BYTES);
+    if (oversizeEach.length > 0) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: `${oversizeEach.length} file(s) exceed the maximum size of 500MB each.` });
     }
 
     const validFiles = files.filter(file => {
-      if (file.size > getMaxSize(file.name)) return false;
+      if (file.size > MAX_UPLOAD_BYTES) return false;
       return !this.selectedFiles.some(ef => ef.name === file.name && ef.size === file.size);
     });
 
+    const merged = [...this.selectedFiles, ...validFiles];
+    if (combinedFileBytes(merged) > MAX_UPLOAD_BYTES) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Combined file size cannot exceed 500MB.' });
+      this.fileUploadComponent?.clear();
+      return;
+    }
+
     if (validFiles.length > 0) {
-      this.selectedFiles = [...this.selectedFiles, ...validFiles];
+      this.selectedFiles = merged;
       this.uploadSuccess = false;
     }
     this.fileUploadComponent?.clear();

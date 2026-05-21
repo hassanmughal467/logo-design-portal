@@ -127,7 +127,7 @@
             [multiple]="true"
             [auto]="false"
             accept="image/*,.pdf,.ai,.eps,.psd,.svg,.pes,.dst,.jef,.exp,.vp3,.xxx,.hus,.art,.vip,.vip3,.shv,.pec,.jpm,.sew,.emb,.csd,.pcs,.phb,.phc,.stx,.s10,.dsb,.zsk"
-            [maxFileSize]="26214400"
+            [maxFileSize]="maxUploadFileSize"
             (onSelect)="onFileSelect($event)"
             chooseLabel="Choose Files"
             [showUploadButton]="false"
@@ -137,7 +137,7 @@
           ></p-fileUpload>
           <small class="p-help">
             <i class="pi pi-info-circle"></i>
-            Maximum file size: 10MB (images), 25MB (vector/embroidery)<br>
+            Up to 500MB total per upload; each file may be up to 500MB.<br>
             Supported formats: JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD, embroidery (PES, DST, JEF, EXP, VP3, XXX, HUS, ART, VIP, etc.)<br>
             You can select multiple files at once, or click Choose Files again to add more
           </small>

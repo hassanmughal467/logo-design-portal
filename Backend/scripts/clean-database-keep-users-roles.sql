@@ -24,6 +24,7 @@ DELETE FROM OrderLogs;
 DELETE FROM OrderStatusHistories;
 DELETE FROM LogoFiles;
 DELETE FROM LogoOrders;
+DELETE FROM Quotes;
 DELETE FROM DesignerInvoiceAdjustments;
 DELETE FROM DesignerInvoiceItems;
 DELETE FROM DesignerInvoices;

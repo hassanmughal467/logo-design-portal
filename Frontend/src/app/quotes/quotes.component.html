@@ -67,6 +67,7 @@
       <div class="field">
         <label>Attachments</label>
         <p-fileUpload #quoteFileUpload mode="basic" [multiple]="true" [auto]="false" (onSelect)="onFileSelect($event)"
+          [maxFileSize]="maxUploadFileSize"
           [showUploadButton]="false" [showCancelButton]="false"></p-fileUpload>
       </div>
       <div class="dialog-actions">

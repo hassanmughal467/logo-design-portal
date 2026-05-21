@@ -31,6 +31,7 @@ public class OrderService : IOrderService
     private readonly ILogger<OrderService> _logger;
     private readonly IDistributedCache _distributedCache;
     private readonly IReadModelCacheVersions _readModelCache;
+    private readonly IClientProfileEnsureService _clientProfileEnsure;
 
     public OrderService(
         IApplicationDbContext context,
@@ -42,7 +43,8 @@ public class OrderService : IOrderService
         ICommentService commentService,
         ILogger<OrderService> logger,
         IDistributedCache distributedCache,
-        IReadModelCacheVersions readModelCache)
+        IReadModelCacheVersions readModelCache,
+        IClientProfileEnsureService clientProfileEnsure)
     {
         _context = context;
         _mapper = mapper;
@@ -54,6 +56,7 @@ public class OrderService : IOrderService
         _logger = logger;
         _distributedCache = distributedCache;
         _readModelCache = readModelCache;
+        _clientProfileEnsure = clientProfileEnsure;
     }
 
     /// <summary>
@@ -69,7 +72,7 @@ public class OrderService : IOrderService
 
     public async Task<OrderResponseDto> CreateOrderAsync(CreateOrderRequestDto request, Guid clientId)
     {
-        var client = await EnsureClientExistsAsync(clientId);
+        var client = await _clientProfileEnsure.EnsureForClientUserAsync(clientId);
 
         var order = _mapper.Map<LogoOrder>(request);
         order.Id = Guid.NewGuid();
@@ -138,7 +141,7 @@ public class OrderService : IOrderService
         if (files == null || files.Length == 0)
             throw new InvalidOperationException("At least one reference file is required for order creation.");
 
-        var client = await EnsureClientExistsAsync(clientId);
+        var client = await _clientProfileEnsure.EnsureForClientUserAsync(clientId);
 
         List<LogoFile>? preparedFiles = null;
         LogoOrder? order = null;
@@ -235,7 +238,7 @@ public class OrderService : IOrderService
 
         var clientUserId = await ResolveOrCreateClientUserIdAsync(request, createdBy);
 
-        var client = await EnsureClientExistsAsync(clientUserId);
+        var client = await _clientProfileEnsure.EnsureForClientUserAsync(clientUserId);
         var designerProfile = await _context.DesignerProfiles
             .FirstOrDefaultAsync(d => d.UserId == request.DesignerUserId && !d.IsDeleted);
 
@@ -314,7 +317,7 @@ public class OrderService : IOrderService
                 await _context.SaveChangesAsync(ct);
             }
 
-            order.Status = OrderStatus.Completed;
+            OrderStatusTransitionHelper.ApplyManualCompleted(order);
             order.BillingEligible = true;
             order.CompletedDate = completedAtUtc;
             order.CreatedAt = completedAtUtc; // preserve backdated analytics/reporting date
@@ -388,58 +391,6 @@ public class OrderService : IOrderService
         return user.Id;
     }
 
-    private async Task<ClientProfile> EnsureClientExistsAsync(Guid clientId)
-    {
-        var client = await _context.ClientProfiles
-            .Include(c => c.User)
-            .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
-
-        if (client == null)
-        {
-            var user = await _context.Users
-                .Include(u => u.Role)
-                .FirstOrDefaultAsync(u => u.Id == clientId && !u.IsDeleted);
-
-            if (user == null || user.Role?.Name != "Client")
-                throw new InvalidOperationException("Client profile not found. Please ensure the client has a company name set in their profile.");
-
-            var deletedProfile = await _context.ClientProfiles
-                .Include(c => c.User)
-                .FirstOrDefaultAsync(c => c.UserId == clientId && c.IsDeleted);
-
-            if (deletedProfile != null)
-            {
-                deletedProfile.IsDeleted = false;
-                deletedProfile.DeletedAt = null;
-                deletedProfile.DeletedBy = null;
-                deletedProfile.CompanyName = string.IsNullOrEmpty(deletedProfile.CompanyName) ? $"{user.FirstName} {user.LastName}".Trim() : deletedProfile.CompanyName;
-                if (string.IsNullOrEmpty(deletedProfile.CompanyName)) deletedProfile.CompanyName = "Personal";
-                deletedProfile.UpdatedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
-                InvalidateOrderReadModelsChanged(invalidateUsersToo: true);
-                client = deletedProfile;
-            }
-            else
-            {
-                client = new ClientProfile
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = user.Id,
-                    CompanyName = $"{user.FirstName} {user.LastName}".Trim(),
-                    ContactName = $"{user.FirstName} {user.LastName}".Trim(),
-                    CreatedAt = DateTime.UtcNow
-                };
-                if (string.IsNullOrEmpty(client.CompanyName)) client.CompanyName = "Personal";
-                _context.ClientProfiles.Add(client);
-                await _context.SaveChangesAsync();
-                InvalidateOrderReadModelsChanged(invalidateUsersToo: true);
-                client = await _context.ClientProfiles.Include(c => c.User).FirstAsync(c => c.Id == client.Id);
-            }
-        }
-
-        return client;
-    }
-
     /// <summary>
     /// Applies client-specific pricing from ClientLogoPricing (set by SuperAdmin per client).
     /// Sets ClientBasePrice, ClientChargePrice (= ClientBasePrice), Price, CurrencyCode.
@@ -470,6 +421,9 @@ public class OrderService : IOrderService
         order.CurrencyCode = currencyCode;
     }
 
+    private static bool RoleEquals(string? userRole, string expected) =>
+        string.Equals((userRole ?? string.Empty).Trim(), expected, StringComparison.OrdinalIgnoreCase);
+
     public async Task<OrderResponseDto?> GetOrderByIdAsync(Guid orderId, Guid? userId, string? userRole)
     {
         var order = await _context.LogoOrders
@@ -478,7 +432,6 @@ public class OrderService : IOrderService
                 .ThenInclude(c => c.User)
             .Include(o => o.Designer)
                 .ThenInclude(d => d.User)
-            .Include(o => o.Files)
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
@@ -486,15 +439,25 @@ public class OrderService : IOrderService
             return null;
         }
 
-        // Authorization checks
-        // Use ForbiddenAccessException for authorization failures (user is authenticated but lacks permission)
-        // This will result in 403 Forbidden instead of 401 Unauthorized
-        if (userRole == "Client" && (order.Client == null || order.Client.UserId != userId))
+        var isClient = RoleEquals(userRole, "Client");
+        var isDesigner = RoleEquals(userRole, "Designer");
+        var isAdmin = RoleEquals(userRole, "Admin");
+        var isSuperAdmin = RoleEquals(userRole, "SuperAdmin");
+
+        if (!isClient && !isDesigner && !isAdmin && !isSuperAdmin)
         {
             throw new ForbiddenAccessException("You don't have access to this order.");
         }
 
-        if (userRole == "Designer")
+        // Authorization checks
+        // Use ForbiddenAccessException for authorization failures (user is authenticated but lacks permission)
+        // This will result in 403 Forbidden instead of 401 Unauthorized
+        if (isClient && (order.Client == null || order.Client.UserId != userId))
+        {
+            throw new ForbiddenAccessException("You don't have access to this order.");
+        }
+
+        if (isDesigner)
         {
             // For designers, we need to check if the order is assigned to their DesignerProfile
             // order.DesignerId is the DesignerProfile.Id, not the User.Id
@@ -522,7 +485,7 @@ public class OrderService : IOrderService
             var clientUserId = order.Client.UserId;
 
             // Client sees the latest admin/superadmin request, not their own counter-offer row.
-            if (userRole == "Client")
+            if (isClient)
             {
                 var latestAdminRequest = await _context.OrderStatusHistories
                     .Where(h => h.OrderId == orderId && h.NewStatus == OrderStatus.PriceApprovalPending && !h.IsDeleted && h.ChangedBy != clientUserId)
@@ -547,7 +510,7 @@ public class OrderService : IOrderService
             }
 
             // Admin/SuperAdmin see the client's latest modify/reject notes on the order detail screen.
-            if (userRole == "Admin" || userRole == "SuperAdmin")
+            if (isAdmin || isSuperAdmin)
             {
                 var latestClientResponse = await _context.OrderStatusHistories
                     .Where(h => h.OrderId == orderId && h.NewStatus == OrderStatus.PriceApprovalPending && !h.IsDeleted && h.ChangedBy == clientUserId)
@@ -561,7 +524,7 @@ public class OrderService : IOrderService
         }
 
         // Enrich "Last Updated By" display name for Admin/SuperAdmin (show client name, not just "Client")
-        if ((userRole == "Admin" || userRole == "SuperAdmin") && order.PriceUpdatedByUserId.HasValue)
+        if ((isAdmin || isSuperAdmin) && order.PriceUpdatedByUserId.HasValue)
         {
             response.PriceUpdatedByUserId = order.PriceUpdatedByUserId;
             var u = await _context.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == order.PriceUpdatedByUserId.Value && !x.IsDeleted);
@@ -576,43 +539,48 @@ public class OrderService : IOrderService
         response.HasInvoice = await _context.InvoiceOrders
             .AnyAsync(io => io.OrderId == orderId);
         
-        // Mask client info for Admin and Designer
-        if (userRole == "Admin" || userRole == "Designer")
+        // Mask client info for Admin and Designer (avoid NRE when Client or User navigation is missing)
+        if (isAdmin || isDesigner)
         {
-            response.Client = new ClientInfoDto
+            if (order.Client != null)
             {
-                Id = order.Client.Id,
-                UserId = order.Client.UserId,
-                CompanyName = order.Client.CompanyName,
-                FirstName = order.Client.User.FirstName,
-                LastName = order.Client.User.LastName,
-                // Email and phone masked
-            };
+                response.Client = new ClientInfoDto
+                {
+                    Id = order.Client.Id,
+                    UserId = order.Client.UserId,
+                    CompanyName = order.Client.CompanyName,
+                    FirstName = order.Client.User?.FirstName ?? string.Empty,
+                    LastName = order.Client.User?.LastName ?? string.Empty
+                    // Email and phone masked
+                };
+            }
         }
 
         // Never show client identity to Designer
-        if (userRole == "Designer")
+        if (isDesigner)
         {
             response.Client = null; // Remove client info completely
         }
 
         // Mask designer identity from Client: show "Company Design Team" instead
-        if (userRole == "Client" && response.Designer != null)
+        if (isClient && response.Designer != null)
         {
             response.AssignedDesignerDisplayName = "Company Design Team";
             response.Designer = null; // Hide designer name, email, profile, userId
         }
-        else if (userRole == "Client" && order.DesignerId.HasValue)
+        else if (isClient && order.DesignerId.HasValue)
         {
             response.AssignedDesignerDisplayName = "Company Design Team";
         }
 
         // Enrich StandardPrice for Designer/Admin when order has design but price not yet submitted
         if (response.StandardPrice == null && order.DesignCategory.HasValue && order.DesignType.HasValue &&
-            (userRole == "Designer" || userRole == "Admin" || userRole == "SuperAdmin"))
+            (isDesigner || isAdmin || isSuperAdmin))
         {
             response.StandardPrice = await GetDisplayStandardPriceAsync(order.DesignCategory.Value, order.DesignType.Value, order.DesignerId);
         }
+
+        await ApplyFileCountsAsync(new List<OrderResponseDto> { response }, new List<Guid> { orderId });
 
         return response;
     }
@@ -620,13 +588,7 @@ public class OrderService : IOrderService
     public async Task<List<OrderResponseDto>> GetOrdersByClientAsync(Guid clientId)
     {
         const int maxList = 200;
-        var client = await _context.ClientProfiles
-            .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
-
-        if (client == null)
-        {
-            return new List<OrderResponseDto>();
-        }
+        var client = await _clientProfileEnsure.EnsureForClientUserAsync(clientId);
 
         var query = _context.LogoOrders
             .AsNoTracking()
@@ -954,7 +916,7 @@ public class OrderService : IOrderService
         // Only move to InProgress from the new-order queue; keep PriceApprovalPending (etc.) until client/admin price flows complete.
         if (order.Status == OrderStatus.WaitingForAdminApproval)
         {
-            order.Status = OrderStatus.InProgress;
+            OrderStatusTransitionHelper.Apply(order, OrderStatus.InProgress);
         }
         var newStatus = order.Status;
         order.UpdatedAt = DateTime.UtcNow;
@@ -999,6 +961,20 @@ public class OrderService : IOrderService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to notify designer of order assignment {OrderId}.", orderId);
+        }
+
+        // Client (and admins) subscribe to OrderStatusChanged for grid/dashboard sync; OrderAssigned is designer-only.
+        if (previousStatus != newStatus)
+        {
+            try
+            {
+                var recipientIds = await GetOrderUpdateRecipientIdsAsync(order);
+                await _entityUpdateSender.SendOrderStatusChangedAsync(orderId, newStatus.ToString(), assignedBy, recipientIds);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send real-time order status update after assignment {OrderId}.", orderId);
+            }
         }
 
         return await GetOrderByIdAsync(orderId, assignedBy, "SuperAdmin");
@@ -1220,7 +1196,7 @@ public class OrderService : IOrderService
             await _entityUpdateSender.SendPreviewApprovedAsync(orderId, clientName, newStatus.ToString(), adminUserIds);
         }
 
-        return await GetOrderByIdAsync(orderId, userId, null);
+        return await GetOrderByIdAsync(orderId, userId, userRole);
     }
 
     public async Task<OrderResponseDto> RequestPriceApprovalAsync(Guid orderId, RequestPriceApprovalDto request, Guid requestedBy)
@@ -1240,7 +1216,7 @@ public class OrderService : IOrderService
         order.ClientPrice = request.ProposedPrice;
         order.RequiresPriceApproval = true;
         order.PriceApproved = false;
-        order.Status = OrderStatus.PriceApprovalPending;
+        OrderStatusTransitionHelper.Apply(order, OrderStatus.PriceApprovalPending);
         // New client approval cycle — do not treat prior client accept as current (UI uses PriceUpdatedByRole == Client).
         order.PriceUpdatedByRole = null;
         order.PriceUpdatedByUserId = null;
@@ -1316,7 +1292,8 @@ public class OrderService : IOrderService
             order.ClientPrice = approvedAmount;
             order.Price = approvedAmount;
             // If a designer is already assigned, resume InProgress; otherwise back to admin approval queue.
-            order.Status = order.DesignerId.HasValue ? OrderStatus.InProgress : OrderStatus.WaitingForAdminApproval;
+            var nextAfterPriceApproval = order.DesignerId.HasValue ? OrderStatus.InProgress : OrderStatus.WaitingForAdminApproval;
+            OrderStatusTransitionHelper.Apply(order, nextAfterPriceApproval);
             // Track who updated the price
             order.PriceUpdatedByRole = "Client";
             order.PriceUpdatedByUserId = approvedBy;
@@ -1325,7 +1302,7 @@ public class OrderService : IOrderService
         else
         {
             // If rejected, status remains PriceApprovalPending for admin to adjust
-            order.Status = OrderStatus.PriceApprovalPending;
+            OrderStatusTransitionHelper.Apply(order, OrderStatus.PriceApprovalPending);
         }
 
         order.UpdatedAt = DateTime.UtcNow;
@@ -1393,7 +1370,7 @@ public class OrderService : IOrderService
                 // Keep pending so admin can adjust; record client's reason
                 order.PriceApproved = false;
                 order.RequiresPriceApproval = true;
-                order.Status = OrderStatus.PriceApprovalPending;
+                OrderStatusTransitionHelper.Apply(order, OrderStatus.PriceApprovalPending);
                 order.UpdatedAt = now;
                 order.UpdatedBy = userId;
 
@@ -1434,7 +1411,7 @@ public class OrderService : IOrderService
                 order.ClientPrice = request.CounterPrice.Value;
                 order.RequiresPriceApproval = true;
                 order.PriceApproved = false;
-                order.Status = OrderStatus.PriceApprovalPending;
+                OrderStatusTransitionHelper.Apply(order, OrderStatus.PriceApprovalPending);
                 order.UpdatedAt = now;
                 order.UpdatedBy = userId;
 
@@ -1490,7 +1467,7 @@ public class OrderService : IOrderService
         }
 
         var previousStatus = order.Status;
-        order.Status = OrderStatus.InProgress;
+        OrderStatusTransitionHelper.Apply(order, OrderStatus.InProgress);
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = approvedBy;
 
@@ -1629,7 +1606,7 @@ public class OrderService : IOrderService
         }
 
         var previousStatus = order.Status;
-        order.Status = OrderStatus.PreviewDelivered;
+        OrderStatusTransitionHelper.Apply(order, OrderStatus.PreviewDelivered);
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = sentBy;
 
@@ -1665,6 +1642,17 @@ public class OrderService : IOrderService
         );
 
         await _entityUpdateSender.SendPreviewDeliveredAsync(order.Id, OrderStatus.PreviewDelivered.ToString(), order.Client.UserId);
+
+        // PreviewDelivered is client-only; designers/admins use OrderStatusChanged for list/dashboard sync.
+        try
+        {
+            var recipientIds = await GetOrderUpdateRecipientIdsAsync(order);
+            await _entityUpdateSender.SendOrderStatusChangedAsync(order.Id, OrderStatus.PreviewDelivered.ToString(), sentBy, recipientIds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send real-time order status update after preview forwarded {OrderId}.", order.Id);
+        }
 
         return await GetOrderByIdAsync(order.Id, sentBy, "Admin");
     }
@@ -1800,7 +1788,6 @@ public class OrderService : IOrderService
         }
 
         var previousStatus = order.Status;
-        OrderStatus newStatus;
         bool isCancelledByUser = false;
 
         // Determine cancellation status based on user role
@@ -1828,13 +1815,11 @@ public class OrderService : IOrderService
                 throw new InvalidOperationException("Order cannot be cancelled once processing has started.");
             }
 
-            newStatus = OrderStatus.CancelledByUser;
             isCancelledByUser = true;
         }
         else if (userRole == "Admin" || userRole == "SuperAdmin")
         {
             // Admins can cancel at any stage
-            newStatus = OrderStatus.CancelledByAdmin;
         }
         else
         {
@@ -1842,7 +1827,10 @@ public class OrderService : IOrderService
         }
 
         // Update order
-        order.Status = newStatus;
+        if (isCancelledByUser)
+            OrderStatusTransitionHelper.ApplyClientCancellation(order);
+        else
+            OrderStatusTransitionHelper.ApplyAdminCancellation(order);
         order.CancellationReason = request.Reason;
         order.CancelledBy = userId;
         order.CancelledAt = DateTime.UtcNow;
@@ -1856,7 +1844,7 @@ public class OrderService : IOrderService
             Id = Guid.NewGuid(),
             OrderId = order.Id,
             PreviousStatus = previousStatus,
-            NewStatus = newStatus,
+            NewStatus = order.Status,
             Notes = $"Order cancelled by {userRole}. Reason: {request.Reason}",
             ChangedBy = userId,
             CreatedAt = DateTime.UtcNow
@@ -1868,7 +1856,7 @@ public class OrderService : IOrderService
             orderId,
             OrderAction.Cancelled,
             previousStatus,
-            newStatus,
+            order.Status,
             userRole,
             userId,
             request.Reason,
@@ -2109,7 +2097,7 @@ public class OrderService : IOrderService
         order.RefundedBy = userId;
         order.RefundAmount = request.Amount;
         order.RefundReason = request.Reason;
-        order.Status = OrderStatus.Refunded;
+        OrderStatusTransitionHelper.Apply(order, OrderStatus.Refunded);
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = userId;
 
@@ -2393,16 +2381,16 @@ public class OrderService : IOrderService
 
     private async Task<List<Guid>> GetAdminAndSuperAdminUserIdsAsync()
     {
-        var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
-        var superAdminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
-        if (adminRole == null && superAdminRole == null)
+        var roleIds = await _context.Roles
+            .AsNoTracking()
+            .Where(r => r.Name == "Admin" || r.Name == "SuperAdmin")
+            .Select(r => r.Id)
+            .ToListAsync();
+        if (roleIds.Count == 0)
             return new List<Guid>();
 
-        var roleIds = new List<Guid>();
-        if (adminRole != null) roleIds.Add(adminRole.Id);
-        if (superAdminRole != null) roleIds.Add(superAdminRole.Id);
-
         return await _context.Users
+            .AsNoTracking()
             .Where(u => !u.IsDeleted && roleIds.Contains(u.RoleId))
             .Select(u => u.Id)
             .ToListAsync();

@@ -1,5 +1,33 @@
 # Testing Standards
 
+Canonical agent rules also live in `.cursor/rules/testing.mdc`.
+
+## Required test types (per feature change)
+
+| Type | Purpose |
+|------|---------|
+| Unit | Pure logic, helpers, service branches (AAA) |
+| Integration | API + DB, auth, permissions (`[Collection("Integration")]`) |
+| Playwright E2E | Critical journeys, cross-role flows |
+| Permission | 401/403 by role; never rely on UI-only guards |
+| Security | IDOR, upload abuse, CSRF/cookies, webhooks |
+| Negative | Invalid state, bad payloads, wrong tenant |
+| Concurrency | Parallel mutations on same entity where relevant |
+
+## Critical modules
+
+Auth, orders, invoices/payments, uploads, SignalR, role masking, state machine transitions.
+
+## Never skip
+
+Unauthorized access, invalid state transitions, edge cases, retry scenarios (where applicable), duplicate actions (e.g. double mark-paid, duplicate upload window).
+
+## Quality bar
+
+Tests must be **deterministic**, **isolated**, and **production-grade** (assert HTTP status + meaningful body; use factories/`IntegrationDatabaseHelper`).
+
+Module-specific checklists: `docs/QA_*_MODULE.md` and `docs/TESTING_*_MODULE.md`.
+
 ## Test Pyramid
 - Unit tests are the default for pure logic and service behavior.
 - Integration tests validate repository, API contracts, and persistence boundaries.
@@ -10,6 +38,34 @@
 - Backend line coverage gate remains at 80%+.
 - Frontend unit coverage gate remains enforced in CI.
 - New code must not reduce baseline coverage in touched modules.
+
+## Week 1 security test locations
+
+| Area | Tests |
+|------|-------|
+| Upload abuse | `UploadSecurityHelperTests`, `FilesControllerUploadSecurityIntegrationTests` |
+| Auth / JWT | `AuthSecurityIntegrationTests`, `AuthControllerTests` |
+| Swagger exposure | `SwaggerExposureIntegrationTests` |
+| Playwright smoke | CI runs `login`, `unauthorized`, `rbac-and-token` specs |
+
+See `docs/WEEK1_SECURITY_HARDENING.md` and `docs/FILE_UPLOAD_SECURITY.md`.
+
+## Week 2 QA expansion
+
+| Guide | Topic |
+|-------|--------|
+| `docs/PLAYWRIGHT_TESTING_GUIDE.md` | E2E layout, projects, CI |
+| `docs/SECURITY_TESTING_GUIDE.md` | Security automation matrix |
+| `docs/OBSERVABILITY_SETUP.md` | Serilog, OTel, health, alerts |
+| `docs/PERFORMANCE_TESTING_GUIDE.md` | k6, SLO, bottlenecks |
+| `docs/REGRESSION_TESTING_STRATEGY.md` | Suite tiers, high-risk areas |
+| `docs/LOAD_TESTING_PLAN.md` | Staged load rollout |
+
+E2E folders: `auth/`, `workflows/`, `invoices/`, `uploads/`, `permissions/`, `realtime/`, `security/`, `smoke/`, `regression/`.
+
+Health endpoints: `/health/live` (liveness), `/health/ready` (readiness).
+
+Load scripts: `load-tests/k6/`.
 - Coverage exceptions require explicit reviewer approval in PR.
 
 ## Naming Conventions

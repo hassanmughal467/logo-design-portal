@@ -5,6 +5,7 @@ using LogoDesignPortal.API.Configuration;
 using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.API.Infrastructure;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Configuration;
 
 namespace LogoDesignPortal.API.Middleware;
 
@@ -19,18 +20,21 @@ public class RateLimitingMiddleware
     private readonly IDistributedRateLimiter _limiter;
     private readonly RateLimitingOptions _options;
     private readonly bool _disabled;
+    private readonly IConfiguration _configuration;
 
     public RateLimitingMiddleware(
         RequestDelegate next,
         ILogger<RateLimitingMiddleware> logger,
         IDistributedRateLimiter limiter,
         IOptions<RateLimitingOptions> options,
-        IWebHostEnvironment env)
+        IWebHostEnvironment env,
+        IConfiguration configuration)
     {
         _next = next;
         _logger = logger;
         _limiter = limiter;
         _options = options.Value;
+        _configuration = configuration;
         _disabled = env.IsDevelopment()
             || env.IsEnvironment("Testing")
             || string.Equals(Environment.GetEnvironmentVariable("DISABLE_RATE_LIMIT"), "true", StringComparison.OrdinalIgnoreCase);
@@ -77,6 +81,7 @@ public class RateLimitingMiddleware
                 bucket, identity, path, context.GetCorrelationId());
             context.Response.StatusCode = (int)HttpStatusCode.TooManyRequests;
             context.Response.Headers.Append("Retry-After", Math.Max(1, retry).ToString());
+            CorsAllowedOrigins.AppendHeadersIfAllowed(context, _configuration);
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(JsonSerializer.Serialize(new
             {

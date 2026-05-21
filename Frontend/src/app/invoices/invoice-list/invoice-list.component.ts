@@ -3,9 +3,10 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { BillingService, BillingQueueOverview, BillingEligibleOrder } from '@core/services/billing.service';
-import { MessageService } from 'primeng/api';
-import { Subject, firstValueFrom, forkJoin, of } from 'rxjs';
-import { takeUntil, catchError, finalize } from 'rxjs/operators';
+import { LazyLoadEvent, MessageService } from 'primeng/api';
+import { Subject, firstValueFrom, of } from 'rxjs';
+import { takeUntil, catchError, finalize, map } from 'rxjs/operators';
+import { DEFAULT_INVOICE_CURRENCY, formatCurrencyAmount } from '@core/utils/currency-format';
 
 export interface InvoiceItem {
   id: string;
@@ -14,6 +15,8 @@ export interface InvoiceItem {
   orderDate?: Date | string;
   description: string;
   amount: number;
+  /** From linked logo order; manual lines omit. */
+  currencyCode?: string | null;
 }
 
 export interface Invoice {
@@ -36,6 +39,8 @@ export interface Invoice {
   items: InvoiceItem[];
   isLocked: boolean;
   createdAt: Date;
+  /** When all order lines share one ISO code (e.g. GBP); manual-only may be absent. */
+  currencyCode?: string | null;
 }
 
 @Component({
@@ -45,11 +50,16 @@ export interface Invoice {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class InvoiceListComponent implements OnInit, OnDestroy {
-  invoices: Invoice[] = [];
+  /** Current tab page from the API (server-side pagination). */
+  tabInvoices: Invoice[] = [];
+  listTotalRecords = 0;
+  tableFirst = 0;
+  tableRows = 25;
+  readonly tablePageSizeOptions = [10, 25, 50, 100];
+  isTableLoading = false;
+
   globalFilter = '';
   selectedStatus: string | null = null;
-  first = 0;
-  rows = 10;
 
   statuses = ['Paid', 'Unpaid', 'Overdue'];
 
@@ -84,7 +94,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   editItems: { id?: string; orderId?: string; description: string; amount: number; isNew?: boolean }[] = [];
   removedItemIds: string[] = [];
 
-  // Statistics
+  // Statistics (KPI + period buckets from GET invoices/statistics)
   invoiceStats = {
     total: 0,
     paid: 0,
@@ -92,7 +102,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     overdue: 0,
     totalAmount: 0,
     paidAmount: 0,
-    pendingAmount: 0
+    pendingAmount: 0,
+    week: { total: 0, paid: 0, pending: 0 },
+    month: { total: 0, paid: 0, pending: 0 }
   };
 
   // Payment functionality
@@ -102,6 +114,10 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   selectedInvoiceTabIndex = 0;
 
   private destroy$ = new Subject<void>();
+  /** Avoid duplicate auto-open when route id unchanged. */
+  private prevRouteInvoiceParam: string | null = null;
+  /** Skip p-tabView onChange until the first server load finishes (avoids duplicate fetches). */
+  private suppressInvoiceTabReload = true;
 
   isInvoicesLoading = false;
   isInvoicesRefreshing = false;
@@ -132,19 +148,159 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     return this.canManageInvoices;
   }
 
+  /** True when any line is $0 — common if client pricing was not configured when the order was placed. */
+  invoiceLineItemsNeedAmountReview(invoice: Invoice | null): boolean {
+    if (!invoice?.items?.length) return false;
+    return invoice.items.some(i => (i.amount ?? 0) <= 0);
+  }
+
   ngOnInit(): void {
     this.loadInvoiceData();
+    this.route.paramMap.pipe(takeUntil(this.destroy$)).subscribe((pm) => {
+      const id = pm.get('id');
+      if (id === this.prevRouteInvoiceParam) return;
+      this.prevRouteInvoiceParam = id;
+      if (this.hasInvoicesLoadedOnce) {
+        this.openInvoiceFromRoute();
+      }
+    });
+  }
+
+  onInvoiceTabChange(event: { index: number }): void {
+    if (this.suppressInvoiceTabReload) {
+      return;
+    }
+    this.selectedInvoiceTabIndex = event.index;
+    this.tableFirst = 0;
+    this.selectedInvoices = [];
+    this.loadTabInvoicesPage(1, this.tableRows, false);
+  }
+
+  onInvoicesLazyLoad(event: LazyLoadEvent): void {
+    const rows = event.rows ?? this.tableRows;
+    const first = event.first ?? 0;
+    const page = Math.floor(first / rows) + 1;
+    this.loadTabInvoicesPage(page, rows, false);
+  }
+
+  /** API returns PagedResultDto { items, total, ... }; support legacy bare array. */
+  private parseInvoicesListResponse(response: unknown): Invoice[] {
+    const rows = ApiService.extractItems<any>(response);
+    const list =
+      rows.length > 0 ? rows : Array.isArray(response) ? (response as any[]) : [];
+    return list.map((raw) => this.normalizeInvoiceFromApi(raw));
+  }
+
+  private parsePagedInvoicesResponse(response: unknown): { items: Invoice[]; total: number } {
+    const items = this.parseInvoicesListResponse(response);
+    const meta = ApiService.extractPagedMeta(response);
+    return { items, total: meta.total > 0 ? meta.total : items.length };
+  }
+
+  /** Tab 0 unpaid (exclude paid), 1 pending, 2 overdue, 3 paid — matches backend InvoiceStatus. */
+  private buildInvoicesListQuery(page: number, pageSize: number): string {
+    const tab = this.selectedInvoiceTabIndex;
+    let filter = '';
+    if (tab === 0) {
+      filter = '&excludePaid=true';
+    } else if (tab === 1) {
+      filter = '&status=1';
+    } else if (tab === 2) {
+      filter = '&status=4';
+    } else if (tab === 3) {
+      filter = '&status=2';
+    }
+    return `invoices?page=${page}&pageSize=${pageSize}${filter}`;
+  }
+
+  private applyInvoiceStatistics(stats: any | null): void {
+    if (!stats) {
+      return;
+    }
+    const ws = stats.weekSummary ?? stats.WeekSummary ?? {};
+    const ms = stats.monthSummary ?? stats.MonthSummary ?? {};
+    this.invoiceStats = {
+      total: stats.totalInvoices ?? 0,
+      paid: stats.paidInvoices ?? 0,
+      unpaid: stats.dueInvoices ?? 0,
+      overdue: stats.overdueInvoices ?? 0,
+      totalAmount: stats.totalAmount ?? 0,
+      paidAmount: stats.paidAmount ?? 0,
+      pendingAmount: (stats.dueAmount ?? 0) + (stats.overdueAmount ?? 0),
+      week: {
+        total: Number(ws.totalAmount ?? ws.TotalAmount ?? 0),
+        paid: Number(ws.paidAmount ?? ws.PaidAmount ?? 0),
+        pending: Number(ws.pendingAmount ?? ws.PendingAmount ?? 0)
+      },
+      month: {
+        total: Number(ms.totalAmount ?? ms.TotalAmount ?? 0),
+        paid: Number(ms.paidAmount ?? ms.PaidAmount ?? 0),
+        pending: Number(ms.pendingAmount ?? ms.PendingAmount ?? 0)
+      }
+    };
+  }
+
+  private loadTabInvoicesPage(page: number, pageSize: number, initialFullLoad: boolean): void {
+    const query = this.buildInvoicesListQuery(page, pageSize);
+    this.isTableLoading = true;
+    this.apiService
+      .get<any>(query)
+      .pipe(
+        takeUntil(this.destroy$),
+        catchError((error) => {
+          console.error('Error loading invoices:', error);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Failed to Load Invoices',
+            detail: error?.error?.error || 'Could not load invoices. Please try again.',
+            life: 5000
+          });
+          return of(null);
+        }),
+        finalize(() => {
+          this.isTableLoading = false;
+          if (initialFullLoad) {
+            this.isInvoicesLoading = false;
+            this.hasInvoicesLoadedOnce = true;
+            this.suppressInvoiceTabReload = false;
+          } else if (this.hasInvoicesLoadedOnce) {
+            this.isInvoicesRefreshing = false;
+          }
+          this.cdr.markForCheck();
+        })
+      )
+      .subscribe((response) => {
+        if (response) {
+          const { items, total } = this.parsePagedInvoicesResponse(response);
+          this.tabInvoices = items;
+          this.listTotalRecords = total;
+          this.tableFirst = (page - 1) * pageSize;
+          this.tableRows = pageSize;
+        } else {
+          this.tabInvoices = [];
+          this.listTotalRecords = 0;
+        }
+        this.cdr.markForCheck();
+        if (initialFullLoad) {
+          this.openInvoiceFromRoute();
+        }
+      });
   }
 
   /** Open invoice detail when navigated via /invoices/:id (e.g. from notification click) */
   private openInvoiceFromRoute(): void {
     const id = this.route.snapshot.paramMap.get('id');
-    if (!id) return;
-    const invoice = this.invoices.find(inv => inv.id === id || inv.id?.toLowerCase() === id?.toLowerCase());
+    if (!id) {
+      return;
+    }
+    const invoice = this.tabInvoices.find(
+      (inv) => inv.id === id || inv.id?.toLowerCase() === id?.toLowerCase()
+    );
     if (invoice) {
       this.openDetailDialogFromApi(invoice);
     } else {
-      this.apiService.get<any>(`invoices/${id}`)
+      this.apiService
+        .get<any>(`invoices/${id}`)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (raw) => {
@@ -160,7 +316,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  /** Loads invoices and statistics together; keeps layout on refresh with a light dim. */
+  /** Loads statistics then first page of the active tab (server-side pagination). */
   loadInvoiceData(): void {
     if (!this.hasInvoicesLoadedOnce) {
       this.isInvoicesLoading = true;
@@ -168,47 +324,20 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       this.isInvoicesRefreshing = true;
     }
 
-    forkJoin({
-      invoices: this.apiService.get<Invoice[]>('invoices').pipe(
-        catchError((error) => {
-          console.error('Error loading invoices:', error);
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Failed to Load Invoices',
-            detail: error?.error?.error || 'Could not load invoices. Please try again.',
-            life: 5000
-          });
-          return of([] as Invoice[]);
-        })
-      ),
-      stats: this.apiService.get<any>('invoices/statistics').pipe(catchError(() => of(null)))
-    })
+    this.apiService
+      .get<any>('invoices/statistics')
       .pipe(
         takeUntil(this.destroy$),
-        finalize(() => {
-          this.isInvoicesLoading = false;
-          this.isInvoicesRefreshing = false;
-          this.hasInvoicesLoadedOnce = true;
-          this.cdr.markForCheck();
+        catchError(() => of(null)),
+        map((stats) => {
+          this.applyInvoiceStatistics(stats);
+          return stats;
         })
       )
-      .subscribe(({ invoices, stats }) => {
-        this.invoices = invoices;
-        if (stats) {
-          this.invoiceStats = {
-            total: stats.totalInvoices || 0,
-            paid: stats.paidInvoices || 0,
-            unpaid: stats.dueInvoices || 0,
-            overdue: stats.overdueInvoices || 0,
-            totalAmount: stats.totalAmount || 0,
-            paidAmount: stats.paidAmount || 0,
-            pendingAmount: (stats.dueAmount || 0) + (stats.overdueAmount || 0)
-          };
-        } else {
-          this.calculateStats(invoices);
-        }
+      .subscribe(() => {
         this.cdr.markForCheck();
-        this.openInvoiceFromRoute();
+        const page = Math.floor(this.tableFirst / this.tableRows) + 1;
+        this.loadTabInvoicesPage(page, this.tableRows, !this.hasInvoicesLoadedOnce);
       });
   }
 
@@ -292,7 +421,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (orders: BillingEligibleOrder[]) => {
           this.availableOrders = orders.map(o => ({
-            label: `Order #${o.orderNumber} – ${o.title} – $${o.price}`,
+            label: `Order #${o.orderNumber} – ${o.title} – ${formatCurrencyAmount(o.price, o.currencyCode)}`,
             value: o.orderId
           }));
           this.loadingOrders = false;
@@ -344,7 +473,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         ? new Date(it.orderDate ?? it.OrderDate)
         : undefined,
       description: it.description ?? it.Description ?? '',
-      amount: Number(it.amount ?? it.Amount ?? 0)
+      amount: Number(it.amount ?? it.Amount ?? 0),
+      currencyCode: it.currencyCode ?? it.CurrencyCode ?? null
     }));
     return {
       id: raw.id || raw.Id,
@@ -368,7 +498,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         (raw.isLocked ?? raw.IsLocked) === true ||
         String(raw.status ?? raw.Status ?? '')
           .toLowerCase() === 'paid',
-      createdAt: new Date(raw.createdAt ?? raw.CreatedAt ?? Date.now())
+      createdAt: new Date(raw.createdAt ?? raw.CreatedAt ?? Date.now()),
+      currencyCode: raw.currencyCode ?? raw.CurrencyCode ?? null
     };
   }
 
@@ -558,11 +689,55 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     return severityMap[status] || 'secondary';
   }
 
-  formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+  /**
+   * @param currencyCode ISO code from invoice/order; KPI / cross-invoice aggregates use default (USD).
+   */
+  formatCurrency(amount: number, currencyCode?: string | null): string {
+    return formatCurrencyAmount(amount, currencyCode ?? DEFAULT_INVOICE_CURRENCY);
+  }
+
+  /** Dashboard KPIs / week-month stats (amounts may mix currencies server-side). */
+  formatStatCurrency(amount: number): string {
+    return formatCurrencyAmount(amount, DEFAULT_INVOICE_CURRENCY);
+  }
+
+  invoiceDisplayCurrency(invoice: Invoice): string {
+    const c = invoice.currencyCode?.trim();
+    if (c) return c.toUpperCase();
+    const fromItem = invoice.items?.find((i) => i.currencyCode?.trim())?.currencyCode;
+    return fromItem?.trim().toUpperCase() || DEFAULT_INVOICE_CURRENCY;
+  }
+
+  lineItemDisplayCurrency(item: InvoiceItem, invoice: Invoice | null): string {
+    const c = item.currencyCode?.trim();
+    if (c) return c.toUpperCase();
+    return invoice ? this.invoiceDisplayCurrency(invoice) : DEFAULT_INVOICE_CURRENCY;
+  }
+
+  get editInvoiceCurrency(): string {
+    return this.editInvoice ? this.invoiceDisplayCurrency(this.editInvoice) : DEFAULT_INVOICE_CURRENCY;
+  }
+
+  /** Single currency for bulk-pay total when all selected invoices agree; else default. */
+  bulkPaymentDisplayCurrency(): string {
+    if (this.selectedInvoices.length === 0) return DEFAULT_INVOICE_CURRENCY;
+    const codes = this.selectedInvoices.map((i) => this.invoiceDisplayCurrency(i));
+    const uniq = [...new Set(codes)];
+    return uniq.length === 1 ? uniq[0] : DEFAULT_INVOICE_CURRENCY;
+  }
+
+  selectedInvoicesMixedCurrency(): boolean {
+    if (this.selectedInvoices.length < 2) return false;
+    const codes = this.selectedInvoices.map((i) => this.invoiceDisplayCurrency(i));
+    return new Set(codes).size > 1;
+  }
+
+  formatInvoiceAmount(invoice: Invoice, amount: number): string {
+    return formatCurrencyAmount(amount, this.invoiceDisplayCurrency(invoice));
+  }
+
+  formatLineAmount(item: InvoiceItem, invoice: Invoice): string {
+    return formatCurrencyAmount(item.amount, this.lineItemDisplayCurrency(item, invoice));
   }
 
   formatDate(date: Date | string | undefined): string {
@@ -594,35 +769,6 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     return severityMap[billingType] || 'secondary';
   }
 
-  private calculateStats(invoices: Invoice[]): void {
-    this.invoiceStats = {
-      total: invoices.length,
-      paid: invoices.filter(i => i.status === 'Paid').length,
-      unpaid: invoices.filter(i => i.status !== 'Paid').length, // Unpaid includes Overdue
-      overdue: invoices.filter(i => i.status === 'Overdue').length,
-      totalAmount: invoices.reduce((sum, i) => sum + (i.totalAmount || i.amount), 0),
-      paidAmount: invoices.filter(i => i.status === 'Paid').reduce((sum, i) => sum + (i.totalAmount || i.amount), 0),
-      pendingAmount: invoices.filter(i => i.status !== 'Paid').reduce((sum, i) => sum + (i.totalAmount || i.amount), 0)
-    };
-  }
-
-  // Payment methods
-  getUnpaidInvoices(): Invoice[] {
-    return this.invoices.filter(inv => inv.status === 'Pending' || inv.status === 'Overdue');
-  }
-
-  getPendingInvoices(): Invoice[] {
-    return this.invoices.filter(inv => inv.status === 'Pending');
-  }
-
-  getDueInvoices(): Invoice[] {
-    return this.invoices.filter(inv => inv.status === 'Overdue');
-  }
-
-  getPaidInvoices(): Invoice[] {
-    return this.invoices.filter(inv => inv.status === 'Paid');
-  }
-
   getSelectedInvoicesTotal(): number {
     return this.selectedInvoices.reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
   }
@@ -631,6 +777,12 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (invoice) {
       this.selectedInvoices = [invoice];
     }
+    this.showPaymentDialog = true;
+  }
+
+  /** Bulk pay for rows on the current page (current tab / server page). */
+  openBulkPayForCurrentPage(): void {
+    this.selectedInvoices = [...this.tabInvoices];
     this.showPaymentDialog = true;
   }
 
@@ -690,77 +842,47 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  // Summary methods
-  getWeeklySummary(): { total: number; paid: number; pending: number } {
-    const now = new Date();
-    const weekStart = new Date(now.setDate(now.getDate() - now.getDay()));
-    weekStart.setHours(0, 0, 0, 0);
-
-    const weekInvoices = this.invoices.filter(inv => {
-      const invDate = new Date(inv.createdAt);
-      return invDate >= weekStart;
-    });
-
-    return {
-      total: weekInvoices.reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0),
-      paid: weekInvoices
-        .filter(inv => inv.status === 'Paid')
-        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0),
-      pending: weekInvoices
-        .filter(inv => inv.status !== 'Paid')
-        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0)
-    };
-  }
-
-  getMonthlySummary(): { total: number; paid: number; pending: number } {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const monthInvoices = this.invoices.filter(inv => {
-      const invDate = new Date(inv.createdAt);
-      return invDate >= monthStart;
-    });
-
-    return {
-      total: monthInvoices.reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0),
-      paid: monthInvoices
-        .filter(inv => inv.status === 'Paid')
-        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0),
-      pending: monthInvoices
-        .filter(inv => inv.status !== 'Paid')
-        .reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0)
-    };
-  }
-
   // Report download methods
   downloadInvoiceReport(format: 'csv' | 'pdf'): void {
-    const invoices = this.getInvoicesForCurrentTab();
     if (format === 'csv') {
-      this.downloadCSV(invoices);
+      this.downloadCSVForCurrentTab();
     } else {
-      this.downloadPDF(invoices);
+      this.downloadPDF();
     }
   }
 
-  private getInvoicesForCurrentTab(): Invoice[] {
-    switch (this.selectedInvoiceTabIndex) {
-      case 0:
-        return this.getUnpaidInvoices();
-      case 1:
-        return this.getPendingInvoices();
-      case 2:
-        return this.getDueInvoices();
-      case 3:
-        return this.getPaidInvoices();
-      default:
-        return [];
+  /** CSV includes every row for the current tab (all pages). */
+  private async downloadCSVForCurrentTab(): Promise<void> {
+    const pageSize = 100;
+    let page = 1;
+    const all: Invoice[] = [];
+    let total = Infinity;
+    try {
+      while (all.length < total) {
+        const query = this.buildInvoicesListQuery(page, pageSize);
+        const res = await firstValueFrom(this.apiService.get<any>(query));
+        const { items, total: t } = this.parsePagedInvoicesResponse(res);
+        all.push(...items);
+        total = t;
+        if (items.length < pageSize || items.length === 0) break;
+        page++;
+      }
+    } catch {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Export failed',
+        detail: 'Could not load invoices for CSV export.'
+      });
+      return;
     }
+    this.downloadCSV(all);
   }
 
   private downloadCSV(invoices: Invoice[]): void {
-    const headers = ['Invoice Number', 'Amount', 'Status', 'Due Date', 'Paid Date'];
+    const headers = ['Invoice Number', 'Currency', 'Amount', 'Status', 'Due Date', 'Paid Date'];
     const rows = invoices.map(inv => [
       inv.invoiceNumber,
+      this.invoiceDisplayCurrency(inv),
       inv.totalAmount || inv.amount,
       inv.status,
       inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'N/A',
@@ -782,7 +904,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     window.URL.revokeObjectURL(url);
   }
 
-  private downloadPDF(invoices: Invoice[]): void {
+  private downloadPDF(): void {
     // Map tab index to status for the backend filter
     const statusMap: { [key: number]: string } = {
       0: '', // Unpaid = all non-paid

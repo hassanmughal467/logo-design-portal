@@ -1,4 +1,5 @@
 using LogoDesignPortal.API.Extensions;
+using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.Application.DTOs.Quotes;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -21,7 +22,7 @@ public class QuotesController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = "Client")]
-    [RequestSizeLimit(50 * 1024 * 1024)]
+    [RequestSizeLimit(UploadLimits.MaxMultipartBytes)]
     public async Task<IActionResult> Create([FromForm] string quote, [FromForm] IFormFileCollection? files)
     {
         if (User.GetUserId() is not { } userId)

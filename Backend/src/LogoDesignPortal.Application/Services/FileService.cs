@@ -1,5 +1,6 @@
 using AutoMapper;
 using LogoDesignPortal.Application.Configuration;
+using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.Application.DTOs.Common;
 using LogoDesignPortal.Application.DTOs.DesignerPayout;
 using LogoDesignPortal.Application.DTOs.Files;
@@ -25,6 +26,7 @@ public class FileService : IFileService
     private readonly INotificationService _notificationService;
     private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
     private readonly IDesignerPayoutService _designerPayoutService;
+    private readonly IFileUploadScanHook _uploadScanHook;
     private readonly ProductionSafetyOptions _safetyOptions;
     private readonly string _fileStoragePath;
     private readonly string _temporaryStoragePath;
@@ -33,10 +35,7 @@ public class FileService : IFileService
     private static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
     private static readonly string[] VectorExtensions = { ".svg", ".pdf", ".ai", ".eps", ".psd" };
     private static readonly string[] EmbroiderExtensions = { ".pes", ".dst", ".jef", ".exp", ".vp3", ".xxx", ".hus", ".art", ".vip", ".vip3", ".shv", ".pec", ".jpm", ".sew", ".emb", ".csd", ".pcs", ".phb", ".phc", ".stx", ".s10", ".dsb", ".zsk" };
-    private const long ImageMaxBytes = 10 * 1024 * 1024; // 10MB
-    private const long VectorMaxBytes = 25 * 1024 * 1024; // 25MB
-
-    public FileService(IApplicationDbContext context, IConfiguration configuration, IMapper mapper, ILogger<FileService> logger, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender, IDesignerPayoutService designerPayoutService, IOptions<ProductionSafetyOptions> safetyOptions)
+    public FileService(IApplicationDbContext context, IConfiguration configuration, IMapper mapper, ILogger<FileService> logger, INotificationService notificationService, IRealtimeEntityUpdateSender entityUpdateSender, IDesignerPayoutService designerPayoutService, IFileUploadScanHook uploadScanHook, IOptions<ProductionSafetyOptions> safetyOptions)
     {
         _context = context;
         _mapper = mapper;
@@ -44,6 +43,7 @@ public class FileService : IFileService
         _notificationService = notificationService;
         _entityUpdateSender = entityUpdateSender;
         _designerPayoutService = designerPayoutService;
+        _uploadScanHook = uploadScanHook;
         _safetyOptions = safetyOptions?.Value ?? new ProductionSafetyOptions();
         _fileStoragePath = configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
         _temporaryStoragePath = Path.Combine(_fileStoragePath, "Temporary");
@@ -69,52 +69,31 @@ public class FileService : IFileService
         }
     }
 
-    private static long GetMaxSizeForExtension(string extension)
-    {
-        var ext = extension.ToLowerInvariant();
-        if (ImageExtensions.Contains(ext)) return ImageMaxBytes;
-        if (VectorExtensions.Contains(ext)) return VectorMaxBytes;
-        if (EmbroiderExtensions.Contains(ext)) return VectorMaxBytes;
-        return ImageMaxBytes; // default for unknown
-    }
-
-    private static readonly Dictionary<string, byte[][]> MagicBytes = new()
-    {
-        [".jpg"] = new[] { new byte[] { 0xFF, 0xD8, 0xFF } },
-        [".jpeg"] = new[] { new byte[] { 0xFF, 0xD8, 0xFF } },
-        [".png"] = new[] { new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A } },
-        [".gif"] = new[] { new byte[] { 0x47, 0x49, 0x46, 0x38, 0x37, 0x61 }, new byte[] { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61 } },
-        [".webp"] = new[] { new byte[] { 0x52, 0x49, 0x46, 0x46 } },
-        [".pdf"] = new[] { new byte[] { 0x25, 0x50, 0x44, 0x46 } },
-        [".svg"] = new[] { new byte[] { 0x3C, 0x3F, 0x78, 0x6D, 0x6C }, new byte[] { 0x3C, 0x73, 0x76, 0x67 } }
-    };
-
     private static void ValidateFile(IFormFile file, string? fileNameForError = null)
     {
-        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        UploadSecurityHelper.ValidateUploadFileName(file.FileName);
+        var ext = UploadSecurityHelper.GetEffectiveExtension(file.FileName);
         var allowed = ImageExtensions.Concat(VectorExtensions).Concat(EmbroiderExtensions).Distinct().ToArray();
         if (!allowed.Contains(ext))
             throw new InvalidOperationException($"File type '{ext}' is not allowed{(fileNameForError != null ? $" for file '{fileNameForError}'" : ".")}");
-        var maxSize = GetMaxSizeForExtension(ext);
-        if (file.Length > maxSize)
-            throw new InvalidOperationException($"File {(fileNameForError != null ? $"'{fileNameForError}'" : "")} exceeds maximum allowed size ({(ImageExtensions.Contains(ext) ? "10MB" : "25MB")}).");
-        if (MagicBytes.TryGetValue(ext, out var signatures))
+        if (file.Length > UploadLimits.MaxSingleFileBytes)
+            throw new InvalidOperationException($"File {(fileNameForError != null ? $"'{fileNameForError}'" : "")} exceeds maximum allowed size ({UploadLimits.MaxSingleFileBytes / (1024 * 1024)}MB).");
+        UploadSecurityHelper.ValidateDeclaredContentType(ext, file.ContentType);
+        using var stream = file.OpenReadStream();
+        UploadSecurityHelper.ValidateMagicBytes(ext, stream);
+    }
+
+    private static void ValidateCombinedUploadSize(IReadOnlyCollection<IFormFile?> files)
+    {
+        long total = 0;
+        foreach (var f in files)
         {
-            using var stream = file.OpenReadStream();
-            var header = new byte[Math.Max(8, signatures.Max(s => s.Length))];
-            var read = stream.Read(header, 0, header.Length);
-            if (read < signatures.Min(s => s.Length))
-                throw new InvalidOperationException($"File content does not match extension '{ext}'.");
-            var matches = signatures.Any(sig => header.Take(sig.Length).SequenceEqual(sig));
-            if (!matches && ext == ".webp")
-            {
-                var riff = header.Take(4).SequenceEqual(new byte[] { 0x52, 0x49, 0x46, 0x46 });
-                var webp = read >= 12 && header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50;
-                matches = riff && webp;
-            }
-            if (!matches)
-                throw new InvalidOperationException($"File content does not match extension '{ext}'. Possible file type spoofing.");
+            if (f == null || f.Length <= 0) continue;
+            total += f.Length;
         }
+
+        if (total > UploadLimits.MaxMultipartBytes)
+            throw new InvalidOperationException("Combined file size cannot exceed 500MB.");
     }
 
     public async Task<FileUploadResponseDto> UploadFileAsync(Guid orderId, IFormFile file, Guid uploadedBy, string fileType, string? description = null, int? designCategory = null, int? designType = null, decimal? proposedPrice = null)
@@ -145,6 +124,16 @@ public class FileService : IFileService
         }
 
         ValidateFile(file);
+
+        var sanitizedOriginalName = UploadSecurityHelper.SanitizeOriginalFileName(file.FileName, Path.GetExtension(file.FileName));
+        var duplicateWindow = DateTime.UtcNow.AddHours(-1);
+        var isDuplicate = await _context.LogoFiles.AnyAsync(f =>
+            f.OrderId == orderId && !f.IsDeleted &&
+            f.OriginalFileName == sanitizedOriginalName &&
+            f.FileSize == file.Length &&
+            f.CreatedAt >= duplicateWindow);
+        if (isDuplicate)
+            throw new InvalidOperationException("An identical file was uploaded recently for this order. Please wait or upload a different file.");
 
         var user = await _context.Users
             .Include(u => u.Role)
@@ -233,6 +222,17 @@ public class FileService : IFileService
             throw new InvalidOperationException("File storage failed. Please try again or contact support.");
         }
 
+        try
+        {
+            await _uploadScanHook.ScanAsync(filePath, sanitizedOriginalName);
+        }
+        catch (Exception ex)
+        {
+            try { System.IO.File.Delete(filePath); } catch { /* best effort */ }
+            _logger.LogWarning(ex, "Upload rejected by scan hook for order {OrderId}", orderId);
+            throw new InvalidOperationException("File failed security scan and was not stored.");
+        }
+
         // Version = 0 for client reference files (until designer sends via Super Admin); delivery round for Designer Preview; per-file sequence for others
         int versionNumber;
         if (userRole == "Client" && parsedFileType == FileType.Reference)
@@ -268,7 +268,7 @@ public class FileService : IFileService
             Id = Guid.NewGuid(),
             OrderId = orderId,
             FileName = fileName,
-            OriginalFileName = file.FileName,
+            OriginalFileName = sanitizedOriginalName,
             FilePath = filePath,
             ContentType = file.ContentType,
             FileSize = file.Length,
@@ -377,6 +377,8 @@ public class FileService : IFileService
         if (files == null || files.Length == 0)
             throw new InvalidOperationException("No files provided.");
 
+        ValidateCombinedUploadSize(files);
+
         var results = new List<LogoFile>();
         var storagePath = _fileStoragePath; // Reference files go to main storage
         // Client reference files are version 0 until designer sends files via Super Admin
@@ -387,6 +389,7 @@ public class FileService : IFileService
             if (file == null || file.Length == 0) continue;
 
             ValidateFile(file, file.FileName);
+            var sanitizedRefName = UploadSecurityHelper.SanitizeOriginalFileName(file.FileName, Path.GetExtension(file.FileName));
 
             var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
             var fileName = $"{Guid.NewGuid()}{fileExtension}";
@@ -397,12 +400,14 @@ public class FileService : IFileService
                 await file.CopyToAsync(stream);
             }
 
+            await _uploadScanHook.ScanAsync(filePath, sanitizedRefName);
+
             var logoFile = new LogoFile
             {
                 Id = Guid.NewGuid(),
                 OrderId = orderId,
                 FileName = fileName,
-                OriginalFileName = file.FileName,
+                OriginalFileName = sanitizedRefName,
                 FilePath = filePath,
                 ContentType = file.ContentType,
                 FileSize = file.Length,
@@ -454,6 +459,8 @@ public class FileService : IFileService
         {
             throw new InvalidOperationException("No files provided.");
         }
+
+        ValidateCombinedUploadSize(files);
 
         var results = new List<FileUploadResponseDto>();
 
@@ -549,6 +556,7 @@ public class FileService : IFileService
             }
 
             ValidateFile(file, file.FileName);
+            var sanitizedMultiName = UploadSecurityHelper.SanitizeOriginalFileName(file.FileName, Path.GetExtension(file.FileName));
 
             var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
             var versionNumber = (parsedFileType == FileType.Preview && userRole == "Designer")
@@ -564,12 +572,14 @@ public class FileService : IFileService
                 await file.CopyToAsync(stream);
             }
 
+            await _uploadScanHook.ScanAsync(filePath, sanitizedMultiName);
+
             var logoFile = new LogoFile
             {
                 Id = Guid.NewGuid(),
                 OrderId = orderId,
                 FileName = fileName,
-                OriginalFileName = file.FileName,
+                OriginalFileName = sanitizedMultiName,
                 FilePath = filePath,
                 ContentType = file.ContentType,
                 FileSize = file.Length,
@@ -710,7 +720,11 @@ public class FileService : IFileService
             {
                 throw new ForbiddenAccessException("You don't have access to this file.");
             }
-            // If we reach here, the client owns the order - allow access
+            // Clients must not download undelivered designer previews (IDOR via file GUID)
+            if (!file.IsVisibleToClient && file.FileType != FileType.Final)
+            {
+                throw new ForbiddenAccessException("You don't have access to this file.");
+            }
         }
         else if (userRole == "Designer")
         {
@@ -744,7 +758,8 @@ public class FileService : IFileService
 
         var fileContent = await System.IO.File.ReadAllBytesAsync(file.FilePath);
 
-        return (fileContent, file.OriginalFileName, file.ContentType);
+        var safeDownloadName = UploadSecurityHelper.SanitizeOriginalFileName(file.OriginalFileName);
+        return (fileContent, safeDownloadName, file.ContentType);
     }
 
     public async Task<List<FileResponseDto>> GetOrderFilesAsync(Guid orderId, Guid? userId, string? userRole)

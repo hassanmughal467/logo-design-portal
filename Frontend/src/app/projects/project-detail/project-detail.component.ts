@@ -4,6 +4,7 @@ import { ApiService } from '@core/services/api.service';
 import { MessageService } from 'primeng/api';
 import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
 
 export interface Project {
   id: string;
@@ -184,17 +185,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     const vectorExtensions = ['.svg', '.pdf', '.ai', '.eps', '.psd'];
     const embroiderExtensions = ['.pes', '.dst', '.jef', '.exp', '.vp3', '.xxx', '.hus', '.art', '.vip', '.vip3', '.shv', '.pec', '.jpm', '.sew', '.emb', '.csd', '.pcs', '.phb', '.phc', '.stx', '.s10', '.dsb', '.zsk'];
     const allowedExtensions = [...imageExtensions, ...vectorExtensions, ...embroiderExtensions];
-    const imageMaxBytes = 10 * 1024 * 1024;  // 10MB
-    const vectorMaxBytes = 25 * 1024 * 1024;  // 25MB
-
-    const getMaxSize = (fileName: string): number => {
-      const ext = '.' + (fileName.split('.').pop() || '').toLowerCase();
-      if (imageExtensions.includes(ext)) return imageMaxBytes;
-      if (vectorExtensions.includes(ext) || embroiderExtensions.includes(ext)) return vectorMaxBytes;
-      return imageMaxBytes;
-    };
-
-    const invalidSize = files.filter(f => f.size > getMaxSize(f.name));
+    const invalidSize = files.filter(f => f.size > MAX_UPLOAD_BYTES);
     const invalidType = files.filter(f => {
       const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
       return !allowedExtensions.includes(ext) && !f.type.startsWith('image/');
@@ -204,7 +195,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       this.messageService.add({
         severity: 'error',
         summary: 'File Too Large',
-        detail: `${invalidSize.length} file(s) exceed allowed size (images: 10MB, vector/embroidery: 25MB)`
+        detail: `${invalidSize.length} file(s) exceed the maximum size of 500MB each`
       });
     }
 
@@ -218,8 +209,17 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
     const validFiles = files.filter(f => {
       const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
-      return f.size <= getMaxSize(f.name) && (allowedExtensions.includes(ext) || f.type.startsWith('image/'));
+      return f.size <= MAX_UPLOAD_BYTES && (allowedExtensions.includes(ext) || f.type.startsWith('image/'));
     });
+    if (combinedFileBytes(validFiles) > MAX_UPLOAD_BYTES) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'File Too Large',
+        detail: 'Combined file size cannot exceed 500MB.'
+      });
+      (event.target as HTMLInputElement).value = '';
+      return;
+    }
     this.selectedFiles = validFiles;
     (event.target as HTMLInputElement).value = '';
   }

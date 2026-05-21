@@ -118,6 +118,32 @@ public class CommentService : ICommentService
             }
         }
 
+        // Notify the client when staff posts a non-internal comment (visible to client)
+        if ((creatorRole == "Admin" || creatorRole == "SuperAdmin") && visibleToClient && order.Client?.UserId is { } clientUserId)
+        {
+            try
+            {
+                var staffName = $"{user.FirstName} {user.LastName}".Trim();
+                if (string.IsNullOrEmpty(staffName)) staffName = "Support";
+                var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
+                var title = "New message on your order";
+                var message = $"{staffName} left a comment on order (#{orderNumber}).";
+                await _notificationService.CreateNotificationAsync(
+                    clientUserId,
+                    title,
+                    message,
+                    NotificationType.Info,
+                    orderId,
+                    NotificationReferenceType.Order,
+                    orderId,
+                    createdBy);
+            }
+            catch
+            {
+                // Notification failure must not affect comment creation
+            }
+        }
+
         return MapToResponse(commentLegacy, user, userRole);
     }
 
@@ -187,6 +213,8 @@ public class CommentService : ICommentService
         var comment = await _context.OrderComments
             .Include(c => c.CreatedByUser)
                 .ThenInclude(u => u.Role)
+            .Include(c => c.Order!)
+                .ThenInclude(o => o.Client)
             .FirstOrDefaultAsync(c => c.Id == commentId && !c.IsDeleted);
 
         if (comment == null)
@@ -198,8 +226,31 @@ public class CommentService : ICommentService
             comment.CommentType == CommentType.PriceNegotiationDesigner)
             throw new InvalidOperationException("Price negotiation notes use fixed visibility and cannot be changed here.");
 
+        var wasVisibleToClient = comment.VisibleToClient;
         comment.VisibleToClient = request.VisibleToClient;
         await _context.SaveChangesAsync();
+
+        // When staff shares a designer (or other) comment with the client, notify the client once
+        if (request.VisibleToClient && !wasVisibleToClient && comment.Order?.Client?.UserId is { } clientUserId)
+        {
+            try
+            {
+                var orderNumber = NotificationFormatHelper.GetOrderNumber(comment.OrderId);
+                await _notificationService.CreateNotificationAsync(
+                    clientUserId,
+                    "Update on your order",
+                    $"A team comment is now visible to you on order (#{orderNumber}).",
+                    NotificationType.Info,
+                    comment.OrderId,
+                    NotificationReferenceType.Order,
+                    comment.OrderId,
+                    userId);
+            }
+            catch
+            {
+                // Notification failure must not affect visibility update
+            }
+        }
 
         return MapToResponse(comment, comment.CreatedByUser, userRole);
     }

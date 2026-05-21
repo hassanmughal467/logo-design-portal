@@ -8,6 +8,7 @@ import { FileType } from '@shared/models/file.model';
 import { DesignCategory, DesignType } from '@shared/models/design-pricing.model';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
+import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
 
 @Component({
   selector: 'app-order-create',
@@ -52,6 +53,8 @@ export class OrderCreateComponent implements OnInit, OnChanges {
 
   showPlacementDropdown = false;
   showStylePreferencesDropdown = false;
+  /** Set when user submits without reference files so we can show validation. */
+  referenceFilesShowError = false;
 
   private static todayAtMidnight(): Date {
     const d = new Date();
@@ -111,6 +114,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
     });
     this.updatePlacementVisibility();
     this.updateStylePreferencesVisibility();
+    this.referenceFilesShowError = false;
     this.orderForm.markAsUntouched();
     this.selectedFiles = [];
   }
@@ -133,6 +137,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
     });
     this.showPlacementDropdown = false;
     this.showStylePreferencesDropdown = false;
+    this.referenceFilesShowError = false;
     this.updateStylePreferencesVisibility();
     this.orderForm.markAsUntouched();
     this.selectedFiles = [];
@@ -181,11 +186,26 @@ export class OrderCreateComponent implements OnInit, OnChanges {
     this.resetForm();
   }
 
+  get referenceFilesInvalid(): boolean {
+    return this.selectedFiles.length === 0 && this.referenceFilesShowError;
+  }
+
   onSubmit(): void {
     if (this.orderForm.invalid) {
       this.markFormGroupTouched(this.orderForm);
       return;
     }
+
+    if (this.selectedFiles.length === 0) {
+      this.referenceFilesShowError = true;
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Reference file required',
+        detail: 'Please upload at least one reference file before creating the order.'
+      });
+      return;
+    }
+    this.referenceFilesShowError = false;
 
     this.submitError = '';
     this.loading = true;
@@ -243,33 +263,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
       }
     });
 
-    if (this.selectedFiles.length > 0) {
-      this.createOrderWithFiles(orderData);
-    } else {
-      this.apiService.post<any>('orders', orderData).subscribe({
-        next: (order) => {
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Order created successfully'
-          });
-          this.loading = false;
-          this.orderCreated.emit(order);
-          this.closeModal();
-        },
-        error: (error) => {
-          const msg = error.error?.error || error.error?.message || (typeof error.error === 'string' ? error.error : null);
-          const detail = msg || (error.error?.errors ? JSON.stringify(error.error.errors) : 'Failed to create order');
-          this.submitError = typeof detail === 'string' ? detail : 'Failed to create order';
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: this.submitError
-          });
-          this.loading = false;
-        }
-      });
-    }
+    this.createOrderWithFiles(orderData);
   }
 
   private createOrderWithFiles(orderData: any): void {
@@ -343,17 +337,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
     const vectorExtensions = ['.svg', '.pdf', '.ai', '.eps', '.psd'];
     const embroiderExtensions = ['.pes', '.dst', '.jef', '.exp', '.vp3', '.xxx', '.hus', '.art', '.vip', '.vip3', '.shv', '.pec', '.jpm', '.sew', '.emb', '.csd', '.pcs', '.phb', '.phc', '.stx', '.s10', '.dsb', '.zsk'];
     const allowedExtensions = [...imageExtensions, ...vectorExtensions, ...embroiderExtensions];
-    const imageMaxBytes = 10 * 1024 * 1024;  // 10MB
-    const vectorMaxBytes = 25 * 1024 * 1024;  // 25MB
-
-    const getMaxSize = (fileName: string): number => {
-      const ext = '.' + (fileName.split('.').pop() || '').toLowerCase();
-      if (imageExtensions.includes(ext)) return imageMaxBytes;
-      if (vectorExtensions.includes(ext) || embroiderExtensions.includes(ext)) return vectorMaxBytes;
-      return imageMaxBytes;
-    };
-
-    const invalidSize = files.filter(f => f.size > getMaxSize(f.name));
+    const invalidSize = files.filter(f => f.size > MAX_UPLOAD_BYTES);
     const invalidType = files.filter(f => {
       const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
       return !allowedExtensions.includes(ext) && !f.type.startsWith('image/');
@@ -363,7 +347,7 @@ export class OrderCreateComponent implements OnInit, OnChanges {
       this.messageService.add({
         severity: 'error',
         summary: 'File Too Large',
-        detail: `${invalidSize.length} file(s) exceed allowed size (images: 10MB, vector/docs: 25MB)`
+        detail: `${invalidSize.length} file(s) exceed the maximum size of 500MB each`
       });
     }
 
@@ -378,13 +362,26 @@ export class OrderCreateComponent implements OnInit, OnChanges {
     // Filter to valid files and avoid duplicates
     const validFiles = files.filter(f => {
       const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
-      const validSize = f.size <= getMaxSize(f.name);
+      const validSize = f.size <= MAX_UPLOAD_BYTES;
       const validType = allowedExtensions.includes(ext) || f.type.startsWith('image/');
       const notDuplicate = !this.selectedFiles.some(existing => existing.name === f.name && existing.size === f.size);
       return validSize && validType && notDuplicate;
     });
-    
-    this.selectedFiles = [...this.selectedFiles, ...validFiles];
+
+    const merged = [...this.selectedFiles, ...validFiles];
+    if (combinedFileBytes(merged) > MAX_UPLOAD_BYTES) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'File Too Large',
+        detail: 'Combined file size cannot exceed 500MB.'
+      });
+      return;
+    }
+
+    this.selectedFiles = merged;
+    if (this.selectedFiles.length > 0) {
+      this.referenceFilesShowError = false;
+    }
   }
 
   removeFile(index: number): void {

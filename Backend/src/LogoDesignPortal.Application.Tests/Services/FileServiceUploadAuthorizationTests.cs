@@ -175,6 +175,7 @@ public class FileServiceUploadAuthorizationTests : IDisposable
             Mock.Of<INotificationService>(),
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Mock.Of<IDesignerPayoutService>(),
+            Mock.Of<IFileUploadScanHook>(),
             Options.Create(new ProductionSafetyOptions()));
     }
 

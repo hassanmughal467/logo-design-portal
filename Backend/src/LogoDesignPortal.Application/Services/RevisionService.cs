@@ -1,4 +1,5 @@
 using AutoMapper;
+using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Revisions;
@@ -31,9 +32,6 @@ public class RevisionService : IRevisionService
     private static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
     private static readonly string[] VectorExtensions = { ".svg", ".pdf", ".ai", ".eps", ".psd" };
     private static readonly string[] EmbroiderExtensions = { ".pes", ".dst", ".jef", ".exp", ".vp3", ".xxx", ".hus", ".art", ".vip", ".vip3", ".shv", ".pec", ".jpm", ".sew", ".emb", ".csd", ".pcs", ".phb", ".phc", ".stx", ".s10", ".dsb", ".zsk" };
-    private const long ImageMaxBytes = 10 * 1024 * 1024; // 10MB
-    private const long VectorMaxBytes = 25 * 1024 * 1024; // 25MB
-
     public RevisionService(
         IApplicationDbContext context,
         IMapper mapper,
@@ -73,24 +71,18 @@ public class RevisionService : IRevisionService
         }
     }
 
-    private static long GetMaxSizeForExtension(string extension)
-    {
-        var ext = extension.ToLowerInvariant();
-        if (ImageExtensions.Contains(ext)) return ImageMaxBytes;
-        if (VectorExtensions.Contains(ext)) return VectorMaxBytes;
-        if (EmbroiderExtensions.Contains(ext)) return VectorMaxBytes;
-        return ImageMaxBytes;
-    }
-
     private static void ValidateRevisionFile(IFormFile file)
     {
-        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        UploadSecurityHelper.ValidateUploadFileName(file.FileName);
+        var ext = UploadSecurityHelper.GetEffectiveExtension(file.FileName);
         var allowed = ImageExtensions.Concat(VectorExtensions).Concat(EmbroiderExtensions).Distinct().ToArray();
         if (!allowed.Contains(ext))
             throw new InvalidOperationException($"File type '{ext}' is not allowed for file '{file.FileName}'.");
-        var maxSize = GetMaxSizeForExtension(ext);
-        if (file.Length > maxSize)
-            throw new InvalidOperationException($"File '{file.FileName}' exceeds maximum allowed size ({(ImageExtensions.Contains(ext) ? "10MB" : "25MB")}).");
+        if (file.Length > UploadLimits.MaxMultipartBytes)
+            throw new InvalidOperationException($"File '{file.FileName}' exceeds maximum allowed size (500MB).");
+        UploadSecurityHelper.ValidateDeclaredContentType(ext, file.ContentType);
+        using var stream = file.OpenReadStream();
+        UploadSecurityHelper.ValidateMagicBytes(ext, stream);
     }
 
     public async Task<bool> CanRequestRevisionAsync(Guid orderId, Guid userId, string userRole)
@@ -208,6 +200,17 @@ public class RevisionService : IRevisionService
         // Upload revision files if provided
         if (request.Files != null && request.Files.Length > 0)
         {
+            long revisionFilesTotal = 0;
+            foreach (var file in request.Files)
+            {
+                if (file == null || file.Length == 0)
+                    continue;
+                revisionFilesTotal += file.Length;
+            }
+
+            if (revisionFilesTotal > UploadLimits.MaxMultipartBytes)
+                throw new InvalidOperationException("Combined file size cannot exceed 500MB.");
+
             foreach (var file in request.Files)
             {
                 if (file == null || file.Length == 0)
@@ -244,7 +247,7 @@ public class RevisionService : IRevisionService
         }
 
         // Update order status
-        order.Status = OrderStatus.RevisionRequested;
+        OrderStatusTransitionHelper.Apply(order, OrderStatus.RevisionRequested);
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = requestedBy;
 
@@ -529,7 +532,7 @@ public class RevisionService : IRevisionService
         if (order.Client == null)
             throw new InvalidOperationException("Order has no associated client.");
         var isClientApproval = userRole == "Client" && order.Client.UserId == approvedBy;
-        order.Status = isClientApproval ? OrderStatus.ClientApproved : OrderStatus.Completed;
+        OrderStatusTransitionHelper.Apply(order, isClientApproval ? OrderStatus.ClientApproved : OrderStatus.Completed);
         order.AllowUploads = false;
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = approvedBy;

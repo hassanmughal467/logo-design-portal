@@ -1,4 +1,6 @@
 using System.Text.Json;
+using LogoDesignPortal.Application.Constants;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Quotes;
 using LogoDesignPortal.Application.Interfaces;
@@ -16,20 +18,20 @@ public class QuoteService : IQuoteService
     private readonly IApplicationDbContext _context;
     private readonly INotificationService _notificationService;
     private readonly IOrderService _orderService;
+    private readonly IClientProfileEnsureService _clientProfileEnsure;
     private readonly string _quoteStoragePath;
     private static readonly string[] AllowedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".svg", ".ai", ".eps", ".psd" };
-    private const long ImageMaxBytes = 10 * 1024 * 1024;
-    private const long DocumentMaxBytes = 25 * 1024 * 1024;
-
     public QuoteService(
         IApplicationDbContext context,
         INotificationService notificationService,
         IOrderService orderService,
+        IClientProfileEnsureService clientProfileEnsure,
         IConfiguration configuration)
     {
         _context = context;
         _notificationService = notificationService;
         _orderService = orderService;
+        _clientProfileEnsure = clientProfileEnsure;
         var root = configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
         _quoteStoragePath = Path.Combine(root, "Quotes");
         Directory.CreateDirectory(_quoteStoragePath);
@@ -37,16 +39,15 @@ public class QuoteService : IQuoteService
 
     public async Task<QuoteResponseDto> CreateQuoteAsync(CreateQuoteRequestDto request, IFormFile[] files, Guid clientUserId)
     {
-        var client = await _context.ClientProfiles.FirstOrDefaultAsync(c => c.UserId == clientUserId && !c.IsDeleted)
-            ?? throw new InvalidOperationException("Client profile not found.");
+        var client = await _clientProfileEnsure.EnsureForClientUserAsync(clientUserId);
 
         var savedFiles = await SaveQuoteAttachmentsAsync(files);
         var quote = new Quote
         {
             Id = Guid.NewGuid(),
             ClientId = client.Id,
-            LogoName = request.LogoName.Trim(),
-            Description = request.Description.Trim(),
+            LogoName = TextInputSanitizer.SanitizePlainText(request.LogoName.Trim(), 200) ?? string.Empty,
+            Description = TextInputSanitizer.SanitizePlainText(request.Description.Trim()) ?? string.Empty,
             RequestedBudget = request.RequestedBudget,
             AttachmentsJson = JsonSerializer.Serialize(savedFiles),
             Status = QuoteStatus.Pending,
@@ -229,11 +230,15 @@ public class QuoteService : IQuoteService
         foreach (var file in files)
         {
             if (file.Length <= 0) continue;
-            var extension = Path.GetExtension(file.FileName);
+            UploadSecurityHelper.ValidateUploadFileName(file.FileName);
+            var extension = UploadSecurityHelper.GetEffectiveExtension(file.FileName);
+            UploadSecurityHelper.ValidateDeclaredContentType(extension, file.ContentType);
+            using (var validationStream = file.OpenReadStream())
+                UploadSecurityHelper.ValidateMagicBytes(extension, validationStream);
             var safeName = $"{Guid.NewGuid()}{extension}";
             var fullPath = Path.Combine(_quoteStoragePath, safeName);
-            await using var stream = new FileStream(fullPath, FileMode.Create);
-            await file.CopyToAsync(stream);
+            await using var writeStream = new FileStream(fullPath, FileMode.Create);
+            await file.CopyToAsync(writeStream);
             saved.Add(safeName);
         }
 
@@ -245,19 +250,25 @@ public class QuoteService : IQuoteService
         if (files.Length > 10)
             throw new InvalidOperationException("A maximum of 10 attachments is allowed per quote.");
 
+        long totalBytes = 0;
         foreach (var file in files)
         {
             if (file.Length <= 0)
                 throw new InvalidOperationException("One or more attachments are empty.");
 
-            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            UploadSecurityHelper.ValidateUploadFileName(file.FileName);
+            var extension = UploadSecurityHelper.GetEffectiveExtension(file.FileName);
             if (!AllowedExtensions.Contains(extension))
                 throw new InvalidOperationException($"Unsupported attachment type: {extension}");
+            UploadSecurityHelper.ValidateDeclaredContentType(extension, file.ContentType);
 
-            var maxSize = extension is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" ? ImageMaxBytes : DocumentMaxBytes;
-            if (file.Length > maxSize)
-                throw new InvalidOperationException($"Attachment '{file.FileName}' exceeds allowed size.");
+            if (file.Length > UploadLimits.MaxMultipartBytes)
+                throw new InvalidOperationException($"Attachment '{file.FileName}' exceeds allowed size (500MB).");
+            totalBytes += file.Length;
         }
+
+        if (totalBytes > UploadLimits.MaxMultipartBytes)
+            throw new InvalidOperationException("Combined attachment size cannot exceed 500MB.");
     }
 
     private static QuoteResponseDto ToDto(Quote quote)

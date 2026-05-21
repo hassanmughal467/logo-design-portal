@@ -57,5 +57,7 @@ public class LogoFileConfiguration : IEntityTypeConfiguration<LogoFile>
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(e => e.PreviewBatchId);
+        builder.HasIndex(e => new { e.OrderId, e.IsDeleted });
+        builder.HasIndex(e => new { e.OrderId, e.IsVisibleToClient, e.FileType });
     }
 }

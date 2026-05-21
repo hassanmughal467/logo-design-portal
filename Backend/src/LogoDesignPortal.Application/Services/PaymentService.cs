@@ -1,6 +1,7 @@
 using AutoMapper;
 using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.DTOs.Payments;
+using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
@@ -48,17 +49,17 @@ public class PaymentService : IPaymentService
         _readModelCache.BumpAnalytics();
     }
 
-    public async Task<PaymentResponseDto> CreatePaymentAsync(CreatePaymentRequestDto request, Guid userId)
+    public async Task<PaymentResponseDto> CreatePaymentAsync(CreatePaymentRequestDto request, Guid userId, string? userRole)
     {
-        // Validate invoice exists
         var invoice = await _context.Invoices
             .Include(i => i.Client)
             .FirstOrDefaultAsync(i => i.Id == request.InvoiceId && !i.IsDeleted);
 
         if (invoice == null)
-        {
             throw new InvalidOperationException("Invoice not found.");
-        }
+
+        if (!PaymentInvoiceAccessHelper.CanAccessInvoice(invoice, userId, userRole))
+            throw new ForbiddenAccessException("You do not have permission to create a payment for this invoice.");
 
         // Create payment record
         var payment = new Payment
@@ -123,16 +124,17 @@ public class PaymentService : IPaymentService
         return _mapper.Map<PaymentResponseDto>(payment);
     }
 
-    public async Task<PaymentLinkResponseDto> GeneratePaymentLinkAsync(Guid invoiceId, string paymentMethod, Guid userId)
+    public async Task<PaymentLinkResponseDto> GeneratePaymentLinkAsync(Guid invoiceId, string paymentMethod, Guid userId, string? userRole)
     {
         var invoice = await _context.Invoices
             .Include(i => i.Client)
             .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
 
         if (invoice == null)
-        {
             throw new InvalidOperationException("Invoice not found.");
-        }
+
+        if (!PaymentInvoiceAccessHelper.CanAccessInvoice(invoice, userId, userRole))
+            throw new ForbiddenAccessException("You do not have permission to generate a payment link for this invoice.");
 
         var request = new CreatePaymentRequestDto
         {
@@ -144,7 +146,7 @@ public class PaymentService : IPaymentService
             CancelUrl = $"{GetFrontendUrl()}/invoices?payment=cancelled"
         };
 
-        var payment = await CreatePaymentAsync(request, userId);
+        var payment = await CreatePaymentAsync(request, userId, userRole);
 
         return new PaymentLinkResponseDto
         {
@@ -159,16 +161,18 @@ public class PaymentService : IPaymentService
         };
     }
 
-    public async Task<PaymentResponseDto> ProcessPaymentAsync(ProcessPaymentRequestDto request, Guid userId)
+    public async Task<PaymentResponseDto> ProcessPaymentAsync(ProcessPaymentRequestDto request, Guid userId, string? userRole)
     {
         var payment = await _context.Payments
             .Include(p => p.Invoice)
+                .ThenInclude(i => i.Client)
             .FirstOrDefaultAsync(p => p.Id == request.PaymentId && !p.IsDeleted);
 
         if (payment == null)
-        {
             throw new InvalidOperationException("Payment not found.");
-        }
+
+        if (!PaymentInvoiceAccessHelper.CanAccessInvoice(payment.Invoice, userId, userRole))
+            throw new ForbiddenAccessException("You do not have permission to process this payment.");
 
         bool verified = false;
 

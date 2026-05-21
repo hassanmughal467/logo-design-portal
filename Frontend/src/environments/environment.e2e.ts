@@ -1,5 +1,1 @@
-export const environment = {
-  production: false,
-  apiUrl: 'http://localhost:5000',
-  apiVersion: ''
-};
+export { environment } from './environment.testing';

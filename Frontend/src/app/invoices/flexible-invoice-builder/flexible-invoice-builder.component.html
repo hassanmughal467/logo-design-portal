@@ -66,16 +66,22 @@
             <td>{{ order.orderNumber }}</td>
             <td>{{ order.title || '—' }}</td>
             <td>{{ order.completedDate ? (order.completedDate | date:'yyyy-MM-dd') : '-' }}</td>
-            <td class="text-right">{{ formatCurrency(order.price) }}</td>
+            <td class="text-right">{{ formatCurrency(order.price, order.currencyCode) }}</td>
           </tr>
         </ng-template>
       </p-table>
     </div>
 
     <div class="totals">
-      <strong>Preview Total:</strong> {{ formatCurrency(previewTotal) }}
-      <strong style="margin-left: 1rem;">Selected Total:</strong> {{ formatCurrency(selectedTotal) }}
+      <strong>Preview Total:</strong> {{ formatCurrency(previewTotal, previewCurrencyCode) }}
+      <strong style="margin-left: 1rem;">Selected Total:</strong> {{ formatCurrency(selectedTotal, selectedTotalCurrency) }}
     </div>
+
+    <p class="flexible-pricing-note" *ngIf="orders.length > 0 && selectedOrderIds.size > 0 && selectedTotal <= 0">
+      <i class="pi pi-info-circle" aria-hidden="true"></i>
+      Selected orders total <strong>{{ formatCurrency(0, selectedTotalCurrency) }}</strong> (often missing client pricing). You can still generate the invoice, then on
+      <strong>Invoices</strong> open it and use <strong>Edit line items &amp; details</strong> to set correct amounts before sending.
+    </p>
 
     <div class="actions">
       <p-button label="Back to Invoices" styleClass="p-button-outlined" (onClick)="router.navigate(['/invoices'])"></p-button>

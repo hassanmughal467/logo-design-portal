@@ -1,7 +1,10 @@
+using LogoDesignPortal.Application.Branding;
+using LogoDesignPortal.Application.Configuration;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -11,10 +14,12 @@ namespace LogoDesignPortal.Application.Services;
 public class InvoicePdfService : IInvoicePdfService
 {
     private readonly IApplicationDbContext _context;
+    private readonly InvoiceBrandingOptions _brandingOptions;
 
-    public InvoicePdfService(IApplicationDbContext context)
+    public InvoicePdfService(IApplicationDbContext context, IOptions<InvoiceBrandingOptions> brandingOptions)
     {
         _context = context;
+        _brandingOptions = brandingOptions?.Value ?? new InvoiceBrandingOptions();
         QuestPDF.Settings.License = LicenseType.Community;
     }
 
@@ -25,7 +30,6 @@ public class InvoicePdfService : IInvoicePdfService
             .Where(s => s.Category == "Business" && !s.IsDeleted)
             .ToDictionaryAsync(s => s.Key, s => s.Value);
 
-        var companyName = businessSettings.GetValueOrDefault("companyName", "Logo Design Agency");
         var companyEmail = businessSettings.GetValueOrDefault("email", "");
         var companyPhone = businessSettings.GetValueOrDefault("phone", "");
         var companyAddress = businessSettings.GetValueOrDefault("address", "");
@@ -43,8 +47,7 @@ public class InvoicePdfService : IInvoicePdfService
             .Where(s => s.Category == "Invoice" && !s.IsDeleted)
             .ToDictionaryAsync(s => s.Key, s => s.Value);
 
-        var currency = invoiceSettings.GetValueOrDefault("currency", "USD");
-        var currencySymbol = GetCurrencySymbol(currency);
+        var settingsCurrency = invoiceSettings.GetValueOrDefault("currency", "USD");
 
         // Status colors
         var statusColor = invoice.Status switch
@@ -62,40 +65,57 @@ public class InvoicePdfService : IInvoicePdfService
                 page.Margin(40);
                 page.DefaultTextStyle(x => x.FontSize(10).FontColor(Colors.Grey.Darken3));
 
-                // Header
+                // Header: logo top-center; name + tagline left (name one line); INVOICE + status right
                 page.Header().Element(header =>
                 {
-                    header.Row(row =>
-                    {
-                        // Company Info (Left)
-                        row.RelativeItem().Column(col =>
-                        {
-                            col.Item().Text(companyName)
-                                .FontSize(22).Bold().FontColor(Colors.Blue.Darken2);
+                    var logoBytes = TryLoadIssuerLogoBytes();
 
-                            if (!string.IsNullOrWhiteSpace(companyFullAddress))
-                                col.Item().Text(companyFullAddress).FontSize(9).FontColor(Colors.Grey.Darken1);
-                            if (!string.IsNullOrWhiteSpace(companyPhone))
-                                col.Item().Text($"Phone: {companyPhone}").FontSize(9).FontColor(Colors.Grey.Darken1);
-                            if (!string.IsNullOrWhiteSpace(companyEmail))
-                                col.Item().Text($"Email: {companyEmail}").FontSize(9).FontColor(Colors.Grey.Darken1);
-                            if (!string.IsNullOrWhiteSpace(companyWebsite))
-                                col.Item().Text($"Web: {companyWebsite}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    header.Column(stack =>
+                    {
+                        stack.Item().Row(centerRow =>
+                        {
+                            centerRow.RelativeItem();
+                            if (logoBytes != null)
+                            {
+                                centerRow.ConstantItem(150).Height(68).AlignMiddle()
+                                    .Image(logoBytes).FitArea();
+                            }
+
+                            centerRow.RelativeItem();
                         });
 
-                        // Invoice Title & Status (Right)
-                        row.RelativeItem().AlignRight().Column(col =>
+                        stack.Item().PaddingTop(8).Row(bottomRow =>
                         {
-                            col.Item().Text("INVOICE")
-                                .FontSize(28).Bold().FontColor(Colors.Blue.Darken2);
-
-                            col.Item().PaddingTop(5).Row(statusRow =>
+                            bottomRow.RelativeItem().Column(left =>
                             {
-                                statusRow.AutoItem()
-                                    .Background(statusColor)
-                                    .Padding(4)
-                                    .Text(invoice.Status.ToUpper())
-                                    .FontSize(10).Bold().FontColor(Colors.White);
+                                left.Item().Text(InvoicePdfBranding.IssuerName)
+                                    .FontSize(22).Bold().FontColor(Colors.Blue.Darken2);
+                                left.Item().PaddingTop(4).Text(InvoicePdfBranding.Tagline)
+                                    .FontSize(9).SemiBold().FontColor(Colors.Grey.Darken2);
+
+                                if (!string.IsNullOrWhiteSpace(companyFullAddress))
+                                    left.Item().PaddingTop(6).Text(companyFullAddress).FontSize(9).FontColor(Colors.Grey.Darken1);
+                                if (!string.IsNullOrWhiteSpace(companyPhone))
+                                    left.Item().Text($"Phone: {companyPhone}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                                if (!string.IsNullOrWhiteSpace(companyEmail))
+                                    left.Item().Text($"Email: {companyEmail}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                                if (!string.IsNullOrWhiteSpace(companyWebsite))
+                                    left.Item().Text($"Web: {companyWebsite}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                            });
+
+                            bottomRow.RelativeItem().AlignRight().Column(right =>
+                            {
+                                right.Item().Text("INVOICE")
+                                    .FontSize(28).Bold().FontColor(Colors.Blue.Darken2);
+
+                                right.Item().PaddingTop(5).Row(statusRow =>
+                                {
+                                    statusRow.AutoItem()
+                                        .Background(statusColor)
+                                        .Padding(4)
+                                        .Text(invoice.Status.ToUpper())
+                                        .FontSize(10).Bold().FontColor(Colors.White);
+                                });
                             });
                         });
                     });
@@ -210,7 +230,7 @@ public class InvoicePdfService : IInvoicePdfService
                             header.Cell().Background(Colors.Blue.Darken2).Padding(8)
                                 .Text("Date").FontColor(Colors.White).SemiBold().FontSize(9);
                             header.Cell().Background(Colors.Blue.Darken2).Padding(8)
-                                .Text("Tile").FontColor(Colors.White).SemiBold().FontSize(9);
+                                .Text("Title").FontColor(Colors.White).SemiBold().FontSize(9);
                             header.Cell().Background(Colors.Blue.Darken2).Padding(8)
                                 .Text("Description").FontColor(Colors.White).SemiBold().FontSize(9);
                             header.Cell().Background(Colors.Blue.Darken2).Padding(8).AlignRight()
@@ -236,8 +256,9 @@ public class InvoicePdfService : IInvoicePdfService
                                 .Text(orderTitle).FontSize(9);
                             table.Cell().Background(bgColor).Padding(8)
                                 .Text(descriptionOrTitle).FontSize(9);
+                            var lineSymbol = GetCurrencySymbol(ResolveLineItemCurrency(item, invoice, settingsCurrency));
                             table.Cell().Background(bgColor).Padding(8).AlignRight()
-                                .Text($"{currencySymbol}{item.Amount:N2}").FontSize(9);
+                                .Text($"{lineSymbol}{item.Amount:N2}").FontSize(9);
                         }
 
                         // If no items, show a placeholder
@@ -253,12 +274,13 @@ public class InvoicePdfService : IInvoicePdfService
                     // Totals Section
                     content.Item().AlignRight().Width(250).Column(totals =>
                     {
+                        var totalsSymbol = GetCurrencySymbol(ResolveInvoiceTotalsCurrency(invoice, settingsCurrency));
                         // Subtotal
                         totals.Item().BorderBottom(1).BorderColor(Colors.Grey.Lighten2)
                             .Padding(6).Row(r =>
                         {
                             r.RelativeItem().Text("Subtotal:").SemiBold();
-                            r.AutoItem().AlignRight().Text($"{currencySymbol}{invoice.Amount:N2}");
+                            r.AutoItem().AlignRight().Text($"{totalsSymbol}{invoice.Amount:N2}");
                         });
 
                         // Tax
@@ -268,7 +290,7 @@ public class InvoicePdfService : IInvoicePdfService
                                 .Padding(6).Row(r =>
                             {
                                 r.RelativeItem().Text("Tax:").SemiBold();
-                                r.AutoItem().AlignRight().Text($"{currencySymbol}{invoice.TaxAmount:N2}");
+                                r.AutoItem().AlignRight().Text($"{totalsSymbol}{invoice.TaxAmount:N2}");
                             });
                         }
 
@@ -276,7 +298,7 @@ public class InvoicePdfService : IInvoicePdfService
                         totals.Item().Background(Colors.Blue.Darken2).Padding(8).Row(r =>
                         {
                             r.RelativeItem().Text("TOTAL:").Bold().FontColor(Colors.White).FontSize(12);
-                            r.AutoItem().AlignRight().Text($"{currencySymbol}{invoice.TotalAmount:N2}")
+                            r.AutoItem().AlignRight().Text($"{totalsSymbol}{invoice.TotalAmount:N2}")
                                 .Bold().FontColor(Colors.White).FontSize(12);
                         });
                     });
@@ -327,7 +349,6 @@ public class InvoicePdfService : IInvoicePdfService
             .Where(s => s.Category == "Business" && !s.IsDeleted)
             .ToDictionaryAsync(s => s.Key, s => s.Value);
 
-        var companyName = businessSettings.GetValueOrDefault("companyName", "Logo Design Agency");
         var companyEmail = businessSettings.GetValueOrDefault("email", "");
         var companyPhone = businessSettings.GetValueOrDefault("phone", "");
 
@@ -336,8 +357,15 @@ public class InvoicePdfService : IInvoicePdfService
             .Where(s => s.Category == "Invoice" && !s.IsDeleted)
             .ToDictionaryAsync(s => s.Key, s => s.Value);
 
-        var currency = invoiceSettings.GetValueOrDefault("currency", "USD");
-        var currencySymbol = GetCurrencySymbol(currency);
+        var settingsCurrency = invoiceSettings.GetValueOrDefault("currency", "USD");
+        var distinctReportCurrencies = invoices
+            .Select(i => ResolveInvoiceTotalsCurrency(i, settingsCurrency))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var reportSummaryCurrency = distinctReportCurrencies.Count == 1
+            ? distinctReportCurrencies[0]
+            : settingsCurrency;
+        var reportSummarySymbol = GetCurrencySymbol(reportSummaryCurrency);
 
         // Calculate summary
         var totalAmount = invoices.Sum(i => i.TotalAmount);
@@ -352,28 +380,44 @@ public class InvoicePdfService : IInvoicePdfService
                 page.Margin(40);
                 page.DefaultTextStyle(x => x.FontSize(10).FontColor(Colors.Grey.Darken3));
 
-                // Header
+                // Header: logo top-center; name + tagline left; report meta right
                 page.Header().Column(header =>
                 {
-                    header.Item().Row(row =>
+                    var logoBytes = TryLoadIssuerLogoBytes();
+
+                    header.Item().Row(centerRow =>
                     {
-                        row.RelativeItem().Column(col =>
+                        centerRow.RelativeItem();
+                        if (logoBytes != null)
                         {
-                            col.Item().Text(companyName)
+                            centerRow.ConstantItem(140).Height(60).AlignMiddle()
+                                .Image(logoBytes).FitArea();
+                        }
+
+                        centerRow.RelativeItem();
+                    });
+
+                    header.Item().PaddingTop(8).Row(bottomRow =>
+                    {
+                        bottomRow.RelativeItem().Column(left =>
+                        {
+                            left.Item().Text(InvoicePdfBranding.IssuerName)
                                 .FontSize(20).Bold().FontColor(Colors.Blue.Darken2);
+                            left.Item().PaddingTop(4).Text(InvoicePdfBranding.Tagline)
+                                .FontSize(8).SemiBold().FontColor(Colors.Grey.Darken2);
                             if (!string.IsNullOrWhiteSpace(companyEmail))
-                                col.Item().Text(companyEmail).FontSize(9).FontColor(Colors.Grey.Darken1);
+                                left.Item().PaddingTop(6).Text(companyEmail).FontSize(9).FontColor(Colors.Grey.Darken1);
                             if (!string.IsNullOrWhiteSpace(companyPhone))
-                                col.Item().Text(companyPhone).FontSize(9).FontColor(Colors.Grey.Darken1);
+                                left.Item().Text(companyPhone).FontSize(9).FontColor(Colors.Grey.Darken1);
                         });
 
-                        row.RelativeItem().AlignRight().Column(col =>
+                        bottomRow.RelativeItem().AlignRight().Column(right =>
                         {
-                            col.Item().Text(reportTitle)
+                            right.Item().Text(reportTitle)
                                 .FontSize(22).Bold().FontColor(Colors.Blue.Darken2);
-                            col.Item().Text($"Generated: {DateTime.UtcNow:MMM dd, yyyy}")
+                            right.Item().Text($"Generated: {DateTime.UtcNow:MMM dd, yyyy}")
                                 .FontSize(9).FontColor(Colors.Grey.Darken1);
-                            col.Item().Text($"Total Invoices: {invoices.Count}")
+                            right.Item().Text($"Total Invoices: {invoices.Count}")
                                 .FontSize(9).FontColor(Colors.Grey.Darken1);
                         });
                     });
@@ -392,7 +436,7 @@ public class InvoicePdfService : IInvoicePdfService
                             .Background(Colors.Blue.Lighten5).Padding(10).Column(col =>
                         {
                             col.Item().Text("Total Amount").FontSize(9).FontColor(Colors.Grey.Darken1);
-                            col.Item().Text($"{currencySymbol}{totalAmount:N2}")
+                            col.Item().Text($"{reportSummarySymbol}{totalAmount:N2}")
                                 .FontSize(16).Bold().FontColor(Colors.Blue.Darken2);
                         });
 
@@ -403,7 +447,7 @@ public class InvoicePdfService : IInvoicePdfService
                             .Background("#f0fdf4").Padding(10).Column(col =>
                         {
                             col.Item().Text("Paid").FontSize(9).FontColor(Colors.Grey.Darken1);
-                            col.Item().Text($"{currencySymbol}{paidAmount:N2}")
+                            col.Item().Text($"{reportSummarySymbol}{paidAmount:N2}")
                                 .FontSize(16).Bold().FontColor("#22c55e");
                         });
 
@@ -414,7 +458,7 @@ public class InvoicePdfService : IInvoicePdfService
                             .Background("#fffbeb").Padding(10).Column(col =>
                         {
                             col.Item().Text("Pending").FontSize(9).FontColor(Colors.Grey.Darken1);
-                            col.Item().Text($"{currencySymbol}{pendingAmount:N2}")
+                            col.Item().Text($"{reportSummarySymbol}{pendingAmount:N2}")
                                 .FontSize(16).Bold().FontColor("#f59e0b");
                         });
                     });
@@ -472,8 +516,9 @@ public class InvoicePdfService : IInvoicePdfService
                                 .Text(inv.InvoiceNumber).FontSize(8);
                             table.Cell().Background(bgColor).Padding(6)
                                 .Text(inv.ClientName).FontSize(8);
+                            var rowSymbol = GetCurrencySymbol(ResolveInvoiceTotalsCurrency(inv, settingsCurrency));
                             table.Cell().Background(bgColor).Padding(6).AlignRight()
-                                .Text($"{currencySymbol}{inv.TotalAmount:N2}").FontSize(8);
+                                .Text($"{rowSymbol}{inv.TotalAmount:N2}").FontSize(8);
                             table.Cell().Background(bgColor).Padding(6).AlignCenter()
                                 .Text(inv.Status).FontSize(8).FontColor(statusColor).SemiBold();
                             table.Cell().Background(bgColor).Padding(6)
@@ -495,7 +540,7 @@ public class InvoicePdfService : IInvoicePdfService
                 {
                     row.RelativeItem().Text(text =>
                     {
-                        text.Span(companyName).FontSize(8).FontColor(Colors.Grey.Medium);
+                        text.Span(InvoicePdfBranding.IssuerName).FontSize(8).FontColor(Colors.Grey.Medium);
                         text.Span(" — Invoice Report").FontSize(8).FontColor(Colors.Grey.Medium);
                     });
 
@@ -511,6 +556,43 @@ public class InvoicePdfService : IInvoicePdfService
         });
 
         return document.GeneratePdf();
+    }
+
+    /// <summary>Uses <see cref="InvoiceBrandingOptions.LogoPath"/> when set and the file exists; otherwise embedded PNG.</summary>
+    private byte[]? TryLoadIssuerLogoBytes()
+    {
+        var path = _brandingOptions.LogoPath?.Trim();
+        if (!string.IsNullOrEmpty(path))
+        {
+            try
+            {
+                if (File.Exists(path))
+                    return File.ReadAllBytes(path);
+            }
+            catch
+            {
+                // Fall back to embedded asset
+            }
+        }
+
+        return TryLoadEmbeddedIssuerLogoBytes();
+    }
+
+    private static byte[]? TryLoadEmbeddedIssuerLogoBytes()
+    {
+        var assembly = typeof(InvoicePdfService).Assembly;
+        var resourceName = assembly.GetManifestResourceNames()
+            .FirstOrDefault(n => n.EndsWith("hawk-merchandising-logo.png", StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrEmpty(resourceName))
+            return null;
+
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream == null)
+            return null;
+
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return ms.ToArray();
     }
 
     private static string BuildAddress(string? address, string? city, string? state, string? country, string? postalCode)
@@ -535,6 +617,24 @@ public class InvoicePdfService : IInvoicePdfService
             parts.Add(country);
 
         return string.Join(", ", parts);
+    }
+
+    /// <summary>Uses order-linked currency on the DTO when present; otherwise invoice-level code; otherwise portal invoice settings.</summary>
+    private static string ResolveInvoiceTotalsCurrency(InvoiceResponseDto invoice, string settingsFallback)
+    {
+        if (!string.IsNullOrWhiteSpace(invoice.CurrencyCode))
+            return invoice.CurrencyCode.Trim();
+        var fromItem = invoice.Items.FirstOrDefault(i => !string.IsNullOrWhiteSpace(i.CurrencyCode))?.CurrencyCode;
+        if (!string.IsNullOrWhiteSpace(fromItem))
+            return fromItem.Trim();
+        return settingsFallback;
+    }
+
+    private static string ResolveLineItemCurrency(InvoiceItemDto item, InvoiceResponseDto invoice, string settingsFallback)
+    {
+        if (!string.IsNullOrWhiteSpace(item.CurrencyCode))
+            return item.CurrencyCode.Trim();
+        return ResolveInvoiceTotalsCurrency(invoice, settingsFallback);
     }
 
     private static string GetCurrencySymbol(string currency)

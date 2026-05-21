@@ -1,0 +1,53 @@
+---
+description: Testing requirements — pyramid, security, critical modules, AAA
+alwaysApply: true
+---
+
+# Testing Rules
+
+## Always generate (for touched features)
+
+- Unit tests (`LogoDesignPortal.Domain.Tests`, `LogoDesignPortal.Application.Tests`)
+- Integration tests (`LogoDesignPortal.API.IntegrationTests`, `[Collection("Integration")]`)
+- Playwright E2E (`Frontend/e2e/tests/`)
+- Permission / authorization tests (403, 401, role guards)
+- Security tests (IDOR, CSRF when cookie auth, upload abuse, webhook signatures)
+- Negative tests (invalid input, wrong role, not found)
+- Concurrency tests where mutations race (status updates, mark-paid, assign)
+
+## Critical areas (require coverage when changing code)
+
+- Auth (login, cookies, CSRF, refresh, lockout)
+- Orders (lifecycle, assign, status API)
+- Invoices & payments (client billing, access control)
+- Uploads (type, size, duplicate window, visibility)
+- SignalR (reconnect, credentials with cookies)
+- Role masking (client vs designer DTOs)
+- State machine transitions (`OrderStatusStateMachine`, no illegal jumps)
+
+## Never skip
+
+- Unauthorized access (no token, wrong role, other tenant)
+- Invalid state transitions
+- Edge cases (limits, empty payloads, locked orders)
+- Retry / transient failure scenarios where applicable
+- Duplicate action tests (double invoice, duplicate upload window)
+
+## Test quality
+
+- **AAA**: Arrange → Act → Assert
+- **Deterministic**: no time-of-day flakes; seed via `TestWebApplicationFactory` / factories
+- **Isolated**: own `HttpClient` per auth context; in-memory DB per factory instance
+- **Production-grade**: assert status codes and bodies; prefer `IntegrationTestJson.Options`; document known gaps in module QA docs under `docs/`
+
+## Project layout
+
+| Layer | Location |
+|-------|----------|
+| Domain unit | `Backend/src/LogoDesignPortal.Domain.Tests/` |
+| Application unit | `Backend/src/LogoDesignPortal.Application.Tests/` |
+| API integration | `Backend/src/LogoDesignPortal.API.IntegrationTests/` |
+| E2E | `Frontend/e2e/tests/security/`, `workflows/` |
+| Module guides | `docs/TESTING_*_MODULE.md`, `docs/QA_*_MODULE.md` |
+
+Do not skip tests in CI. Do not weaken assertions to make flaky tests pass—fix root cause.

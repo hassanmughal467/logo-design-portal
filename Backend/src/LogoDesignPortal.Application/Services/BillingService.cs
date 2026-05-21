@@ -53,6 +53,21 @@ public class BillingService : IBillingService
             .Where(c => clientIds.Contains(c.Id) && !c.IsDeleted)
             .ToDictionaryAsync(c => c.Id);
 
+        var currencyRows = await _context.LogoOrders
+            .AsNoTracking()
+            .Where(o => !o.IsDeleted
+                && o.Status == OrderStatus.Completed
+                && o.BillingEligible
+                && !o.IsInvoiced
+                && clientIds.Contains(o.ClientId))
+            .Select(o => new { o.ClientId, o.CurrencyCode })
+            .ToListAsync();
+        var currencyByClient = currencyRows
+            .GroupBy(x => x.ClientId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => (x.CurrencyCode ?? "USD").Trim().ToUpperInvariant()).Distinct().ToList());
+
         return clientsWithUninvoiced
             .Where(c => clients.ContainsKey(c.ClientId))
             .Select(c =>
@@ -60,13 +75,17 @@ public class BillingService : IBillingService
                 var client = clients[c.ClientId];
                 var clientName = $"{client.User?.FirstName} {client.User?.LastName}".Trim();
                 if (string.IsNullOrEmpty(clientName)) clientName = client.CompanyName ?? "Unknown";
+                string? singleCurrency = null;
+                if (currencyByClient.TryGetValue(c.ClientId, out var codes) && codes.Count == 1)
+                    singleCurrency = codes[0];
                 return new BillingQueueOverviewDto
                 {
                     ClientId = c.ClientId,
                     ClientName = clientName,
                     CompanyName = client.CompanyName ?? string.Empty,
                     UninvoicedOrderCount = c.Count,
-                    TotalPendingAmount = c.TotalAmount
+                    TotalPendingAmount = c.TotalAmount,
+                    CurrencyCode = singleCurrency
                 };
             })
             .OrderByDescending(x => x.TotalPendingAmount)
@@ -117,6 +136,7 @@ public class BillingService : IBillingService
                 o.ClientChargePrice,
                 o.ClientPrice,
                 o.Price,
+                o.CurrencyCode,
                 o.CompletedDate
             })
             .ToListAsync();
@@ -127,6 +147,7 @@ public class BillingService : IBillingService
             OrderNumber = NotificationFormatHelper.GetOrderNumber(o.Id),
             Title = o.Title ?? "Logo Design",
             Price = o.ClientChargePrice > 0 ? o.ClientChargePrice : (o.ClientPrice ?? o.Price),
+            CurrencyCode = string.IsNullOrWhiteSpace(o.CurrencyCode) ? "USD" : o.CurrencyCode.Trim(),
             CompletedDate = o.CompletedDate
         }).ToList();
 
@@ -167,6 +188,7 @@ public class BillingService : IBillingService
             OrderNumber = NotificationFormatHelper.GetOrderNumber(o.Id),
             Title = o.Title ?? $"Logo Design",
             Price = o.ClientChargePrice > 0 ? o.ClientChargePrice : (o.ClientPrice ?? o.Price),
+            CurrencyCode = string.IsNullOrWhiteSpace(o.CurrencyCode) ? "USD" : o.CurrencyCode.Trim(),
             CompletedDate = o.CompletedDate
         }).ToList();
     }

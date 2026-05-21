@@ -1,4 +1,14 @@
-import { Component, OnInit, Input, Output, EventEmitter, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnChanges,
+  SimpleChanges,
+  Input,
+  Output,
+  EventEmitter,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef
+} from '@angular/core';
 import { PaymentService, PaymentLinkResponse, BankDetailsResponse } from '@core/services/payment.service';
 import { MessageService } from 'primeng/api';
 import { firstValueFrom } from 'rxjs';
@@ -9,7 +19,7 @@ import { firstValueFrom } from 'rxjs';
   styleUrls: ['./payment.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class PaymentComponent implements OnInit {
+export class PaymentComponent implements OnInit, OnChanges {
   @Input() invoiceId: string = '';
   @Input() invoiceNumber: string = '';
   @Input() amount: number = 0;
@@ -41,6 +51,12 @@ export class PaymentComponent implements OnInit {
     // Auto-select first payment method
     if (this.paymentMethods.length > 0) {
       this.selectedPaymentMethod = this.paymentMethods[0].value;
+    }
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['currency'] && !changes['currency'].firstChange) {
+      this.cdr.markForCheck();
     }
   }
 

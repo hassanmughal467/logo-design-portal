@@ -12,8 +12,8 @@
   <!-- Invoice Statistics Cards -->
   <div class="kpi-grid">
     <app-kpi-card label="Total Invoices" [value]="invoiceStats.total" icon="pi pi-file-pdf" variant="primary"></app-kpi-card>
-    <app-kpi-card [label]="'Paid (' + formatCurrency(invoiceStats.paidAmount) + ')'" [value]="invoiceStats.paid" icon="pi pi-check-circle" variant="success"></app-kpi-card>
-    <app-kpi-card [label]="'Unpaid (' + formatCurrency(invoiceStats.pendingAmount) + ')'" [value]="invoiceStats.unpaid" icon="pi pi-clock" variant="warning"></app-kpi-card>
+    <app-kpi-card [label]="'Paid (' + formatStatCurrency(invoiceStats.paidAmount) + ')'" [value]="invoiceStats.paid" icon="pi pi-check-circle" variant="success"></app-kpi-card>
+    <app-kpi-card [label]="'Unpaid (' + formatStatCurrency(invoiceStats.pendingAmount) + ')'" [value]="invoiceStats.unpaid" icon="pi pi-clock" variant="warning"></app-kpi-card>
     <app-kpi-card label="Overdue" [value]="invoiceStats.overdue" icon="pi pi-exclamation-triangle" variant="danger"></app-kpi-card>
   </div>
 
@@ -27,24 +27,28 @@
     <div class="financial-summaries">
       <div class="summary-card">
         <h4>Weekly Summary</h4>
-        <p class="summary-total">Total: {{ formatCurrency(getWeeklySummary().total) }}</p>
-        <p class="summary-paid">Paid: {{ formatCurrency(getWeeklySummary().paid) }}</p>
-        <p class="summary-pending">Unpaid: {{ formatCurrency(getWeeklySummary().pending) }}</p>
+        <p class="summary-total">Total: {{ formatStatCurrency(invoiceStats.week.total) }}</p>
+        <p class="summary-paid">Paid: {{ formatStatCurrency(invoiceStats.week.paid) }}</p>
+        <p class="summary-pending">Unpaid: {{ formatStatCurrency(invoiceStats.week.pending) }}</p>
       </div>
       <div class="summary-card">
         <h4>Monthly Summary</h4>
-        <p class="summary-total">Total: {{ formatCurrency(getMonthlySummary().total) }}</p>
-        <p class="summary-paid">Paid: {{ formatCurrency(getMonthlySummary().paid) }}</p>
-        <p class="summary-pending">Unpaid: {{ formatCurrency(getMonthlySummary().pending) }}</p>
+        <p class="summary-total">Total: {{ formatStatCurrency(invoiceStats.month.total) }}</p>
+        <p class="summary-paid">Paid: {{ formatStatCurrency(invoiceStats.month.paid) }}</p>
+        <p class="summary-pending">Unpaid: {{ formatStatCurrency(invoiceStats.month.pending) }}</p>
       </div>
     </div>
-    <p-tabView [(activeIndex)]="selectedInvoiceTabIndex">
+    <p-tabView [(activeIndex)]="selectedInvoiceTabIndex" (onChange)="onInvoiceTabChange($event)">
       <p-tabPanel header="Unpaid" leftIcon="pi pi-exclamation-circle">
         <div class="invoice-actions-bar" *ngIf="canManageInvoices">
-          <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getUnpaidInvoices().length === 0"
-            (onClick)="selectedInvoices = getUnpaidInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
+          <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="listTotalRecords === 0"
+            (onClick)="openBulkPayForCurrentPage()" styleClass="p-button-sm"></p-button>
         </div>
-        <p-table [value]="getUnpaidInvoices()" [paginator]="true" [rows]="10"
+        <p-table [value]="tabInvoices" [lazy]="true" [lazyLoadOnInit]="false" (onLazyLoad)="onInvoicesLazyLoad($event)"
+          [paginator]="true" [rows]="tableRows" [totalRecords]="listTotalRecords" [first]="tableFirst"
+          [rowsPerPageOptions]="tablePageSizeOptions" [showCurrentPageReport]="true"
+          currentPageReportTemplate="Showing {first} to {last} of {totalRecords}"
+          [loading]="isTableLoading"
           [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
@@ -56,7 +60,7 @@
             <tr>
               <td *ngIf="canManageInvoices"><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
               <td>{{ invoice.invoiceNumber }}</td>
-              <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
+              <td>{{ formatInvoiceAmount(invoice, invoice.totalAmount || invoice.amount) }}</td>
               <td>
                 <p-tag [value]="invoice.status" [severity]="invoice.status === 'Overdue' ? 'danger' : 'warning'" [rounded]="true"></p-tag>
               </td>
@@ -71,7 +75,7 @@
                     (onClick)="openDetailDialogFromApi(invoice)"></p-button>
                   <p-button *ngIf="canEditInvoices && !invoice.isLocked" icon="pi pi-pencil"
                     styleClass="p-button-text p-button-rounded p-button-sm"
-                    pTooltip="Edit invoice" tooltipPosition="top"
+                    pTooltip="Edit line items & invoice details" tooltipPosition="top"
                     (onClick)="openEditDialog(invoice)"></p-button>
                   <p-button icon="pi pi-download"
                     styleClass="p-button-text p-button-rounded p-button-sm"
@@ -89,10 +93,14 @@
       </p-tabPanel>
       <p-tabPanel header="Pending" leftIcon="pi pi-clock">
         <div class="invoice-actions-bar" *ngIf="canManageInvoices">
-          <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getPendingInvoices().length === 0"
-            (onClick)="selectedInvoices = getPendingInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
+          <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="listTotalRecords === 0"
+            (onClick)="openBulkPayForCurrentPage()" styleClass="p-button-sm"></p-button>
         </div>
-        <p-table [value]="getPendingInvoices()" [paginator]="true" [rows]="10"
+        <p-table [value]="tabInvoices" [lazy]="true" [lazyLoadOnInit]="false" (onLazyLoad)="onInvoicesLazyLoad($event)"
+          [paginator]="true" [rows]="tableRows" [totalRecords]="listTotalRecords" [first]="tableFirst"
+          [rowsPerPageOptions]="tablePageSizeOptions" [showCurrentPageReport]="true"
+          currentPageReportTemplate="Showing {first} to {last} of {totalRecords}"
+          [loading]="isTableLoading"
           [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
@@ -104,7 +112,7 @@
             <tr>
               <td *ngIf="canManageInvoices"><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
               <td>{{ invoice.invoiceNumber }}</td>
-              <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
+              <td>{{ formatInvoiceAmount(invoice, invoice.totalAmount || invoice.amount) }}</td>
               <td>{{ formatDate(invoice.dueDate) }}</td>
               <td>
                 <div class="invoice-row-actions">
@@ -114,7 +122,7 @@
                     (onClick)="openDetailDialogFromApi(invoice)"></p-button>
                   <p-button *ngIf="canEditInvoices && !invoice.isLocked" icon="pi pi-pencil"
                     styleClass="p-button-text p-button-rounded p-button-sm"
-                    pTooltip="Edit invoice" tooltipPosition="top"
+                    pTooltip="Edit line items & invoice details" tooltipPosition="top"
                     (onClick)="openEditDialog(invoice)"></p-button>
                   <p-button icon="pi pi-download"
                     styleClass="p-button-text p-button-rounded p-button-sm"
@@ -131,10 +139,14 @@
       </p-tabPanel>
       <p-tabPanel header="Due" leftIcon="pi pi-exclamation-triangle">
         <div class="invoice-actions-bar" *ngIf="canManageInvoices">
-          <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="getDueInvoices().length === 0"
-            (onClick)="selectedInvoices = getDueInvoices(); showPaymentDialog = true" styleClass="p-button-sm"></p-button>
+          <p-button label="Bulk Pay" icon="pi pi-money-bill" [disabled]="listTotalRecords === 0"
+            (onClick)="openBulkPayForCurrentPage()" styleClass="p-button-sm"></p-button>
         </div>
-        <p-table [value]="getDueInvoices()" [paginator]="true" [rows]="10"
+        <p-table [value]="tabInvoices" [lazy]="true" [lazyLoadOnInit]="false" (onLazyLoad)="onInvoicesLazyLoad($event)"
+          [paginator]="true" [rows]="tableRows" [totalRecords]="listTotalRecords" [first]="tableFirst"
+          [rowsPerPageOptions]="tablePageSizeOptions" [showCurrentPageReport]="true"
+          currentPageReportTemplate="Showing {first} to {last} of {totalRecords}"
+          [loading]="isTableLoading"
           [(selection)]="selectedInvoices" [dataKey]="'id'" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
@@ -146,7 +158,7 @@
             <tr>
               <td *ngIf="canManageInvoices"><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
               <td>{{ invoice.invoiceNumber }}</td>
-              <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
+              <td>{{ formatInvoiceAmount(invoice, invoice.totalAmount || invoice.amount) }}</td>
               <td><span class="overdue">{{ formatDate(invoice.dueDate) }}</span></td>
               <td>
                 <div class="invoice-row-actions">
@@ -156,7 +168,7 @@
                     (onClick)="openDetailDialogFromApi(invoice)"></p-button>
                   <p-button *ngIf="canEditInvoices && !invoice.isLocked" icon="pi pi-pencil"
                     styleClass="p-button-text p-button-rounded p-button-sm"
-                    pTooltip="Edit invoice" tooltipPosition="top"
+                    pTooltip="Edit line items & invoice details" tooltipPosition="top"
                     (onClick)="openEditDialog(invoice)"></p-button>
                   <p-button icon="pi pi-download"
                     styleClass="p-button-text p-button-rounded p-button-sm"
@@ -172,14 +184,19 @@
         </p-table>
       </p-tabPanel>
       <p-tabPanel header="Paid" leftIcon="pi pi-check-circle">
-        <p-table [value]="getPaidInvoices()" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
+        <p-table [value]="tabInvoices" [lazy]="true" [lazyLoadOnInit]="false" (onLazyLoad)="onInvoicesLazyLoad($event)"
+          [paginator]="true" [rows]="tableRows" [totalRecords]="listTotalRecords" [first]="tableFirst"
+          [rowsPerPageOptions]="tablePageSizeOptions" [showCurrentPageReport]="true"
+          currentPageReportTemplate="Showing {first} to {last} of {totalRecords}"
+          [loading]="isTableLoading"
+          styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr><th>Invoice #</th><th>Amount</th><th>Paid Date</th><th>Payment Method</th><th>Actions</th></tr>
           </ng-template>
           <ng-template pTemplate="body" let-invoice>
             <tr>
               <td>{{ invoice.invoiceNumber }}</td>
-              <td>{{ formatCurrency(invoice.totalAmount || invoice.amount) }}</td>
+              <td>{{ formatInvoiceAmount(invoice, invoice.totalAmount || invoice.amount) }}</td>
               <td>{{ formatDate(invoice.paidDate) }}</td>
               <td>{{ invoice.paymentMethod || 'N/A' }}</td>
               <td>
@@ -229,7 +246,7 @@
           <ng-template let-client pTemplate="item">
             <div class="client-option">
               <span class="client-name">{{ client.companyName || client.clientName }}</span>
-              <span class="client-meta">{{ client.uninvoicedOrderCount }} uninvoiced · {{ formatCurrency(client.totalPendingAmount) }} pending</span>
+              <span class="client-meta">{{ client.uninvoicedOrderCount }} uninvoiced · {{ formatCurrency(client.totalPendingAmount, client.currencyCode) }} pending</span>
             </div>
           </ng-template>
           <ng-template pTemplate="selectedItem" let-client>
@@ -298,6 +315,15 @@
     [draggable]="false"
     [resizable]="false">
     <div class="invoice-detail" *ngIf="selectedInvoice">
+      <div
+        class="invoice-pricing-hint"
+        *ngIf="canEditInvoices && !selectedInvoice.isLocked && invoiceLineItemsNeedAmountReview(selectedInvoice)">
+        <i class="pi pi-info-circle" aria-hidden="true"></i>
+        <p>
+          One or more lines show <strong>$0</strong>, often because client pricing was not set before the order was created.
+          Use <strong>Edit line items &amp; details</strong> below to enter amounts (and add manual lines if needed) before sending this invoice.
+        </p>
+      </div>
       <div class="detail-section">
         <h4>Invoice Information</h4>
         <div class="detail-grid">
@@ -344,7 +370,7 @@
           <ng-template pTemplate="header">
             <tr>
               <th>Date</th>
-              <th>Tile</th>
+              <th>Title</th>
               <th>Description</th>
               <th class="text-right">Price</th>
             </tr>
@@ -357,21 +383,21 @@
                 <span *ngIf="!item.orderTitle" class="text-muted">Manual Item</span>
               </td>
               <td>{{ item.description?.trim() ? item.description : (item.orderTitle || 'Manual Item') }}</td>
-              <td class="text-right">{{ formatCurrency(item.amount) }}</td>
+              <td class="text-right">{{ formatLineAmount(item, selectedInvoice!) }}</td>
             </tr>
           </ng-template>
           <ng-template pTemplate="footer">
             <tr>
               <td colspan="3" class="text-right font-bold">Subtotal:</td>
-              <td class="text-right font-bold">{{ formatCurrency(selectedInvoice.amount) }}</td>
+              <td class="text-right font-bold">{{ formatInvoiceAmount(selectedInvoice, selectedInvoice.amount) }}</td>
             </tr>
             <tr *ngIf="selectedInvoice.taxAmount > 0">
               <td colspan="3" class="text-right">Tax:</td>
-              <td class="text-right">{{ formatCurrency(selectedInvoice.taxAmount) }}</td>
+              <td class="text-right">{{ formatInvoiceAmount(selectedInvoice, selectedInvoice.taxAmount) }}</td>
             </tr>
             <tr>
               <td colspan="3" class="text-right font-bold">Total:</td>
-              <td class="text-right font-bold">{{ formatCurrency(selectedInvoice.totalAmount || selectedInvoice.amount) }}</td>
+              <td class="text-right font-bold">{{ formatInvoiceAmount(selectedInvoice, selectedInvoice.totalAmount || selectedInvoice.amount) }}</td>
             </tr>
           </ng-template>
         </p-table>
@@ -385,7 +411,7 @@
     <ng-template pTemplate="footer">
       <p-button
         *ngIf="canEditInvoices && selectedInvoice && !selectedInvoice.isLocked"
-        label="Edit"
+        label="Edit line items & details"
         icon="pi pi-pencil"
         (onClick)="openEditDialog(selectedInvoice!)"
         styleClass="p-button-outlined modal-footer-btn">
@@ -410,7 +436,7 @@
     [(visible)]="showEditDialog" 
     [modal]="true" 
     [style]="{width: '650px'}"
-    header="Edit Invoice"
+    header="Edit invoice & line items"
     [closable]="true"
     [draggable]="false"
     [resizable]="false">
@@ -446,11 +472,11 @@
       </div>
 
       <div class="form-group">
-        <label>Tax Amount ($)</label>
+        <label>Tax amount</label>
         <p-inputNumber 
           [(ngModel)]="editTaxAmount"
           mode="currency"
-          currency="USD"
+          [currency]="editInvoiceCurrency"
           locale="en-US"
           [min]="0"
           class="full-width">
@@ -481,7 +507,7 @@
               <p-inputNumber 
                 [(ngModel)]="item.amount"
                 mode="currency"
-                currency="USD"
+                [currency]="editInvoiceCurrency"
                 locale="en-US"
                 [min]="0"
                 class="full-width">
@@ -527,7 +553,8 @@
       <div *ngIf="selectedInvoices.length > 1" class="multiple-invoices-payment">
         <p>Process payment for {{ selectedInvoices.length }} invoice(s)?</p>
         <div class="payment-summary">
-          <p><strong>Total Amount:</strong> {{ formatCurrency(getSelectedInvoicesTotal()) }}</p>
+          <p><strong>Total Amount:</strong> {{ formatCurrency(getSelectedInvoicesTotal(), bulkPaymentDisplayCurrency()) }}</p>
+          <p class="text-muted" *ngIf="selectedInvoicesMixedCurrency()" style="font-size: 0.85rem;">Invoices use different currencies; the total is numeric only — confirm amounts per invoice.</p>
         </div>
         <div class="field">
           <label for="paymentMethod">Payment Method</label>
@@ -545,7 +572,7 @@
           [invoiceId]="selectedInvoices[0].id"
           [invoiceNumber]="selectedInvoices[0].invoiceNumber"
           [amount]="selectedInvoices[0].totalAmount || selectedInvoices[0].amount"
-          [currency]="'USD'"
+          [currency]="invoiceDisplayCurrency(selectedInvoices[0])"
           (paymentComplete)="onPaymentComplete()"
           (paymentCancelled)="cancelPayment()">
         </app-payment>

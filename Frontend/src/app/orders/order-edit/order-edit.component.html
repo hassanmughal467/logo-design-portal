@@ -36,8 +36,8 @@
   </div>
 
   <div class="form-row">
-    <!-- Price -->
-    <div class="form-group">
+    <!-- Price: only after client price is approved (otherwise set via admin / approval flow) -->
+    <div class="form-group" *ngIf="showPriceField">
       <label for="price">Price (USD) <span class="required">*</span></label>
       <p-inputNumber 
         id="price"
@@ -53,8 +53,7 @@
       </small>
     </div>
 
-    <!-- Priority -->
-    <div class="form-group">
+    <div class="form-group" [class.full-width]="!showPriceField">
       <label for="priority">Priority</label>
       <p-dropdown 
         id="priority"
@@ -66,12 +65,6 @@
         [styleClass]="'w-full'"
         appendTo="body"
       ></p-dropdown>
-      <small class="p-help">
-        <strong>Low:</strong> No rush<br>
-        <strong>Normal:</strong> Standard timeline<br>
-        <strong>High:</strong> Important, faster delivery<br>
-        <strong>Urgent:</strong> Rush order, fastest delivery
-      </small>
     </div>
   </div>
 
@@ -88,20 +81,6 @@
         styleClass="w-full"
         appendTo="body"
       ></p-calendar>
-    </div>
-  </div>
-
-  <div class="form-row">
-    <!-- Instructions -->
-    <div class="form-group full-width">
-      <label for="instructions">Instructions</label>
-      <textarea 
-        id="instructions"
-        pInputTextarea 
-        formControlName="instructions"
-        rows="3"
-        placeholder="Any specific instructions for the designer..."
-      ></textarea>
     </div>
   </div>
 

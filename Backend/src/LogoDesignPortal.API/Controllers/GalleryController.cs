@@ -12,54 +12,42 @@ namespace LogoDesignPortal.API.Controllers;
 public class GalleryController : ControllerBase
 {
     private readonly IGalleryService _galleryService;
-    private readonly ILogger<GalleryController> _logger;
 
-    public GalleryController(
-        IGalleryService galleryService,
-        ILogger<GalleryController> logger)
+    public GalleryController(IGalleryService galleryService)
     {
         _galleryService = galleryService;
-        _logger = logger;
     }
 
+    /// <summary>Lists approved gallery assets for the authenticated client.</summary>
     [HttpGet("my-gallery")]
     [Authorize(Roles = "Client")]
     [ProducesResponseType(typeof(List<GalleryItemResponseDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetMyGallery()
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetMyGallery(CancellationToken cancellationToken)
     {
-        try
-        {
-            var userId = User.GetUserIdOrThrow();
-            var galleryItems = await _galleryService.GetClientGalleryAsync(userId);
-            return Ok(galleryItems);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var userId = User.GetUserIdOrThrow();
+        var galleryItems = await _galleryService.GetClientGalleryAsync(userId, cancellationToken);
+        return Ok(galleryItems);
     }
 
-    [HttpGet("{id}")]
+    /// <summary>Gets a single gallery item if it belongs to the authenticated client.</summary>
+    [HttpGet("{id:guid}")]
     [Authorize(Roles = "Client")]
     [ProducesResponseType(typeof(GalleryItemResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetGalleryItemById(Guid id)
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetGalleryItemById(Guid id, CancellationToken cancellationToken)
     {
-        try
-        {
-            var userId = User.GetUserIdOrThrow();
-            var galleryItem = await _galleryService.GetGalleryItemByIdAsync(id, userId);
-            
-            if (galleryItem == null)
-            {
-                return NotFound(new { error = "Gallery item not found." });
-            }
+        var userId = User.GetUserIdOrThrow();
+        var galleryItem = await _galleryService.GetGalleryItemByIdAsync(id, userId, cancellationToken);
 
-            return Ok(galleryItem);
-        }
-        catch (InvalidOperationException ex)
+        if (galleryItem == null)
         {
-            return BadRequest(new { error = ex.Message });
+            return NotFound(new { error = "Gallery item not found." });
         }
+
+        return Ok(galleryItem);
     }
 }

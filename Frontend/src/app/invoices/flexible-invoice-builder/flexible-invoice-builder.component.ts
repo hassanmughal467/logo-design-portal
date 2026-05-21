@@ -8,6 +8,7 @@ import {
   BillingService,
   BillingQueueResult
 } from '@core/services/billing.service';
+import { DEFAULT_INVOICE_CURRENCY, formatCurrencyAmount } from '@core/utils/currency-format';
 
 @Component({
   selector: 'app-flexible-invoice-builder',
@@ -132,6 +133,28 @@ export class FlexibleInvoiceBuilderComponent implements OnInit {
       .reduce((sum, o) => sum + o.price, 0);
   }
 
+  /** When all loaded orders share one currency; otherwise default (totals may mix currencies). */
+  get previewCurrencyCode(): string {
+    if (this.orders.length === 0) return DEFAULT_INVOICE_CURRENCY;
+    const codes = [
+      ...new Set(
+        this.orders.map(o => (o.currencyCode || DEFAULT_INVOICE_CURRENCY).trim().toUpperCase())
+      )
+    ];
+    return codes.length === 1 ? codes[0] : DEFAULT_INVOICE_CURRENCY;
+  }
+
+  get selectedTotalCurrency(): string {
+    const selected = this.orders.filter(o => this.selectedOrderIds.has(o.orderId));
+    if (selected.length === 0) return DEFAULT_INVOICE_CURRENCY;
+    const codes = [
+      ...new Set(
+        selected.map(o => (o.currencyCode || DEFAULT_INVOICE_CURRENCY).trim().toUpperCase())
+      )
+    ];
+    return codes.length === 1 ? codes[0] : DEFAULT_INVOICE_CURRENCY;
+  }
+
   generateInvoice(): void {
     if (!this.selectedClient) {
       this.messageService.add({ severity: 'warn', summary: 'Warning', detail: 'Please select a client.' });
@@ -178,8 +201,8 @@ export class FlexibleInvoiceBuilderComponent implements OnInit {
     });
   }
 
-  formatCurrency(value: number): string {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+  formatCurrency(value: number, currencyCode?: string | null): string {
+    return formatCurrencyAmount(value, currencyCode ?? DEFAULT_INVOICE_CURRENCY);
   }
 
   private toIsoDate(date: Date | null): string | undefined {

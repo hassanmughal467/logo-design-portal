@@ -4,9 +4,9 @@ namespace LogoDesignPortal.Application.Interfaces;
 
 public interface IPaymentService
 {
-    Task<PaymentResponseDto> CreatePaymentAsync(CreatePaymentRequestDto request, Guid userId);
-    Task<PaymentLinkResponseDto> GeneratePaymentLinkAsync(Guid invoiceId, string paymentMethod, Guid userId);
-    Task<PaymentResponseDto> ProcessPaymentAsync(ProcessPaymentRequestDto request, Guid userId);
+    Task<PaymentResponseDto> CreatePaymentAsync(CreatePaymentRequestDto request, Guid userId, string? userRole);
+    Task<PaymentLinkResponseDto> GeneratePaymentLinkAsync(Guid invoiceId, string paymentMethod, Guid userId, string? userRole);
+    Task<PaymentResponseDto> ProcessPaymentAsync(ProcessPaymentRequestDto request, Guid userId, string? userRole);
     Task<PaymentResponseDto?> GetPaymentByIdAsync(Guid paymentId);
     /// <summary>
     /// Gets a payment by ID with access control. Returns null if not found or user lacks access.

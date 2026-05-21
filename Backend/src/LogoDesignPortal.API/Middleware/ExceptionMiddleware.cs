@@ -1,4 +1,6 @@
+using LogoDesignPortal.API.Configuration;
 using LogoDesignPortal.API.Extensions;
+using LogoDesignPortal.API.Logging;
 using LogoDesignPortal.Application.Exceptions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -37,24 +39,13 @@ public class ExceptionMiddleware
         catch (Exception ex)
         {
             var correlationId = context.GetCorrelationId();
+            var category = ExceptionCategoryMapper.Map(ex);
             _logger.LogError(ex,
-                "CorrelationId={CorrelationId} | Unhandled exception: {Message} | {Method} {Path}",
-                correlationId, ex.Message, context.Request.Method, context.Request.Path);
+                "CorrelationId={CorrelationId} ExceptionCategory={ExceptionCategory} | Unhandled exception: {Message} | {Method} {Path}",
+                correlationId, category, ex.Message, context.Request.Method, context.Request.Path);
             await HandleExceptionAsync(context, ex, correlationId).ConfigureAwait(false);
         }
     }
-
-    private static readonly string[] AllowedCorsOrigins =
-    {
-        "https://admin.hawkmerchandising.com",
-        "http://admin.hawkmerchandising.com",
-        "https://api.hawkmerchandising.com",
-        "http://api.hawkmerchandising.com",
-        "http://localhost:4200",
-        "https://localhost:4200",
-        "http://127.0.0.1:4200",
-        "https://127.0.0.1:4200"
-    };
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception, string correlationId)
     {
@@ -66,12 +57,7 @@ public class ExceptionMiddleware
 
         var (statusCode, message) = GetStatusCodeAndMessage(exception);
 
-        var origin = context.Request.Headers.Origin.FirstOrDefault();
-        if (!string.IsNullOrEmpty(origin) && AllowedCorsOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
-        {
-            context.Response.Headers.Append("Access-Control-Allow-Origin", origin);
-            context.Response.Headers.Append("Access-Control-Allow-Credentials", "true");
-        }
+        CorsAllowedOrigins.AppendHeadersIfAllowed(context, _configuration);
 
         // CorrelationIdMiddleware already set this when the response hadn't started.
         if (!context.Response.Headers.ContainsKey("X-Correlation-Id"))

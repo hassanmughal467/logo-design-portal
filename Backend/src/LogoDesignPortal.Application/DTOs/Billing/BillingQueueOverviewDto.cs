@@ -7,4 +7,7 @@ public class BillingQueueOverviewDto
     public string CompanyName { get; set; } = string.Empty;
     public int UninvoicedOrderCount { get; set; }
     public decimal TotalPendingAmount { get; set; }
+
+    /// <summary>Set when all uninvoiced orders for this client share the same currency code.</summary>
+    public string? CurrencyCode { get; set; }
 }

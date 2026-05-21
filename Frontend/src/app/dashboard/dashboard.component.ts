@@ -12,8 +12,9 @@ import { Order, OrderStatus } from '@shared/models/order.model';
 import { MessageService } from 'primeng/api';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Observable, Subject, firstValueFrom, forkJoin } from 'rxjs';
-import { takeUntil, catchError, finalize, timeout, map } from 'rxjs/operators';
+import { takeUntil, catchError, finalize, timeout, map, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { of } from 'rxjs';
+import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
 
 export interface ActionRequiredItem {
   type: 'approval' | 'revision' | 'invoice' | 'price' | 'designerPrice';
@@ -45,6 +46,7 @@ export interface OrderTimelineEvent {
 export class DashboardComponent implements OnInit, OnDestroy {
   @ViewChild('getQuoteFileUpload') private getQuoteFileUpload?: FileUpload;
 
+  readonly maxUploadFileSize = MAX_UPLOAD_BYTES;
   user: User | null = null;
     dashboardData: DashboardData = {
     stats: {
@@ -63,6 +65,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     revenueByPackage: []
   };
   private destroy$ = new Subject<void>();
+  /** Batches SignalR order events so the dashboard is not fully reloaded on every hub message. */
+  private readonly dashboardRealtimeRefresh$ = new Subject<void>();
 
   // Chart data
   statusChartData: any;
@@ -215,26 +219,50 @@ export class DashboardComponent implements OnInit, OnDestroy {
       }
     ];
     
-    // Load user first
+    // Load when the signed-in user identity changes — not on every BehaviorSubject emit (e.g. token refresh).
     this.authService.currentUser$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(
+        takeUntil(this.destroy$),
+        distinctUntilChanged((a, b) => (a?.id ?? '') === (b?.id ?? ''))
+      )
       .subscribe(user => {
         this.user = user;
-        // Always load dashboard data, even if user is null (will show empty state)
         this.loadDashboardData();
       });
 
-    // Real-time order updates: refresh dashboard when order events arrive
+    this.dashboardRealtimeRefresh$
+      .pipe(debounceTime(600), takeUntil(this.destroy$))
+      .subscribe(() => this.loadDashboardData(true));
+
+    // Real-time order updates (same hub stream as order list; avoid reloading on every event — see handleOrderUpdate)
     this.realtimeNotification.orderUpdates$
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => this.handleOrderUpdate(data));
   }
 
   private handleOrderUpdate(data?: { orderId?: string }): void {
-    // On reconnect, always refresh to recover from missed events
-    if (data?.orderId === '**reconnect**' || this.user) {
+    if (!data?.orderId) return;
+
+    if (data.orderId === '**reconnect**') {
       this.loadDashboardData(true);
+      return;
     }
+
+    this.dashboardRealtimeRefresh$.next();
+  }
+
+  /** Resolves id from API rows (camelCase or PascalCase). */
+  private resolveOrderIdFromRow(row: unknown): string | null {
+    if (row == null) return null;
+    if (typeof row === 'string') {
+      const t = row.trim();
+      return t || null;
+    }
+    const o = row as Record<string, unknown>;
+    const raw = o['id'] ?? o['Id'];
+    if (raw == null) return null;
+    const s = String(raw).trim();
+    return s || null;
   }
 
   ngOnDestroy(): void {
@@ -819,13 +847,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Order Detail Modal
-  showOrderDetailModal = false;
-  selectedOrderId: string | null = null;
-
-  navigateToOrder(orderId: string): void {
-    this.selectedOrderId = orderId;
-    this.showOrderDetailModal = true;
+  /**
+   * Open order on the dedicated /orders/:id route (route mode).
+   * The in-dashboard modal duplicated OrderDetail inside MainLayout + appendTo body and reliably broke (stuck loading / blank dialog).
+   */
+  navigateToOrder(orderOrId: Order | string | unknown): void {
+    const id = this.resolveOrderIdFromRow(orderOrId);
+    if (!id) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Cannot open order',
+        detail: 'Missing order id. Refresh the dashboard and try again.'
+      });
+      return;
+    }
+    void this.router.navigate(['/orders', id]);
   }
 
   /** Navigate to the appropriate page when clicking a notification */
@@ -855,15 +891,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       default:
         if (orderId || refId) this.router.navigate(['/orders', orderId ?? refId]);
     }
-  }
-
-  onOrderDetailClose(): void {
-    this.showOrderDetailModal = false;
-    this.selectedOrderId = null;
-  }
-
-  onOrderUpdated(): void {
-    this.loadDashboardData(true);
   }
 
   canAddToInvoice(order: Order): boolean {
@@ -910,7 +937,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onGetQuoteFileSelect(event: any): void {
     const files: File[] = event.files ? Array.from(event.files) : [];
     const deduped = files.filter(file => !this.quoteFiles.some(f => f.name === file.name && f.size === file.size));
-    this.quoteFiles = [...this.quoteFiles, ...deduped];
+    const tooBig = deduped.filter(f => f.size > MAX_UPLOAD_BYTES);
+    if (tooBig.length > 0) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Each file must be 500MB or smaller.' });
+    }
+    const ok = deduped.filter(f => f.size <= MAX_UPLOAD_BYTES);
+    const merged = [...this.quoteFiles, ...ok];
+    if (combinedFileBytes(merged) > MAX_UPLOAD_BYTES) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Combined file size cannot exceed 500MB.' });
+      this.getQuoteFileUpload?.clear();
+      return;
+    }
+    this.quoteFiles = merged;
     this.getQuoteFileUpload?.clear();
   }
 
@@ -960,10 +998,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   onOrderCreated(order: any): void {
     this.loadDashboardData(true);
-    // Optionally open the created order in detail modal
-    if (order && order.id) {
-      this.selectedOrderId = order.id;
-      this.showOrderDetailModal = true;
+    const id = this.resolveOrderIdFromRow(order);
+    if (id) {
+      void this.router.navigate(['/orders', id]);
     }
   }
 
@@ -1049,9 +1086,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   requestRevision(order: Order): void {
-    this.selectedOrderId = order.id;
-    this.showOrderDetailModal = true;
-    // The order detail modal should have revision request functionality
+    this.navigateToOrder(order);
   }
 
   filterGallery(): void {
@@ -1414,7 +1449,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       case 'revision':
       case 'price':
       case 'designerPrice':
-        this.navigateToOrder(item.data.id);
+        this.navigateToOrder(item.data);
         break;
       case 'invoice':
         this.openPaymentDialog(item.data);

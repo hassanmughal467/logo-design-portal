@@ -10,7 +10,6 @@ using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using LogoDesignPortal.Infrastructure.Persistence;
-
 namespace LogoDesignPortal.Application.Tests.Services;
 
 /// <summary>
@@ -197,6 +196,7 @@ public class OrderServiceStatusTransitionTests
             Mock.Of<ICommentService>(),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>(),
             Mock.Of<IDistributedCache>(),
-            Mock.Of<IReadModelCacheVersions>());
+            Mock.Of<IReadModelCacheVersions>(),
+            new ClientProfileEnsureService(context, Mock.Of<IReadModelCacheVersions>(), Mock.Of<Microsoft.Extensions.Logging.ILogger<ClientProfileEnsureService>>()));
     }
 }

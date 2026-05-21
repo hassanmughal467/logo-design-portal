@@ -181,13 +181,13 @@
             </tr>
           </ng-template>
           <ng-template pTemplate="body" let-order>
-            <tr class="order-row" (click)="navigateToOrder(order.id)">
+            <tr class="order-row" (click)="navigateToOrder(order)">
               <td><div class="order-title"><i class="pi pi-file-edit"></i><span>{{ order.title }}</span></div></td>
               <td><p-tag [value]="formatStatus(order.status)" [severity]="getStatusSeverity(order.status)" [rounded]="true"></p-tag></td>
               <td><span class="date-text">{{ formatRelativeDate(order.updatedAt || order.createdAt) }}</span></td>
               <td><span class="date-text" [class.overdue]="isOverdue(order.dueDate)">{{ order.dueDate ? formatDate(order.dueDate) : 'N/A' }}</span></td>
               <td>
-                <p-button icon="pi pi-eye" styleClass="p-button-text p-button-rounded p-button-sm" (onClick)="navigateToOrder(order.id); $event.stopPropagation()" pTooltip="View"></p-button>
+                <p-button icon="pi pi-eye" styleClass="p-button-text p-button-rounded p-button-sm" (onClick)="navigateToOrder(order); $event.stopPropagation()" pTooltip="View"></p-button>
                 <p-button *ngIf="order.status === 'Completed'" icon="pi pi-copy" styleClass="p-button-text p-button-rounded p-button-sm" (onClick)="quickReorder(order); $event.stopPropagation()" pTooltip="Copy"></p-button>
               </td>
             </tr>
@@ -697,7 +697,7 @@
                 </tr>
               </ng-template>
               <ng-template pTemplate="body" let-order>
-                <tr class="order-row" (click)="navigateToOrder(order.id)">
+                <tr class="order-row" (click)="navigateToOrder(order)">
                   <td>
                     <div class="order-title">
                       <i class="pi pi-file-edit"></i>
@@ -711,7 +711,7 @@
                   <td><span class="date-text" [class.overdue]="isOverdue(order.dueDate)">{{ formatDate(order.dueDate) }}</span></td>
                   <td style="text-align: center;">
                     <p-button icon="pi pi-eye" styleClass="p-button-text p-button-rounded p-button-sm"
-                      (onClick)="navigateToOrder(order.id); $event.stopPropagation()" pTooltip="View Details" tooltipPosition="top"></p-button>
+                      (onClick)="navigateToOrder(order); $event.stopPropagation()" pTooltip="View Details" tooltipPosition="top"></p-button>
                     <p-button *ngIf="canAddToInvoice(order)"
                       icon="pi pi-file-pdf" styleClass="p-button-text p-button-rounded p-button-sm"
                       (onClick)="addToInvoice(order); $event.stopPropagation()"
@@ -791,8 +791,7 @@
   <!-- Order Create Modal -->
   <app-order-create [(visible)]="showOrderCreateModal" [prefillData]="reorderData" (orderCreated)="onOrderCreated($event)"></app-order-create>
 
-  <!-- Order Detail Modal -->
-  <app-order-detail *ngIf="selectedOrderId" [orderId]="selectedOrderId" [(visible)]="showOrderDetailModal" (visibleChange)="onOrderDetailClose()" (orderUpdated)="onOrderUpdated()"></app-order-detail>
+  <!-- Order detail: open via /orders/:id (same screen as Orders list) — avoids broken nested p-dialog + appendTo body on dashboard -->
 
   <!-- Get Quote Dialog (client-only, stays on dashboard) -->
   <p-dialog
@@ -826,6 +825,7 @@
           mode="basic"
           [multiple]="true"
           [auto]="false"
+          [maxFileSize]="maxUploadFileSize"
           (onSelect)="onGetQuoteFileSelect($event)"
           [showUploadButton]="false"
           [showCancelButton]="false">

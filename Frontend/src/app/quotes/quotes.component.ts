@@ -6,6 +6,7 @@ import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { Quote, QuoteStatus } from '@shared/models/quote.model';
 import { MessageService } from 'primeng/api';
+import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
 
 @Component({
   selector: 'app-quotes',
@@ -15,6 +16,7 @@ import { MessageService } from 'primeng/api';
 export class QuotesComponent implements OnInit {
   @ViewChild('quoteFileUpload') private quoteFileUpload?: FileUpload;
 
+  readonly maxUploadFileSize = MAX_UPLOAD_BYTES;
   quotes: Quote[] = [];
   showCreateDialog = false;
   showRespondDialog = false;
@@ -147,7 +149,18 @@ export class QuotesComponent implements OnInit {
   onFileSelect(event: any): void {
     const files: File[] = event.files ? Array.from(event.files) : [];
     const deduped = files.filter(file => !this.selectedFiles.some(f => f.name === file.name && f.size === file.size));
-    this.selectedFiles = [...this.selectedFiles, ...deduped];
+    const tooBig = deduped.filter(f => f.size > MAX_UPLOAD_BYTES);
+    if (tooBig.length > 0) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Each file must be 500MB or smaller.' });
+    }
+    const ok = deduped.filter(f => f.size <= MAX_UPLOAD_BYTES);
+    const merged = [...this.selectedFiles, ...ok];
+    if (combinedFileBytes(merged) > MAX_UPLOAD_BYTES) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Combined file size cannot exceed 500MB.' });
+      this.quoteFileUpload?.clear();
+      return;
+    }
+    this.selectedFiles = merged;
     this.quoteFileUpload?.clear();
   }
 }

@@ -6,13 +6,13 @@ import { environment } from '@environments/environment';
 })
 export class LoggerService {
   debug(...args: unknown[]): void {
-    if (!environment.production) {
+    if (environment.enableDebugLogging) {
       console.debug(...args);
     }
   }
 
   log(...args: unknown[]): void {
-    if (!environment.production) {
+    if (environment.enableDebugLogging) {
       console.log(...args);
     }
   }

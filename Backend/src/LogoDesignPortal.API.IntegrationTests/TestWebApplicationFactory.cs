@@ -24,6 +24,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     /// <summary>Client profile Id for the seeded client user (LogoOrder.ClientId).</summary>
     public Guid ClientProfileId => TestDataIds.ClientProfileId;
 
+    /// <summary>Designer profile Id for the seeded designer user.</summary>
+    public Guid DesignerProfileId => TestDataIds.DesignerProfileId;
+
     /// <summary>Isolated in-memory database per factory instance (serialized via ICollectionFixture).</summary>
     private readonly string _dbName = "IntegrationTestDb_" + Guid.NewGuid().ToString("N")[..8];
 

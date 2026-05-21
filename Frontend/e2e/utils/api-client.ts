@@ -1,6 +1,9 @@
 import type { APIRequestContext } from '@playwright/test';
 import { E2E_API_URL } from './env';
 
+// re-export for health probes
+export { E2E_API_URL };
+
 /**
  * Thin wrapper around Playwright's `APIRequestContext` with a stable JSON API for this backend.
  * Using Playwright's built-in request fixture gives automatic trace correlation and sane defaults.
@@ -227,6 +230,46 @@ export async function getInvoiceApi(request: APIRequestContext, token: string, i
     throw new Error(`getInvoiceApi failed: ${res.status()} ${await res.text()}`);
   }
   return res.json() as Promise<{ id: string; status?: string; totalAmount?: number }>;
+}
+
+export async function refundOrderApi(
+  request: APIRequestContext,
+  adminToken: string,
+  orderId: string,
+  amount: number,
+  reason: string
+) {
+  const res = await request.post(apiUrl(`/orders/${orderId}/refund`), {
+    headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+    data: { amount, reason },
+  });
+  if (!res.ok()) {
+    throw new Error(`refundOrderApi failed: ${res.status()} ${await res.text()}`);
+  }
+  return res.json() as Promise<{ id: string; status: string }>;
+}
+
+export async function uploadFileApi(
+  request: APIRequestContext,
+  token: string,
+  orderId: string,
+  fileName: string,
+  body: Buffer,
+  contentType: string,
+  fileType = 'Reference'
+) {
+  return request.post(apiUrl(`/files/upload/${orderId}`), {
+    headers: { Authorization: `Bearer ${token}` },
+    multipart: {
+      file: { name: fileName, mimeType: contentType, buffer: body },
+      fileType,
+    },
+  });
+}
+
+export async function healthReadyApi(request: APIRequestContext) {
+  const base = E2E_API_URL.replace(/\/$/, '');
+  return request.get(`${base}/health/ready`);
 }
 
 export async function deleteUserApi(request: APIRequestContext, superAdminToken: string, userId: string, permanent = true) {

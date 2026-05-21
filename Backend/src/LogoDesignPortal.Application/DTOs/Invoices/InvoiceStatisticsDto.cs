@@ -10,4 +10,10 @@ public class InvoiceStatisticsDto
     public decimal PaidAmount { get; set; }
     public decimal DueAmount { get; set; }
     public decimal OverdueAmount { get; set; }
+
+    /// <summary>Invoices created in the current UTC calendar week (Sun–Sat).</summary>
+    public InvoicePeriodSummaryDto WeekSummary { get; set; } = new();
+
+    /// <summary>Invoices created in the current UTC calendar month.</summary>
+    public InvoicePeriodSummaryDto MonthSummary { get; set; } = new();
 }

@@ -5,18 +5,22 @@ using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Infrastructure.Redis;
 using LogoDesignPortal.API.Infrastructure;
 using LogoDesignPortal.API.BackgroundJobs;
+using LogoDesignPortal.API.Configuration;
 using StackExchange.Redis;
+using Microsoft.Extensions.Logging;
 
 namespace LogoDesignPortal.API.Hosting;
 
 public static class ScalabilityServiceRegistration
 {
-    private static bool AllowsInMemoryFallback(IHostEnvironment environment) =>
-        environment.IsDevelopment() || environment.IsEnvironment("Testing");
+    private static bool AllowsInMemoryFallback(IHostEnvironment environment, IConfiguration configuration) =>
+        environment.IsDevelopment()
+        || environment.IsEnvironment("Testing")
+        || configuration.GetValue($"{ScalabilityOptions.SectionName}:AllowInMemoryFallback", false);
 
     /// <summary>
     /// Registers Redis-backed cache, shared read-model epochs, and distributed rate limiting when Redis is available.
-    /// In Production/Staging, Redis is mandatory (no in-process fallback).
+    /// In Production/Staging without <c>Scalability:AllowInMemoryFallback</c>, Redis is mandatory.
     /// </summary>
     /// <returns>True if Redis was configured and connected.</returns>
     public static bool AddDistributedCacheEpochsAndRateLimiter(
@@ -29,14 +33,15 @@ public static class ScalabilityServiceRegistration
             configuration.GetConnectionString("Redis")
             ?? configuration["Redis:Configuration"];
 
-        var redisRequired = !AllowsInMemoryFallback(environment);
+        var redisRequired = !AllowsInMemoryFallback(environment, configuration);
 
         if (string.IsNullOrWhiteSpace(redis))
         {
             if (redisRequired)
             {
                 throw new InvalidOperationException(
-                    "Redis is required in non-Development environments. Set ConnectionStrings:Redis or Redis:Configuration " +
+                    "Redis is required in non-Development environments (unless Scalability:AllowInMemoryFallback is true for a single server). " +
+                    "Set ConnectionStrings:Redis or Redis:Configuration " +
                     "(e.g. localhost:6379 or your Azure/AWS Redis connection string).");
             }
 
@@ -64,7 +69,7 @@ public static class ScalabilityServiceRegistration
             if (redisRequired)
             {
                 throw new InvalidOperationException(
-                    "Redis is configured but the connection failed. Fix connectivity or credentials; production cannot start without Redis.",
+                    "Redis is configured but the connection failed. Fix connectivity or credentials, or set Scalability:AllowInMemoryFallback=true only on a single-instance host.",
                     ex);
             }
 
@@ -80,7 +85,8 @@ public static class ScalabilityServiceRegistration
         IServiceCollection services,
         IConfiguration configuration,
         IHostEnvironment environment,
-        bool redisInfrastructureOk)
+        bool redisInfrastructureOk,
+        ILogger logger)
     {
         var redis =
             configuration.GetConnectionString("Redis")
@@ -99,18 +105,24 @@ public static class ScalabilityServiceRegistration
                 .UseRecommendedSerializerSettings()
                 .UseRedisStorage(redis, new RedisStorageOptions { Prefix = "hangfire:ldp:" }));
         }
-        else if (environment.IsEnvironment("Testing") || environment.IsDevelopment())
+        else if (environment.IsEnvironment("Testing") || environment.IsDevelopment() || AllowsInMemoryFallback(environment, configuration))
         {
             services.AddHangfire((sp, cfg) => cfg
                 .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
                 .UseSimpleAssemblyNameTypeSerializer()
                 .UseRecommendedSerializerSettings()
                 .UseMemoryStorage());
+
+            if (!environment.IsDevelopment() && !environment.IsEnvironment("Testing"))
+            {
+                logger.LogWarning(
+                    "Hangfire using in-memory storage (Scalability:AllowInMemoryFallback=true). Add Redis before scaling to multiple API instances.");
+            }
         }
         else
         {
             throw new InvalidOperationException(
-                "Hangfire must use Redis storage in non-Development environments so background jobs do not run duplicated across instances.");
+                "Hangfire must use Redis storage when Scalability:AllowInMemoryFallback is false so background jobs are not duplicated across instances.");
         }
 
         if (!environment.IsEnvironment("Testing"))

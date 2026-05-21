@@ -1,3 +1,4 @@
+using System.Linq;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
@@ -146,6 +147,14 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             .ConfigureAwait(false);
 
         return sqlResults.ToDictionary(r => r.DesignerId, r => r.AvgCompletionDays);
+    }
+
+    /// <inheritdoc />
+    public void Untrack(object entity)
+    {
+        var entry = ChangeTracker.Entries().FirstOrDefault(e => ReferenceEquals(e.Entity, entity));
+        if (entry != null)
+            entry.State = EntityState.Detached;
     }
 
     /// <summary>Result shape for raw SQL only; not mapped to a table.</summary>

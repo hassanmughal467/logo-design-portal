@@ -1,5 +1,6 @@
 using LogoDesignPortal.Domain.Constants;
 using LogoDesignPortal.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using LogoDesignPortal.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,7 +35,10 @@ public class TestDataSeeder : IHostedService
     {
         // Align with Program.cs / EF seed roles (fixed GUIDs). Do not insert duplicate role rows.
         if (context.Users.Any(u => u.Email == "client@test.com"))
+        {
+            HydrateTestDataIdsFromDatabase(context);
             return;
+        }
 
         var testPassword = "Test@123";
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(testPassword, BCrypt.Net.BCrypt.GenerateSalt(10));
@@ -113,10 +117,67 @@ public class TestDataSeeder : IHostedService
 
         context.SaveChanges();
 
+        SeedDefaultRolePermissions(context);
+
         TestDataIds.DesignerUserId = designer.Id;
         TestDataIds.ClientUserId = client.Id;
         TestDataIds.AdminUserId = admin.Id;
         TestDataIds.ClientProfileId = clientProfile.Id;
+        TestDataIds.DesignerProfileId = designerProfile.Id;
+    }
+
+    private static void HydrateTestDataIdsFromDatabase(ApplicationDbContext context)
+    {
+        var client = context.Users
+            .Include(u => u.Role)
+            .First(u => u.Email == "client@test.com");
+        var designer = context.Users.First(u => u.Email == "designer@test.com");
+        var admin = context.Users.First(u => u.Email == "admin@test.com");
+        var clientProfile = context.ClientProfiles.First(c => c.UserId == client.Id);
+        var designerProfile = context.DesignerProfiles.First(d => d.UserId == designer.Id);
+
+        TestDataIds.ClientUserId = client.Id;
+        TestDataIds.DesignerUserId = designer.Id;
+        TestDataIds.AdminUserId = admin.Id;
+        TestDataIds.ClientProfileId = clientProfile.Id;
+        TestDataIds.DesignerProfileId = designerProfile.Id;
+    }
+
+    private static void SeedDefaultRolePermissions(ApplicationDbContext context)
+    {
+        var permissionIds = context.Permissions.Where(p => !p.IsDeleted)
+            .ToDictionary(p => p.Name, p => p.Id);
+
+        var rolePermissions = new Dictionary<Guid, string[]>
+        {
+            [SeededRoleIds.Client] = new[] { "CreateOrder", "UploadFile", "DownloadFile", "UpdateOrderStatus" },
+            [SeededRoleIds.Designer] = new[] { "UploadFile", "DownloadFile" },
+            [SeededRoleIds.Admin] = new[]
+            {
+                "CreateUser", "ViewUsers", "ViewAllOrders", "AssignOrder", "UpdateOrderStatus",
+                "CreateDesignerProfile", "ViewDesignerProfiles", "UploadFile", "DownloadFile", "DeleteFile"
+            }
+        };
+
+        foreach (var (roleId, names) in rolePermissions)
+        {
+            foreach (var name in names)
+            {
+                if (!permissionIds.TryGetValue(name, out var permissionId))
+                    continue;
+                if (context.RolePermissions.Any(rp => rp.RoleId == roleId && rp.PermissionId == permissionId && !rp.IsDeleted))
+                    continue;
+                context.RolePermissions.Add(new RolePermission
+                {
+                    Id = Guid.NewGuid(),
+                    RoleId = roleId,
+                    PermissionId = permissionId,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        context.SaveChanges();
     }
 }
 
@@ -127,4 +188,5 @@ public static class TestDataIds
     public static Guid ClientUserId { get; set; }
     public static Guid AdminUserId { get; set; }
     public static Guid ClientProfileId { get; set; }
+    public static Guid DesignerProfileId { get; set; }
 }

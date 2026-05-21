@@ -9,4 +9,7 @@ public class InvoiceItemDto
     public DateTime? OrderDate { get; set; }
     public string Description { get; set; } = string.Empty;
     public decimal Amount { get; set; }
+
+    /// <summary>Order currency when this line is tied to a logo order.</summary>
+    public string? CurrencyCode { get; set; }
 }

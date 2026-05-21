@@ -70,16 +70,16 @@ export class HttpLoadingErrorInterceptor implements HttpInterceptor {
 
     switch (error.status) {
       case 401:
-        if (!isAuthEndpoint) {
-          this.authService.logout();
-          this.router.navigate(['/login']);
+        // TokenInterceptor owns refresh + logout; avoid racing double-logout here.
+        if (!isAuthEndpoint && !request.headers.has('X-Auth-Handled')) {
+          // No action — session messaging handled by TokenInterceptor.
         }
         break;
       case 403:
         this.messageService.add({
           severity: 'error',
           summary: 'Access Denied',
-          detail: 'Access denied'
+          detail: message || 'You do not have permission to perform this action.'
         });
         break;
       case 429:

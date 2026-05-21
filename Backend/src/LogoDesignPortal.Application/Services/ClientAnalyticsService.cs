@@ -39,9 +39,9 @@ public class ClientAnalyticsService : IClientAnalyticsService
         var activeCutoff = now.AddDays(-ActiveDaysThreshold);
         var inactiveCutoff = now.AddDays(-InactiveDaysThreshold);
 
-        var totalClients = await _context.ClientProfiles.CountAsync(c => !c.IsDeleted);
+        var totalClients = await _context.ClientProfiles.AsNoTracking().CountAsync(c => !c.IsDeleted);
 
-        var lastOrderByClient = await _context.LogoOrders
+        var lastOrderByClient = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted)
             .GroupBy(o => o.ClientId)
             .Select(g => new { ClientId = g.Key, LastOrder = g.Max(o => o.UpdatedAt ?? o.CreatedAt) })
@@ -53,6 +53,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
             (totalClients - clientIdsWithOrders.Count);
 
         var topRevenue = await _context.LogoOrders
+            .AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
             .GroupBy(o => o.ClientId)
             .Select(g => g.Sum(o => o.Price))
@@ -70,7 +71,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
 
     public async Task<TopClientsDto> GetTopClientsAsync(int limit = 10)
     {
-        var data = await _context.LogoOrders
+        var data = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
             .Include(o => o.Client)
             .ThenInclude(c => c!.User)
@@ -102,7 +103,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
         var startDate = DateTime.UtcNow.AddMonths(-months);
         var startOfPeriod = new DateTime(startDate.Year, startDate.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var completedOrders = await _context.LogoOrders
+        var completedOrders = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
             .Select(o => new { o.Price, Date = (o.UpdatedAt ?? o.CreatedAt) })
             .Where(o => o.Date >= startOfPeriod)
@@ -132,7 +133,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
         var startDate = DateTime.UtcNow.AddMonths(-months);
         var startOfPeriod = new DateTime(startDate.Year, startDate.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var orders = await _context.LogoOrders
+        var orders = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.ClientId == clientId && o.Status == OrderStatus.Completed)
             .Select(o => new { o.Price, Date = (o.UpdatedAt ?? o.CreatedAt) })
             .Where(o => o.Date >= startOfPeriod)
@@ -161,7 +162,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
     {
         var cutoff = DateTime.UtcNow.AddDays(-inactiveDaysThreshold);
 
-        var lastOrderByClient = await _context.LogoOrders
+        var lastOrderByClient = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted)
             .GroupBy(o => o.ClientId)
             .Select(g => new { ClientId = g.Key, LastOrder = g.Max(o => o.UpdatedAt ?? o.CreatedAt) })
@@ -196,7 +197,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
 
     public async Task<ClientLifetimeValueDto> GetClientLifetimeValueAsync()
     {
-        var data = await _context.LogoOrders
+        var data = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
             .Include(o => o.Client)
             .ThenInclude(c => c!.User)
@@ -229,7 +230,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
         var startOfLastMonth = startOfThisMonth.AddMonths(-1);
         var startOfTwoMonthsAgo = startOfThisMonth.AddMonths(-2);
 
-        var completedOrders = await _context.LogoOrders
+        var completedOrders = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
             .Select(o => new { o.ClientId, o.Price, Date = (o.UpdatedAt ?? o.CreatedAt) })
             .Where(o => o.Date >= startOfTwoMonthsAgo)
@@ -293,7 +294,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
         var activeCutoff = now.AddDays(-ActiveDaysThreshold);
         var lowActivityCutoff = now.AddDays(-LowActivityDaysThreshold);
 
-        var lastOrderByClient = await _context.LogoOrders
+        var lastOrderByClient = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted)
             .GroupBy(o => o.ClientId)
             .Select(g => new { ClientId = g.Key, LastOrder = g.Max(o => o.UpdatedAt ?? o.CreatedAt) })
@@ -330,7 +331,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
         var now = DateTime.UtcNow;
         var inactiveCutoff = now.AddDays(-InactiveDaysThreshold);
 
-        var clientRevenue = await _context.LogoOrders
+        var clientRevenue = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
             .Include(o => o.Client)
             .ThenInclude(c => c!.User)
@@ -349,14 +350,14 @@ public class ClientAnalyticsService : IClientAnalyticsService
         var lastMonthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-1);
         var prevMonthStart = lastMonthStart.AddMonths(-1);
 
-        var lastMonthRev = await _context.LogoOrders
+        var lastMonthRev = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= lastMonthStart && (o.UpdatedAt ?? o.CreatedAt) < lastMonthStart.AddMonths(1))
             .GroupBy(o => o.ClientId)
             .Select(g => new { ClientId = g.Key, Revenue = g.Sum(o => o.Price) })
             .ToDictionaryAsync(x => x.ClientId, x => x.Revenue);
 
-        var prevMonthRev = await _context.LogoOrders
+        var prevMonthRev = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= prevMonthStart && (o.UpdatedAt ?? o.CreatedAt) < lastMonthStart)
             .GroupBy(o => o.ClientId)

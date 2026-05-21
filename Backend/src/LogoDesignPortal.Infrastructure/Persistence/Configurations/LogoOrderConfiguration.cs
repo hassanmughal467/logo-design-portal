@@ -158,6 +158,9 @@ public class LogoOrderConfiguration : IEntityTypeConfiguration<LogoOrder>
             .IsRequired(false);
 
         builder.HasIndex(e => new { e.ClientId, e.BillingEligible, e.IsInvoiced });
+        builder.HasIndex(e => new { e.Status, e.BillingEligible, e.IsInvoiced });
+        builder.HasIndex(e => e.CompletedDate);
+        builder.HasIndex(e => e.Deadline);
         builder.HasIndex(e => new { e.DesignerId, e.IsDesignerInvoiced });
 
         // Analytics indexes for optimized aggregation queries

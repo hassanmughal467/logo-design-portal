@@ -50,4 +50,10 @@ public interface IApplicationDbContext
     /// falls back to an in-memory aggregate for SQLite / InMemory providers.
     /// </summary>
     Task<IReadOnlyDictionary<Guid, double>> GetDesignerAverageCompletionDaysByDesignerAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Detaches an entity from the change tracker (e.g. after a failed save / concurrency path).
+    /// No-op if the entity is not tracked.
+    /// </summary>
+    void Untrack(object entity);
 }

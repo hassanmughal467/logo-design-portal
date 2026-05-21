@@ -46,4 +46,24 @@ public static class TestOrderFactory
         configure?.Invoke(o);
         return o;
     }
+
+    public static LogoOrder CreatePreviewDelivered(Guid clientProfileId, decimal price = 80m, Action<LogoOrder>? configure = null)
+    {
+        var o = new LogoOrder
+        {
+            Id = Guid.NewGuid(),
+            ClientId = clientProfileId,
+            Title = "Preview delivered",
+            Description = "Ready for client revision or approval.",
+            Status = OrderStatus.PreviewDelivered,
+            Priority = OrderPriority.Medium,
+            Price = price,
+            ClientBasePrice = price,
+            ClientChargePrice = price,
+            RevisionCount = 0,
+            AllowUploads = false,
+        };
+        configure?.Invoke(o);
+        return o;
+    }
 }

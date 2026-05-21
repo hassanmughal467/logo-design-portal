@@ -1,3 +1,4 @@
+using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.DTOs.Quotes;
 using LogoDesignPortal.Application.DTOs.Notifications;
 using LogoDesignPortal.Application.Interfaces;
@@ -54,7 +55,7 @@ public class QuoteServiceTests
             ["FileStorage:Path"] = Path.GetTempPath()
         }).Build();
 
-        var sut = new QuoteService(context, notificationMock.Object, orderServiceMock.Object, config);
+        var sut = new QuoteService(context, notificationMock.Object, orderServiceMock.Object, new ClientProfileEnsureService(context, Mock.Of<IReadModelCacheVersions>(), Mock.Of<Microsoft.Extensions.Logging.ILogger<ClientProfileEnsureService>>()), config);
 
         var result = await sut.RespondToQuoteAsync(quote.Id, new RespondQuoteRequestDto { AdminQuotedPrice = 120m, AdminNotes = "Ready" }, Guid.NewGuid());
 
@@ -116,7 +117,7 @@ public class QuoteServiceTests
         {
             ["FileStorage:Path"] = Path.GetTempPath()
         }).Build();
-        var sut = new QuoteService(context, notificationMock.Object, orderServiceMock.Object, config);
+        var sut = new QuoteService(context, notificationMock.Object, orderServiceMock.Object, new ClientProfileEnsureService(context, Mock.Of<IReadModelCacheVersions>(), Mock.Of<Microsoft.Extensions.Logging.ILogger<ClientProfileEnsureService>>()), config);
 
         var result = await sut.ConvertToOrderAsync(quote.Id, user.Id, order.Id);
         var savedOrder = await context.LogoOrders.FirstAsync(o => o.Id == order.Id);

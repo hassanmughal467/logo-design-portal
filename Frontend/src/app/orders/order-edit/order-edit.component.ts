@@ -33,9 +33,9 @@ export class OrderEditComponent implements OnInit, OnChanges {
       price: [0, [Validators.required, Validators.min(0.01)]],
       priority: [OrderPriority.Medium],
       deadline: [null],
-      instructions: [''],
       requiredFormats: [''],
       requirements: [''],
+      referenceWebsite: [''],
       colorPreferences: [''],
       stylePreferences: ['']
     });
@@ -49,6 +49,11 @@ export class OrderEditComponent implements OnInit, OnChanges {
     if (changes['order'] && changes['order'].currentValue) {
       this.loadOrderData();
     }
+  }
+
+  /** Client-facing: price is set through approval flow; hide editor until finalized. */
+  get showPriceField(): boolean {
+    return this.order?.priceApproved === true;
   }
 
   loadOrderData(): void {
@@ -74,12 +79,23 @@ export class OrderEditComponent implements OnInit, OnChanges {
       price: this.order.price || 0,
       priority: priority,
       deadline: deadlineDate,
-      instructions: this.order.instructions || '',
       requiredFormats: this.order.requiredFormats || '',
       requirements: this.order.requirements || '',
       colorPreferences: this.order.colorPreferences || '',
       stylePreferences: this.order.stylePreferences || ''
     });
+    this.updatePriceValidators();
+  }
+
+  private updatePriceValidators(): void {
+    const priceCtrl = this.orderForm.get('price');
+    if (!priceCtrl) return;
+    if (this.showPriceField) {
+      priceCtrl.setValidators([Validators.required, Validators.min(0.01)]);
+    } else {
+      priceCtrl.clearValidators();
+    }
+    priceCtrl.updateValueAndValidity({ emitEvent: false });
   }
 
   onSubmit(): void {
@@ -96,10 +112,12 @@ export class OrderEditComponent implements OnInit, OnChanges {
     const orderData = {
       title: formValue.title,
       description: formValue.description,
-      price: formValue.price,
+      price: this.showPriceField
+        ? formValue.price
+        : Math.max(Number(this.order.price) || 0, 0.01),
       priority: formValue.priority || OrderPriority.Medium,
       deadline: formValue.deadline ? new Date(formValue.deadline) : undefined,
-      instructions: formValue.instructions || undefined,
+      instructions: this.order.instructions || undefined,
       requiredFormats: formValue.requiredFormats || undefined,
       requirements: formValue.requirements || undefined,
       colorPreferences: formValue.colorPreferences || undefined,

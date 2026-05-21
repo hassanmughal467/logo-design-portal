@@ -6,8 +6,6 @@ on:
   push:
     branches: [main, develop]
 
-# Fail fast: merge queue should stay red if any job fails (no `continue-on-error`).
-
 jobs:
   backend-tests:
     name: Backend (${{ matrix.name }}) + line coverage ≥80%
@@ -38,10 +36,14 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore & Build (Release)
-        run: |
-          dotnet restore "LogoDesignPortal.sln"
-          dotnet build "LogoDesignPortal.sln" -c Release --no-restore
+      - name: Restore
+        run: dotnet restore LogoDesignPortal.sln
+
+      - name: Verify formatting
+        run: dotnet format LogoDesignPortal.sln --verify-no-changes --verbosity minimal
+
+      - name: Build (Release, nullable + analyzer warnings)
+        run: dotnet build LogoDesignPortal.sln -c Release --no-restore -p:ReportAnalyzer=true
 
       - name: Test + Cobertura (Coverlet threshold)
         run: |
@@ -50,6 +52,15 @@ jobs:
             --collect:"XPlat Code Coverage" \
             --results-directory "${{ runner.temp }}/coverage-${{ matrix.name }}" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+
+      - name: Enforce coverage threshold (integration matrix)
+        if: matrix.name == 'integration'
+        run: |
+          REPORT=$(find "${{ runner.temp }}/coverage-integration" -name 'coverage.cobertura.xml' | head -1)
+          if [ -z "$REPORT" ]; then echo "No coverage report found"; exit 1; fi
+          LINE_RATE=$(grep -oP 'line-rate="\K[0-9.]+' "$REPORT" | head -1)
+          echo "Line rate: $LINE_RATE"
+          python3 -c "import sys; r=float('${LINE_RATE}'); sys.exit(0 if r >= 0.80 else 1)"
 
       - name: Upload backend coverage (${{ matrix.name }})
         if: always()
@@ -60,7 +71,7 @@ jobs:
           if-no-files-found: ignore
 
   frontend-tests:
-    name: Frontend (Angular/Karma + coverage gates)
+    name: Frontend (Karma + coverage gates)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,6 +85,10 @@ jobs:
 
       - name: Setup Chrome (Karma / Angular)
         uses: browser-actions/setup-chrome@v1
+
+      - name: Typecheck
+        working-directory: Frontend
+        run: npx tsc -p tsconfig.app.json --noEmit
 
       - name: Install & unit test
         working-directory: Frontend
@@ -89,14 +104,6 @@ jobs:
         with:
           name: frontend-coverage
           path: Frontend/coverage/logo-design-portal-frontend
-          if-no-files-found: ignore
-
-      - name: Upload frontend mutation reports (optional)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-mutation-report
-          path: Frontend/reports/mutation
           if-no-files-found: ignore
 
   build-app:
@@ -129,10 +136,72 @@ jobs:
           npm ci
           npx ng build --configuration=production
 
-      - name: Upload backend mutation reports (optional)
-        if: always()
-        uses: actions/upload-artifact@v4
+  playwright-smoke:
+    name: Playwright smoke (security + auth)
+    needs: [build-app]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          name: backend-mutation-report
-          path: Backend/StrykerOutput
-          if-no-files-found: ignore
+          dotnet-version: '8.0.x'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install Frontend dependencies
+        working-directory: Frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: Frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start API (in-memory Testing env)
+        working-directory: Backend
+        env:
+          ASPNETCORE_ENVIRONMENT: Testing
+        run: |
+          dotnet run --project src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release --urls http://localhost:5000 &
+          echo $! > /tmp/api.pid
+
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS "http://localhost:5000/health" && exit 0
+            sleep 2
+          done
+          echo "API failed to become healthy"; exit 1
+
+      - name: Start Angular (e2e config)
+        working-directory: Frontend
+        run: |
+          npx ng serve --configuration=e2e --port 4200 &
+          echo $! > /tmp/ng.pid
+
+      - name: Wait for Angular
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS "http://localhost:4200/" && exit 0
+            sleep 2
+          done
+          echo "Angular failed to start"; exit 1
+
+      - name: Run Playwright smoke
+        working-directory: Frontend
+        env:
+          E2E_BASE_URL: http://localhost:4200
+          E2E_API_URL: http://localhost:5000
+          CI: 'true'
+        run: |
+          npx playwright test --config=e2e/playwright.config.ts \
+            e2e/tests/auth/login.spec.ts \
+            e2e/tests/access/unauthorized.spec.ts \
+            e2e/tests/security/rbac-and-token.spec.ts

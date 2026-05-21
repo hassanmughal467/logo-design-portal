@@ -11,56 +11,52 @@ public class GalleryService : IGalleryService
 {
     private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
+    private readonly IClientProfileEnsureService _clientProfileEnsure;
 
-    public GalleryService(IApplicationDbContext context, IMapper mapper)
+    public GalleryService(
+        IApplicationDbContext context,
+        IMapper mapper,
+        IClientProfileEnsureService clientProfileEnsure)
     {
         _context = context;
         _mapper = mapper;
+        _clientProfileEnsure = clientProfileEnsure;
     }
 
-    public async Task<List<GalleryItemResponseDto>> GetClientGalleryAsync(Guid clientId)
+    public async Task<List<GalleryItemResponseDto>> GetClientGalleryAsync(Guid clientId, CancellationToken cancellationToken = default)
     {
-        var client = await _context.ClientProfiles
-            .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
-
-        if (client == null)
-        {
-            throw new InvalidOperationException("Client profile not found.");
-        }
+        var client = await _clientProfileEnsure.EnsureForClientUserAsync(clientId, cancellationToken);
 
         var galleryItems = await _context.ClientGalleries
             .Include(g => g.Order)
             .Include(g => g.File)
             .Where(g => g.ClientId == client.Id && !g.IsDeleted)
             .OrderByDescending(g => g.ApprovedAt)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return _mapper.Map<List<GalleryItemResponseDto>>(galleryItems);
     }
 
-    public async Task<GalleryItemResponseDto?> GetGalleryItemByIdAsync(Guid galleryItemId, Guid clientId)
+    public async Task<GalleryItemResponseDto?> GetGalleryItemByIdAsync(
+        Guid galleryItemId,
+        Guid clientId,
+        CancellationToken cancellationToken = default)
     {
-        var client = await _context.ClientProfiles
-            .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
-
-        if (client == null)
-        {
-            throw new InvalidOperationException("Client profile not found.");
-        }
+        var client = await _clientProfileEnsure.EnsureForClientUserAsync(clientId, cancellationToken);
 
         var galleryItem = await _context.ClientGalleries
             .Include(g => g.Order)
             .Include(g => g.File)
-            .FirstOrDefaultAsync(g => g.Id == galleryItemId && g.ClientId == client.Id && !g.IsDeleted);
+            .FirstOrDefaultAsync(g => g.Id == galleryItemId && g.ClientId == client.Id && !g.IsDeleted, cancellationToken);
 
         return galleryItem == null ? null : _mapper.Map<GalleryItemResponseDto>(galleryItem);
     }
 
-    public async Task<bool> AddToGalleryAsync(Guid orderId, Guid fileId, Guid clientId)
+    public async Task<bool> AddToGalleryAsync(Guid orderId, Guid fileId, Guid clientId, CancellationToken cancellationToken = default)
     {
         var order = await _context.LogoOrders
             .Include(o => o.Client)
-            .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
+            .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted, cancellationToken);
 
         if (order == null || order.Client.UserId != clientId)
         {
@@ -68,24 +64,22 @@ public class GalleryService : IGalleryService
         }
 
         var file = await _context.LogoFiles
-            .FirstOrDefaultAsync(f => f.Id == fileId && f.OrderId == orderId && !f.IsDeleted);
+            .FirstOrDefaultAsync(f => f.Id == fileId && f.OrderId == orderId && !f.IsDeleted, cancellationToken);
 
         if (file == null || !file.IsFinalVersion || !file.IsAdminApproved)
         {
             throw new InvalidOperationException("File not found or not approved for gallery.");
         }
 
-        // Check if already in gallery
         var existing = await _context.ClientGalleries
-            .FirstOrDefaultAsync(g => g.FileId == fileId && g.ClientId == order.ClientId && !g.IsDeleted);
+            .FirstOrDefaultAsync(g => g.FileId == fileId && g.ClientId == order.ClientId && !g.IsDeleted, cancellationToken);
 
         if (existing != null)
         {
-            return true; // Already in gallery
+            return true;
         }
 
-        // Generate preview image path (simplified - in production, generate JPEG preview)
-        var previewPath = file.FilePath; // TODO: Generate JPEG preview
+        var previewPath = file.FilePath;
 
         var galleryItem = new ClientGallery
         {
@@ -104,12 +98,12 @@ public class GalleryService : IGalleryService
         };
 
         _context.ClientGalleries.Add(galleryItem);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
         return true;
     }
 
-    private string? GetFileFormat(string fileName)
+    private static string? GetFileFormat(string fileName)
     {
         var extension = Path.GetExtension(fileName)?.TrimStart('.').ToUpper();
         return extension;

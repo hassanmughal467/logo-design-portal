@@ -1,12 +1,13 @@
 <p-dialog 
-  [(visible)]="visible"
+  [visible]="dialogVisible"
+  (visibleChange)="onPDialogVisibleChange($event)"
   [modal]="true"
+  appendTo="body"
   [style]="{width: '95vw', maxWidth: '1400px', height: '90vh'}"
   [closable]="true"
   [draggable]="false"
   [resizable]="true"
   [header]="order ? order.title : 'Order Details'"
-  (onHide)="closeModal()"
   styleClass="order-detail-dialog">
   
   <p-confirmDialog></p-confirmDialog>
@@ -517,7 +518,7 @@
                   [disabled]="!file.isVisibleToClient && isClient"
                 ></p-button>
                 <p-button 
-                  *ngIf="isAdmin && !file.isAdminApproved && !isOrderLocked(order.status)"
+                  *ngIf="(isAdmin || isSuperAdmin) && !file.isAdminApproved && !isOrderLocked(order.status)"
                   icon="pi pi-check" 
                   [styleClass]="'p-button-text'"
                   severity="success"
@@ -864,10 +865,12 @@
   </ng-template>
 </p-dialog>
 
-<!-- Image Preview Dialog -->
+<!-- Image Preview Dialog: appendTo body + high z-index so it stacks above the order shell (nested dialogs otherwise break for SuperAdmin/admin). -->
 <p-dialog
   [(visible)]="showImagePreviewDialog"
   [modal]="true"
+  appendTo="body"
+  [baseZIndex]="12000"
   [draggable]="false"
   [resizable]="false"
   [style]="{ width: '80vw', maxWidth: '1000px' }"
@@ -1206,7 +1209,7 @@
       <p-fileUpload 
         #revisionFileUpload
         [multiple]="true"
-        [maxFileSize]="26214400"
+        [maxFileSize]="maxUploadFileSize"
         accept="image/*,.pdf,.ai,.eps,.psd,.svg,.pes,.dst,.jef,.exp,.vp3,.xxx,.hus,.art,.vip,.vip3,.shv,.pec,.jpm,.sew,.emb,.csd,.pcs,.phb,.phc,.stx,.s10,.dsb,.zsk"
         (onSelect)="onRevisionFileSelect($event)"
         [auto]="false"
@@ -1271,9 +1274,11 @@
     <div class="form-group" *ngIf="!isClient">
       <p-checkbox 
         [(ngModel)]="isInternalComment"
-        label="Internal Comment (Admin/Designer only)"
+        label="Internal comment (staff only — client cannot see and is not notified)"
         [binary]="true"
       ></p-checkbox>
+      <small class="p-help" *ngIf="isInternalComment">Uncheck to share with the client; they will get a notification.</small>
+      <small class="p-help" *ngIf="!isInternalComment">Visible to the client; they receive a notification when you post.</small>
     </div>
   </div>
   <ng-template pTemplate="footer">

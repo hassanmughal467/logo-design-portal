@@ -30,4 +30,7 @@ public class InvoiceResponseDto
     public List<InvoiceItemDto> Items { get; set; } = new List<InvoiceItemDto>();
     public DateTime CreatedAt { get; set; }
     public bool IsLocked { get; set; } // True if status is Paid
+
+    /// <summary>ISO currency from linked orders (e.g. GBP). Null if no order lines; PDF/UI fall back to invoice settings.</summary>
+    public string? CurrencyCode { get; set; }
 }

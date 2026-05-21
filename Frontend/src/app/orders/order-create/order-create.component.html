@@ -110,16 +110,16 @@
           </p-dropdown>
         </div>
 
-        <!-- Placement (Left Chest / Jacket Back) - shown for Embroidery/Digitizing or Custom Patch -->
+        <!-- Size category (Left Chest / Jacket Back) - shown for Embroidery/Digitizing or Custom Patch -->
         <div class="form-group" *ngIf="showPlacementDropdown">
-          <label for="placement">Placement</label>
+          <label for="placement">Size Category</label>
           <p-dropdown 
             id="placement"
             formControlName="placement"
             [options]="placementOptions"
             optionLabel="label"
             optionValue="value"
-            placeholder="Select placement"
+            placeholder="Select size category"
             styleClass="w-full"
             appendTo="body">
           </p-dropdown>
@@ -179,8 +179,8 @@
 
         <!-- File Upload -->
         <div class="form-group full-width">
-          <label>Reference Files (Optional)</label>
-          <div class="file-upload-area" (click)="fileInput.click()" (dragover)="onDragOver($event)" (drop)="onDrop($event)" (dragleave)="onDragLeave($event)" [class.drag-over]="isDragOver">
+          <label>Reference Files <span class="required">*</span></label>
+          <div class="file-upload-area" (click)="fileInput.click()" (dragover)="onDragOver($event)" (drop)="onDrop($event)" (dragleave)="onDragLeave($event)" [class.drag-over]="isDragOver" [class.ng-invalid]="referenceFilesInvalid">
             <input 
               #fileInput 
               type="file" 
@@ -191,8 +191,9 @@
             />
             <i class="pi pi-cloud-upload upload-icon"></i>
             <p class="upload-text">Drag & drop files here or <span class="browse-link">browse</span></p>
-            <small class="upload-hint">Max 10MB per file · JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD, embroidery (PES, DST, JEF, EXP, etc.)</small>
+            <small class="upload-hint">Up to 500MB total per order creation; each file up to 500MB · JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD, embroidery (PES, DST, JEF, EXP, etc.)</small>
           </div>
+          <small class="p-error" *ngIf="referenceFilesInvalid">At least one reference file is required</small>
           
           <!-- Selected Files List -->
           <div class="selected-files" *ngIf="selectedFiles.length > 0">

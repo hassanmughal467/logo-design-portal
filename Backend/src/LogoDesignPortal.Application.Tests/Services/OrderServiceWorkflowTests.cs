@@ -10,7 +10,6 @@ using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using LogoDesignPortal.Infrastructure.Persistence;
-
 namespace LogoDesignPortal.Application.Tests.Services;
 
 /// <summary>
@@ -47,7 +46,7 @@ public class OrderServiceWorkflowTests
     }
 
     [Fact]
-    public async Task CreateOrderAsync_InvalidClient_ThrowsInvalidOperationException()
+    public async Task CreateOrderAsync_InvalidClient_ThrowsUnauthorizedAccessException()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(databaseName: "CreateOrder_Invalid_" + Guid.NewGuid())
@@ -58,7 +57,7 @@ public class OrderServiceWorkflowTests
         var request = new CreateOrderRequestDto { Title = "Test", Description = "Desc", Price = 50 };
         var nonExistentClientId = Guid.NewGuid();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => orderService.CreateOrderAsync(request, nonExistentClientId));
     }
 
@@ -322,6 +321,7 @@ public class OrderServiceWorkflowTests
             Mock.Of<ICommentService>(),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>(),
             Mock.Of<IDistributedCache>(),
-            Mock.Of<IReadModelCacheVersions>());
+            Mock.Of<IReadModelCacheVersions>(),
+            new ClientProfileEnsureService(context, Mock.Of<IReadModelCacheVersions>(), Mock.Of<Microsoft.Extensions.Logging.ILogger<ClientProfileEnsureService>>()));
     }
 }

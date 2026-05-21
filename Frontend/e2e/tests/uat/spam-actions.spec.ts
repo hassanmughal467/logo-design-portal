@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { LoginPage } from '../../pom';
+import { LoginPage, OrderCreateModalPage } from '../../pom';
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from '../../utils/env';
 import { clickRapidly } from '../../utils/human-behavior';
 
@@ -26,6 +26,7 @@ test('UAT - double submit order form handled gracefully', async ({ page }) => {
   await page
     .getByTestId('order-create-description')
     .fill('User double-click submit behavior simulation to avoid duplicate order requests.');
+  await new OrderCreateModalPage(page).attachMinimalReferenceFile();
 
   const submit = page.getByTestId('order-create-submit');
   await submit.dblclick();

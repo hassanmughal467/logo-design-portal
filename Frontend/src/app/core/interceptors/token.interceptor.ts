@@ -4,6 +4,9 @@ import { Observable, throwError } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { AuthService } from '../services/auth.service';
 import { MessageService } from 'primeng/api';
+import { environment } from '@environments/environment';
+
+const useCookieAuth = !!(environment as { useCookieAuth?: boolean }).useCookieAuth;
 
 @Injectable()
 export class TokenInterceptor implements HttpInterceptor {
@@ -13,7 +16,7 @@ export class TokenInterceptor implements HttpInterceptor {
   ) {}
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    const token = this.authService.getAccessToken();
+    const token = useCookieAuth ? null : this.authService.getAccessToken();
     const authRequest = token
       ? request.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
       : request;
@@ -24,8 +27,8 @@ export class TokenInterceptor implements HttpInterceptor {
         const isRefreshEndpoint = (request.url || '').includes('/auth/refresh-token');
 
         if (error.status === 401 && !isAuthEndpoint && !isRefreshEndpoint) {
-          const stored = this.authService.getStoredTokensForRefresh();
-          if (stored) {
+          const canRefresh = useCookieAuth || this.authService.getStoredTokensForRefresh();
+          if (canRefresh) {
             return this.authService.refreshToken().pipe(
               switchMap(() => {
                 const newToken = this.authService.getAccessToken();

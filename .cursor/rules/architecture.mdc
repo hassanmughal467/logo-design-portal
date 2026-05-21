@@ -1,0 +1,18 @@
+---
+description: Backend architecture — src only, layering, state machine, masking, auth
+alwaysApply: true
+---
+
+# Architecture Rules
+
+- Use only `Backend/src/` — never legacy backend folders outside `src`
+- Respect layered architecture: Domain → Application → Infrastructure → API
+- Controllers must stay thin; business logic belongs in Application services
+- State changes must use `OrderStatusStateMachine` / `OrderStatusTransitionHelper`
+- All DTOs must enforce role masking; never expose client/designer sensitive data
+- Backend authorization is mandatory (`[Authorize]`, roles, `[RequirePermission]`, service-level access checks)
+- Use async everywhere for I/O
+- Validate all uploads (`UploadSecurityHelper`, revision/file rules)
+- Never trust frontend permissions — re-validate on API
+- Use structured logging (Serilog)
+- Avoid large components/services; prefer reusable abstractions (helpers, shared access rules)

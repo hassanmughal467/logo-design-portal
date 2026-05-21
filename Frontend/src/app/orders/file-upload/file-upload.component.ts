@@ -8,6 +8,7 @@ import { MessageService, ConfirmationService } from 'primeng/api';
 import { FileType } from '@shared/models/file.model';
 import { isOrderLocked } from '@shared/utils/order-locking';
 import { DesignCategory, DesignType, DesignerPricingInfo } from '@shared/models/design-pricing.model';
+import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
 
 @Component({
   selector: 'app-file-upload',
@@ -17,6 +18,7 @@ import { DesignCategory, DesignType, DesignerPricingInfo } from '@shared/models/
 export class FileUploadComponent implements OnInit {
   @ViewChild('fileUpload') private primeFileUpload?: FileUpload;
 
+  readonly maxUploadFileSize = MAX_UPLOAD_BYTES;
   uploadForm: FormGroup;
   orderId: string | null = null;
   loading = false;
@@ -322,31 +324,28 @@ export class FileUploadComponent implements OnInit {
 
   onFileSelect(event: any): void {
     const files: File[] = Array.from(event.files || []);
-    
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    const vectorExtensions = ['.svg', '.pdf', '.ai', '.eps', '.psd'];
-    const embroiderExtensions = ['.pes', '.dst', '.jef', '.exp', '.vp3', '.xxx', '.hus', '.art', '.vip', '.vip3', '.shv', '.pec', '.jpm', '.sew', '.emb', '.csd', '.pcs', '.phb', '.phc', '.stx', '.s10', '.dsb', '.zsk'];
-    const imageMaxBytes = 10 * 1024 * 1024;  // 10MB
-    const vectorMaxBytes = 25 * 1024 * 1024;  // 25MB
-
-    const getMaxSize = (fileName: string): number => {
-      const ext = '.' + (fileName.split('.').pop() || '').toLowerCase();
-      if (imageExtensions.includes(ext)) return imageMaxBytes;
-      if (vectorExtensions.includes(ext) || embroiderExtensions.includes(ext)) return vectorMaxBytes;
-      return imageMaxBytes;
-    };
-
-    const invalidFiles = files.filter(file => file.size > getMaxSize(file.name));
-    if (invalidFiles.length > 0) {
+    const oversize = files.filter(file => file.size > MAX_UPLOAD_BYTES);
+    if (oversize.length > 0) {
       this.messageService.add({
         severity: 'error',
         summary: 'Error',
-        detail: `${invalidFiles.length} file(s) exceed allowed size (images: 10MB, vector/docs: 25MB) and were not added`
+        detail: `${oversize.length} file(s) exceed the maximum size of 500MB each and were not added`
       });
     }
 
-    const validFiles = files.filter(file => file.size <= getMaxSize(file.name));
-    this.selectedFiles = [...this.selectedFiles, ...validFiles];
+    const validFiles = files.filter(file => file.size <= MAX_UPLOAD_BYTES);
+    const merged = [...this.selectedFiles, ...validFiles];
+    if (combinedFileBytes(merged) > MAX_UPLOAD_BYTES) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Combined file size cannot exceed 500MB.'
+      });
+      this.primeFileUpload?.clear();
+      return;
+    }
+
+    this.selectedFiles = merged;
     // PrimeNG basic mode hides the file input when it has internal files; clear so user can add more.
     this.primeFileUpload?.clear();
   }

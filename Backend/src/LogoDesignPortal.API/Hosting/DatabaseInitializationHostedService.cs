@@ -80,6 +80,7 @@ public sealed class DatabaseInitializationHostedService : IHostedService
             }
 
             await EnsureStandardRolesAsync(context, logger, cancellationToken).ConfigureAwait(false);
+            await EnsureDefaultRolePermissionsAsync(context, logger, cancellationToken).ConfigureAwait(false);
             await SeedPaymentSettingsAsync(context, logger, cancellationToken).ConfigureAwait(false);
             await EnsureSuperAdminUserAsync(context, logger, cancellationToken).ConfigureAwait(false);
 
@@ -147,6 +148,51 @@ public sealed class DatabaseInitializationHostedService : IHostedService
             await context.SaveChangesAsync(ct).ConfigureAwait(false);
             logger.LogInformation("Seeded standard role {RoleName}.", name);
         }
+    }
+
+    private static async Task EnsureDefaultRolePermissionsAsync(ApplicationDbContext context, ILogger logger, CancellationToken ct)
+    {
+        var permissionIds = await context.Permissions
+            .Where(p => !p.IsDeleted)
+            .ToDictionaryAsync(p => p.Name, p => p.Id, ct)
+            .ConfigureAwait(false);
+
+        var rolePermissions = new Dictionary<Guid, string[]>
+        {
+            [SeededRoleIds.Client] = new[] { "CreateOrder", "UploadFile", "DownloadFile", "UpdateOrderStatus" },
+            [SeededRoleIds.Designer] = new[] { "UploadFile", "DownloadFile" },
+            [SeededRoleIds.Admin] = new[]
+            {
+                "CreateUser", "ViewUsers", "ViewAllOrders", "AssignOrder", "UpdateOrderStatus",
+                "CreateDesignerProfile", "ViewDesignerProfiles", "UploadFile", "DownloadFile", "DeleteFile"
+            }
+        };
+
+        foreach (var (roleId, names) in rolePermissions)
+        {
+            foreach (var name in names)
+            {
+                if (!permissionIds.TryGetValue(name, out var permissionId))
+                    continue;
+
+                var exists = await context.RolePermissions
+                    .AnyAsync(rp => rp.RoleId == roleId && rp.PermissionId == permissionId && !rp.IsDeleted, ct)
+                    .ConfigureAwait(false);
+                if (exists)
+                    continue;
+
+                context.RolePermissions.Add(new RolePermission
+                {
+                    Id = Guid.NewGuid(),
+                    RoleId = roleId,
+                    PermissionId = permissionId,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        await context.SaveChangesAsync(ct).ConfigureAwait(false);
+        logger.LogInformation("Default role permissions ensured for Client, Designer, and Admin.");
     }
 
     private static async Task SeedPaymentSettingsAsync(ApplicationDbContext context, ILogger logger, CancellationToken ct)

@@ -9,7 +9,6 @@ using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using LogoDesignPortal.Infrastructure.Persistence;
 using AutoMapper;
-
 namespace LogoDesignPortal.Application.Tests.Services;
 
 /// <summary>
@@ -179,6 +178,7 @@ public class OrderServiceFullBatchTests
             Mock.Of<ICommentService>(),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>(),
             Mock.Of<IDistributedCache>(),
-            Mock.Of<IReadModelCacheVersions>());
+            Mock.Of<IReadModelCacheVersions>(),
+            new ClientProfileEnsureService(context, Mock.Of<IReadModelCacheVersions>(), Mock.Of<Microsoft.Extensions.Logging.ILogger<ClientProfileEnsureService>>()));
     }
 }

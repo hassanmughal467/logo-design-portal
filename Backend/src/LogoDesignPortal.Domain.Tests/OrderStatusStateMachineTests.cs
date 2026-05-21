@@ -15,6 +15,8 @@ public class OrderStatusStateMachineTests
     [InlineData(OrderStatus.PreviewDelivered, OrderStatus.ClientApproved)]
     [InlineData(OrderStatus.ClientApproved, OrderStatus.Completed)]
     [InlineData(OrderStatus.Completed, OrderStatus.Refunded)]
+    [InlineData(OrderStatus.WaitingForAdminApproval, OrderStatus.CancelledByUser)]
+    [InlineData(OrderStatus.PriceApprovalPending, OrderStatus.CancelledByUser)]
     public void ValidateTransition_AllowedPaths_DoesNotThrow(OrderStatus from, OrderStatus to)
     {
         var ex = Record.Exception(() => OrderStatusStateMachine.ValidateTransition(from, to));

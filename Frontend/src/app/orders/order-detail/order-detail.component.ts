@@ -1,16 +1,18 @@
-import { Component, OnInit, OnDestroy, OnChanges, SimpleChanges, Input, Output, EventEmitter } from '@angular/core';
+import { Component, OnInit, OnDestroy, OnChanges, SimpleChanges, Input, Output, EventEmitter, ViewChild, ChangeDetectorRef } from '@angular/core';
+import { FileUpload } from 'primeng/fileupload';
 import { Router, ActivatedRoute } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { PermissionsService } from '@core/services/permissions.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Subject, Subscription } from 'rxjs';
+import { takeUntil, finalize, timeout } from 'rxjs/operators';
 import { Order, OrderStatus } from '@shared/models/order.model';
 import { isOrderLocked } from '@shared/utils/order-locking';
 import { LogoFile, FileType } from '@shared/models/file.model';
 import { OrderRevision, RevisionAttachment } from '@shared/models/revision.model';
 import { OrderComment, OrderCommentUnreadCounts } from '@shared/models/comment.model';
+import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
 
 @Component({
   selector: 'app-order-detail',
@@ -18,12 +20,20 @@ import { OrderComment, OrderCommentUnreadCounts } from '@shared/models/comment.m
   styleUrls: ['./order-detail.component.scss']
 })
 export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
+  @ViewChild('revisionFileUpload') private revisionFileUpload?: FileUpload;
+  readonly maxUploadFileSize = MAX_UPLOAD_BYTES;
   private readonly designerClientAliasName = 'Hawk Merchandising';
   private readonly designerClientAliasRole = 'SuperAdmin';
   @Input() orderId: string | null = null;
   @Input() visible: boolean = false;
   @Output() visibleChange = new EventEmitter<boolean>();
   @Output() orderUpdated = new EventEmitter<void>();
+
+  /**
+   * Bound to p-dialog only. Parent passes {@link visible} via @Input; mixing [(visible)] on the
+   * dialog with the same field as @Input causes PrimeNG and Angular to fight and can strand loading.
+   */
+  dialogVisible = false;
 
   order: Order | null = null;
   files: LogoFile[] = [];
@@ -97,6 +107,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   
   private destroy$ = new Subject<void>();
   private isRouteMode = false;
+  private loadOrderSubscription: Subscription | null = null;
 
   constructor(
     public router: Router,
@@ -105,7 +116,8 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     private authService: AuthService,
     private permissionsService: PermissionsService,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
+    private confirmationService: ConfirmationService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -121,37 +133,80 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
       if (id && !this.orderId) {
         this.isRouteMode = true;
         this.visible = true;
+        this.dialogVisible = true;
         this.orderId = id;
         this.loadOrder(id);
       }
     });
   }
 
-  ngOnChanges(): void {
-    if (this.visible && this.orderId) {
-      this.loadOrder(this.orderId);
-    } else if (!this.visible) {
-      // Reset when modal closes
-      this.order = null;
-      this.files = [];
-      this.revisions = [];
-      this.comments = [];
-      this.unreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0, unreadPriceNegotiationNotes: 0 };
-      this.activeTab = 0;
-      this.loadFailed = false;
-      this.errorMessage = '';
-      this.commentsLoadedForOrderId = null;
-      this.revisionsLoadedForOrderId = null;
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['visible']) {
+      this.dialogVisible = this.visible;
+      if (!this.visible) {
+        this.resetModalState();
+        return;
+      }
     }
+
+    const id = this.orderId?.trim();
+    if (!this.visible || !id) {
+      return;
+    }
+
+    const visibleOpened =
+      changes['visible'] &&
+      changes['visible'].currentValue === true &&
+      changes['visible'].previousValue !== true;
+    const orderIdChanged =
+      changes['orderId'] &&
+      changes['orderId'].currentValue !== changes['orderId'].previousValue;
+
+    if (visibleOpened || orderIdChanged) {
+      this.loadOrder(id);
+    }
+  }
+
+  /** PrimeNG dialog close (X, overlay) — keep in sync with parent without duplicate onHide + two-way fighting. */
+  onPDialogVisibleChange(show: boolean): void {
+    if (this.dialogVisible === show) {
+      return;
+    }
+    this.dialogVisible = show;
+    if (!show) {
+      if (this.isRouteMode) {
+        this.router.navigate(['/orders']);
+      } else if (this.visible) {
+        this.visibleChange.emit(false);
+      }
+      this.resetModalState();
+    }
+  }
+
+  private resetModalState(): void {
+    this.loadOrderSubscription?.unsubscribe();
+    this.loadOrderSubscription = null;
+    this.order = null;
+    this.files = [];
+    this.revisions = [];
+    this.comments = [];
+    this.unreadCounts = { unreadFiles: 0, unreadRevisions: 0, unreadComments: 0, unreadPriceNegotiationNotes: 0 };
+    this.activeTab = 0;
+    this.loadFailed = false;
+    this.errorMessage = '';
+    this.loading = false;
+    this.commentsLoadedForOrderId = null;
+    this.revisionsLoadedForOrderId = null;
   }
 
   closeModal(): void {
     if (this.isRouteMode) {
       this.router.navigate(['/orders']);
-    } else {
-      this.visible = false;
-      this.visibleChange.emit(false);
+      return;
     }
+    this.dialogVisible = false;
+    this.visibleChange.emit(false);
+    this.resetModalState();
   }
 
   ngOnDestroy(): void {
@@ -161,23 +216,38 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   loadOrder(orderId: string): void {
+    this.loadOrderSubscription?.unsubscribe();
     this.loading = true;
     this.loadFailed = false;
     this.errorMessage = '';
-    this.apiService.get<Order>(`orders/${orderId}`)
-      .pipe(takeUntil(this.destroy$))
+    this.loadOrderSubscription = this.apiService
+      .get<Order>(`orders/${orderId}`)
+      .pipe(
+        timeout(60000),
+        takeUntil(this.destroy$),
+        finalize(() => {
+          this.loading = false;
+          this.cdr.markForCheck();
+        })
+      )
       .subscribe({
         next: (order) => {
           this.order = order;
           this.loadFiles(orderId);
           this.loadUnreadCounts(orderId);
           this.loadTabDataForCurrentTab();
-          this.loading = false;
         },
         error: (error) => {
-          this.loading = false;
           this.loadFailed = true;
-          this.errorMessage = error.error?.error || (error.status === 403 ? 'You do not have access to view this order.' : error.status === 404 ? 'Order not found.' : 'Failed to load order.');
+          const isTimeout = error?.name === 'TimeoutError';
+          this.errorMessage = isTimeout
+            ? 'Request timed out. Check your connection and try again.'
+            : error.error?.error ||
+              (error.status === 403
+                ? 'You do not have access to view this order.'
+                : error.status === 404
+                  ? 'Order not found.'
+                  : 'Failed to load order.');
 
           if (error.status === 403) {
             this.messageService.add({
@@ -195,13 +265,11 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
-              detail: error.error?.error || 'Failed to load order'
+              detail: isTimeout ? this.errorMessage : error.error?.error || 'Failed to load order'
             });
           }
           if (this.isRouteMode) {
             this.router.navigate(['/orders']);
-          } else {
-            // Keep modal open to show error UI (user can close manually)
           }
         }
       });
@@ -638,8 +706,29 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     return this.files.filter(f => f.isVisibleToClient && f.fileType === FileType.Reference);
   }
 
+  /**
+   * Super Admin quick action: jump to Files and open the first pending designer preview image when possible.
+   * Tab/index updates run through onTabChange + CD so PrimeNG TabView updates inside the order modal stack.
+   */
   openPreviewTab(): void {
-    this.activeTab = 0;
+    this.activateTab(0);
+    const pendingPreviewImages = this.files.filter(
+      f => !f.isVisibleToClient && f.fileType === FileType.Preview && this.isPreviewableImage(f)
+    );
+    if (pendingPreviewImages.length > 0) {
+      this.openImagePreview(pendingPreviewImages[0], pendingPreviewImages);
+      return;
+    }
+    const pendingAnyImages = this.files.filter(f => !f.isVisibleToClient && this.isPreviewableImage(f));
+    if (pendingAnyImages.length > 0) {
+      this.openImagePreview(pendingAnyImages[0], pendingAnyImages);
+      return;
+    }
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Preview',
+      detail: 'No image file to preview here. Open the Files tab to download (e.g. PDF or embroidery formats).'
+    });
   }
 
   private cleanupImagePreviewUrl(): void {
@@ -879,7 +968,14 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   openMessagesTab(): void {
-    this.activeTab = 2;
+    this.activateTab(2);
+  }
+
+  /** Ensure TabView active index and lazy tab data load run reliably inside stacked modals. */
+  private activateTab(index: number): void {
+    this.activeTab = index;
+    this.onTabChange(index);
+    this.cdr.detectChanges();
   }
 
   getDisplayNameForRole(originalName: string | undefined | null, role: string | undefined | null): string {
@@ -950,9 +1046,21 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
 
   onRevisionFileSelect(event: any): void {
     const files: File[] = event.files ? Array.from(event.files) : [];
-    if (files.length > 0) {
-      this.revisionFiles = [...this.revisionFiles, ...files];
+    if (files.length === 0) return;
+
+    const tooBig = files.filter(f => f.size > MAX_UPLOAD_BYTES);
+    if (tooBig.length > 0) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Each file must be 500MB or smaller.' });
     }
+    const ok = files.filter(f => f.size <= MAX_UPLOAD_BYTES);
+    const merged = [...this.revisionFiles, ...ok];
+    if (combinedFileBytes(merged) > MAX_UPLOAD_BYTES) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Combined file size cannot exceed 500MB.' });
+      this.revisionFileUpload?.clear();
+      return;
+    }
+    this.revisionFiles = merged;
+    this.revisionFileUpload?.clear();
   }
 
   removeRevisionFile(index: number): void {

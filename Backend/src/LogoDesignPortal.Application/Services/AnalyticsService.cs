@@ -53,11 +53,28 @@ public class AnalyticsService : IAnalyticsService
 
         var q = _context.LogoOrders.AsNoTracking().Where(o => !o.IsDeleted);
 
-        var totalOrders = await q.CountAsync();
-        var completedCount = await q.CountAsync(o => o.Status == OrderStatus.Completed);
-        var totalRevenue = completedCount == 0
-            ? 0m
-            : await q.Where(o => o.Status == OrderStatus.Completed).SumAsync(o => o.Price);
+        // Single aggregate round-trip for KPI counts and revenue (replaces ~10 separate CountAsync/SumAsync calls).
+        var overviewAgg = await q.GroupBy(_ => 1).Select(g => new
+        {
+            TotalOrders = g.Count(),
+            CompletedCount = g.Count(o => o.Status == OrderStatus.Completed),
+            TotalRevenue = g.Where(o => o.Status == OrderStatus.Completed).Sum(o => o.Price),
+            MonthlyRevenue = g.Where(o => o.Status == OrderStatus.Completed && (o.UpdatedAt ?? o.CreatedAt) >= startOfMonth).Sum(o => o.Price),
+            OrdersToday = g.Count(o => o.CreatedAt >= startOfToday),
+            OrdersThisMonth = g.Count(o => o.CreatedAt >= startOfMonth),
+            OrdersThisYear = g.Count(o => o.CreatedAt >= startOfYear),
+            PendingOrders = g.Count(o => o.Status == OrderStatus.WaitingForAdminApproval),
+            InProgress = g.Count(o => o.Status == OrderStatus.InProgress || o.Status == OrderStatus.RevisionRequested),
+            AwaitingAdminReview = g.Count(o => o.Status == OrderStatus.WaitingForAdminApproval || o.Status == OrderStatus.PriceApprovalPending),
+            AwaitingClientApproval = g.Count(o => o.Status == OrderStatus.PreviewDelivered),
+            OverdueOrders = g.Count(o =>
+                o.Deadline.HasValue && o.Deadline.Value < now && o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled)
+        }).FirstOrDefaultAsync().ConfigureAwait(false);
+
+        var totalOrders = overviewAgg?.TotalOrders ?? 0;
+        var completedCount = overviewAgg?.CompletedCount ?? 0;
+        var totalRevenue = overviewAgg?.TotalRevenue ?? 0m;
+        var monthlyRevenue = overviewAgg?.MonthlyRevenue ?? 0m;
 
         var averageDeliveryTime = 0.0;
         var completedForAvg = q
@@ -76,6 +93,7 @@ public class AnalyticsService : IAnalyticsService
         }
 
         var ordersWithRevisions = await _context.OrderRevisions
+            .AsNoTracking()
             .Where(r => !r.IsDeleted)
             .Select(r => r.OrderId)
             .Distinct()
@@ -83,43 +101,33 @@ public class AnalyticsService : IAnalyticsService
         var revisionRate = totalOrders > 0 ? (decimal)ordersWithRevisions / totalOrders * 100 : 0;
         var approvalRate = totalOrders > 0 ? (decimal)completedCount / totalOrders * 100 : 0;
 
-        var monthlyRevenue = await q
-            .Where(o => o.Status == OrderStatus.Completed && (o.UpdatedAt ?? o.CreatedAt) >= startOfMonth)
-            .SumAsync(o => o.Price);
-
-        var totalClients = await _context.ClientProfiles.CountAsync(c => !c.IsDeleted);
+        var totalClients = await _context.ClientProfiles.AsNoTracking().CountAsync(c => !c.IsDeleted);
         var activeDesigners = await _context.LogoOrders
+            .AsNoTracking()
             .Where(o => !o.IsDeleted && o.DesignerId.HasValue && o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled)
             .Select(o => o.DesignerId!.Value)
             .Distinct()
             .CountAsync();
 
-        var pendingOrders = await q.CountAsync(o => o.Status == OrderStatus.WaitingForAdminApproval);
-        var inProgress = await q.CountAsync(o => o.Status == OrderStatus.InProgress || o.Status == OrderStatus.RevisionRequested);
-        var awaitingAdminReview = await q.CountAsync(o => o.Status == OrderStatus.WaitingForAdminApproval || o.Status == OrderStatus.PriceApprovalPending);
-        var awaitingClientApproval = await q.CountAsync(o => o.Status == OrderStatus.PreviewDelivered);
-        var overdueOrders = await q.CountAsync(o =>
-            o.Deadline.HasValue && o.Deadline.Value < now && o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled);
-
         return new AnalyticsOverviewDto
         {
             TotalOrders = totalOrders,
-            OrdersToday = await q.CountAsync(o => o.CreatedAt >= startOfToday),
-            OrdersThisMonth = await q.CountAsync(o => o.CreatedAt >= startOfMonth),
-            OrdersThisYear = await q.CountAsync(o => o.CreatedAt >= startOfYear),
+            OrdersToday = overviewAgg?.OrdersToday ?? 0,
+            OrdersThisMonth = overviewAgg?.OrdersThisMonth ?? 0,
+            OrdersThisYear = overviewAgg?.OrdersThisYear ?? 0,
             TotalRevenue = totalRevenue,
             MonthlyRevenue = monthlyRevenue,
             AverageOrderValue = completedCount > 0 ? totalRevenue / completedCount : 0,
             TotalClients = totalClients,
             ActiveDesigners = activeDesigners,
-            PendingOrders = pendingOrders,
-            OrdersInProgress = inProgress,
-            OrdersAwaitingAdminReview = awaitingAdminReview,
-            OrdersAwaitingClientApproval = awaitingClientApproval,
+            PendingOrders = overviewAgg?.PendingOrders ?? 0,
+            OrdersInProgress = overviewAgg?.InProgress ?? 0,
+            OrdersAwaitingAdminReview = overviewAgg?.AwaitingAdminReview ?? 0,
+            OrdersAwaitingClientApproval = overviewAgg?.AwaitingClientApproval ?? 0,
             RevisionRate = Math.Round(revisionRate, 0),
             ApprovalRate = Math.Round(approvalRate, 0),
             AverageDeliveryTimeDays = Math.Round(averageDeliveryTime, 1),
-            OverdueOrders = overdueOrders
+            OverdueOrders = overviewAgg?.OverdueOrders ?? 0
         };
     }
 

@@ -3,6 +3,7 @@ using LogoDesignPortal.Application.Configuration;
 using LogoDesignPortal.Application.DTOs.DesignerPayout;
 using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Helpers;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain;
@@ -256,7 +257,7 @@ public class DesignerPayoutService : IDesignerPayoutService
         var previousStatus = order.Status;
         OrderStatusStateMachine.ValidateTransition(previousStatus, OrderStatus.PriceApprovalPending);
         var now = DateTime.UtcNow;
-        order.Status = OrderStatus.PriceApprovalPending;
+        OrderStatusTransitionHelper.Apply(order, OrderStatus.PriceApprovalPending);
         order.UpdatedAt = now;
         order.UpdatedBy = userId;
 
@@ -487,7 +488,7 @@ public class DesignerPayoutService : IDesignerPayoutService
 
         var now = DateTime.UtcNow;
         OrderStatusStateMachine.ValidateTransition(OrderStatus.PriceApprovalPending, OrderStatus.InProgress);
-        order.Status = OrderStatus.InProgress;
+        OrderStatusTransitionHelper.Apply(order, OrderStatus.InProgress);
         order.UpdatedAt = now;
         order.UpdatedBy = adminUserId;
 

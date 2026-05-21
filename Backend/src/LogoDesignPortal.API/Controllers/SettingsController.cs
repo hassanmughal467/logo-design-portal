@@ -1,5 +1,7 @@
 using LogoDesignPortal.API.Extensions;
+using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.Application.DTOs.Settings;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -51,8 +53,24 @@ public class SettingsController : ControllerBase
     public async Task<IActionResult> UploadLogo([FromForm] IFormFile logo)
     {
         if (logo == null || logo.Length == 0)
-        {
             return BadRequest(new { error = "No logo file uploaded." });
+
+        if (logo.Length > UploadLimits.MaxSingleFileBytes)
+            return BadRequest(new { error = "Logo file exceeds maximum allowed size." });
+
+        try
+        {
+            UploadSecurityHelper.ValidateUploadFileName(logo.FileName);
+            var ext = UploadSecurityHelper.GetEffectiveExtension(logo.FileName);
+            if (ext is not ".png" and not ".jpg" and not ".jpeg" and not ".webp" and not ".svg")
+                return BadRequest(new { error = "Logo must be PNG, JPEG, WebP, or SVG." });
+            UploadSecurityHelper.ValidateDeclaredContentType(ext, logo.ContentType);
+            using var stream = logo.OpenReadStream();
+            UploadSecurityHelper.ValidateMagicBytes(ext, stream);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
         }
 
         // TODO: Implement logo upload to storage

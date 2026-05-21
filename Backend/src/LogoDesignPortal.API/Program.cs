@@ -1,19 +1,23 @@
 using Hangfire;
 using Hangfire.Dashboard;
 using HealthChecks.Redis;
+using LogoDesignPortal.API.Configuration;
 using LogoDesignPortal.API.Health;
 using LogoDesignPortal.Application;
 using LogoDesignPortal.Application.BackgroundJobs;
 using LogoDesignPortal.Application.Configuration;
 using LogoDesignPortal.API.BackgroundJobs;
 using LogoDesignPortal.API.Configuration;
+using LogoDesignPortal.API.Services;
 using LogoDesignPortal.API.Hosting;
 using LogoDesignPortal.API.Middleware;
+using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.Infrastructure;
 using LogoDesignPortal.Infrastructure.Persistence;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -36,21 +40,8 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
         .Enrich.WithEnvironmentName();
 });
 
-// Validate connection string in Production - fail fast with clear message (common IIS 500.30 cause)
-if (!builder.Environment.IsDevelopment())
-{
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    if (string.IsNullOrWhiteSpace(connectionString) ||
-        connectionString.Contains("YOUR_MYSQL_PASSWORD", StringComparison.OrdinalIgnoreCase) ||
-        connectionString.Contains("REPLACE_IN_WEB_CONFIG", StringComparison.OrdinalIgnoreCase) ||
-        connectionString.Contains("REPLACE_WITH_ACTUAL", StringComparison.OrdinalIgnoreCase))
-    {
-        throw new InvalidOperationException(
-            "Database connection string not configured for Production. " +
-            "Set ConnectionStrings__DefaultConnection in web.config <environmentVariables> or appsettings.Production.json. " +
-            "Example: Server=localhost;Port=3306;Database=LogoDesignPortalDb;User=root;Password=YOUR_ACTUAL_PASSWORD;");
-    }
-}
+ProductionSecretsValidator.Validate(builder.Configuration, builder.Environment);
+EnvironmentConfigurationValidator.Validate(builder.Configuration, builder.Environment);
 
 // Add services to the container - ensure camelCase for JSON (Angular expects it)
 builder.Services.AddControllers()
@@ -60,43 +51,49 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = UploadLimits.MaxMultipartBytes;
+});
 builder.Services.AddEndpointsApiExplorer();
 
-// Configure Swagger with JWT support
-builder.Services.AddSwaggerGen(c =>
+// Swagger/OpenAPI: Development only — never register in Production/Staging
+if (builder.Environment.IsDevelopment())
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
+    builder.Services.AddSwaggerGen(c =>
     {
-        Title = "Logo Design Portal API",
-        Version = "v1",
-        Description = "Logo Design Business Web Portal - Phase 1 Backend Foundation"
-    });
-
-    // Add JWT authentication to Swagger
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token in the text input below.",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
-    });
-
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
+        c.SwaggerDoc("v1", new OpenApiInfo
         {
-            new OpenApiSecurityScheme
+            Title = "Logo Design Portal API",
+            Version = "v1",
+            Description = "Logo Design Business Web Portal — local development only"
+        });
+
+        c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+        {
+            Description = "JWT Authorization header using the Bearer scheme.",
+            Name = "Authorization",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.ApiKey,
+            Scheme = "Bearer"
+        });
+
+        c.AddSecurityRequirement(new OpenApiSecurityRequirement
+        {
             {
-                Reference = new OpenApiReference
+                new OpenApiSecurityScheme
                 {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    }
+                },
+                Array.Empty<string>()
+            }
+        });
     });
-});
+}
 
 // Configure JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured. Use User Secrets (dev) or environment variables (production).");
@@ -120,7 +117,10 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtIssuer,
         ValidAudience = jwtAudience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+        ClockSkew = TimeSpan.FromMinutes(1),
+        RequireExpirationTime = true,
+        RequireSignedTokens = true
     };
     // SignalR uses WebSockets - token must come from query string (browsers don't support custom headers for WS)
     options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
@@ -132,7 +132,16 @@ builder.Services.AddAuthentication(options =>
             if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
             {
                 context.Token = accessToken;
+                return Task.CompletedTask;
             }
+
+            var cookieService = context.HttpContext.RequestServices.GetService<IAuthCookieService>();
+            var cookieToken = cookieService?.GetAccessTokenFromRequest(context.Request);
+            if (!string.IsNullOrEmpty(cookieToken))
+            {
+                context.Token = cookieToken;
+            }
+
             return Task.CompletedTask;
         }
     };
@@ -153,7 +162,12 @@ using (var scalabilityLoggerFactory = LoggerFactory.Create(b => b.AddConfigurati
         builder.Environment,
         scalabilityLogger);
     builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection(RateLimitingOptions.SectionName));
-    ScalabilityServiceRegistration.AddHangfireForPortal(builder.Services, builder.Configuration, builder.Environment, redisOk);
+    ScalabilityServiceRegistration.AddHangfireForPortal(
+        builder.Services,
+        builder.Configuration,
+        builder.Environment,
+        redisOk,
+        scalabilityLogger);
 
     var signalR = builder.Services.AddSignalR();
     if (redisOk && !string.IsNullOrWhiteSpace(redisConnectionForSignalR) && !builder.Environment.IsEnvironment("Testing"))
@@ -173,8 +187,14 @@ builder.Services.Configure<DatabaseInitializationOptions>(
 builder.Services.AddHostedService<DatabaseInitializationHostedService>();
 
 // Production safety kill-switch configuration
+builder.Services.Configure<AuthCookieOptions>(
+    builder.Configuration.GetSection(AuthCookieOptions.SectionName));
+builder.Services.AddSingleton<IAuthCookieService, AuthCookieService>();
+
 builder.Services.Configure<ProductionSafetyOptions>(
     builder.Configuration.GetSection(ProductionSafetyOptions.SectionName));
+builder.Services.Configure<InvoiceBrandingOptions>(
+    builder.Configuration.GetSection(InvoiceBrandingOptions.SectionName));
 
 // Background jobs: must register before AddApplication (Auth/Notification require IBackgroundJobScheduler).
 if (builder.Environment.IsEnvironment("Testing"))
@@ -189,9 +209,24 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddSingleton<DatabaseSchemaReadinessHealthCheck>();
+builder.Services.AddSingleton<FileStorageHealthCheck>();
+builder.Services.AddSingleton<SmtpConfigurationHealthCheck>();
+builder.Services.AddSingleton<DiskSpaceHealthCheck>();
+builder.Services.AddSingleton<MemoryPressureHealthCheck>();
+builder.Services.AddSingleton<SignalRHealthCheck>();
+builder.Services.AddSingleton<ProcessLivenessHealthCheck>();
+builder.Services.Configure<ObservabilityOptions>(builder.Configuration.GetSection(ObservabilityOptions.SectionName));
+builder.Services.AddPortalObservability(builder.Configuration, builder.Environment);
+
 var healthChecks = builder.Services.AddHealthChecks()
+    .AddCheck<ProcessLivenessHealthCheck>("process", tags: new[] { "live" })
     .AddCheck<DatabaseSchemaReadinessHealthCheck>("database_schema", tags: new[] { "ready", "db" })
-    .AddCheck<HangfireStorageHealthCheck>("hangfire", tags: new[] { "ready" });
+    .AddCheck<HangfireStorageHealthCheck>("hangfire", tags: new[] { "ready" })
+    .AddCheck<FileStorageHealthCheck>("file_storage", tags: new[] { "ready" })
+    .AddCheck<DiskSpaceHealthCheck>("disk_space", tags: new[] { "ready" })
+    .AddCheck<SmtpConfigurationHealthCheck>("smtp", tags: new[] { "ready" })
+    .AddCheck<MemoryPressureHealthCheck>("memory", tags: new[] { "ready" })
+    .AddCheck<SignalRHealthCheck>("signalr", tags: new[] { "ready" });
 
 var redisHealth = builder.Configuration.GetConnectionString("Redis") ?? builder.Configuration["Redis:Configuration"];
 if (!string.IsNullOrWhiteSpace(redisHealth))
@@ -204,23 +239,17 @@ builder.Services.AddSingleton<LogoDesignPortal.API.Services.FileStorageInitializ
 builder.Services.AddSingleton<LogoDesignPortal.API.Services.OrphanFileCleanupService>();
 builder.Services.AddSingleton<LogoDesignPortal.API.Services.BillingAutoInvoiceService>();
 
-// CORS - allow frontend domain (admin.hawkmerchandising.com) and local dev origins
+// CORS: built-in production origins + Cors:AllowedOrigins from appsettings / env (see CorsAllowedOrigins).
 // OPTIONS preflight is handled by CORS middleware; UseCors must run before UseAuthentication
+var corsOrigins = CorsAllowedOrigins.Resolve(builder.Configuration, builder.Environment);
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAdmin", policy => policy
-        .WithOrigins(
-            "http://admin.hawkmerchandising.com",
-            "https://admin.hawkmerchandising.com",
-            "http://localhost:4200",
-            "https://localhost:4200",
-            // Local dev / Playwright: some environments resolve or open the app as 127.0.0.1 (browser Origin must match exactly).
-            "http://127.0.0.1:4200",
-            "https://127.0.0.1:4200")
+    options.AddPolicy(CorsAllowedOrigins.PolicyName, policy => policy
+        .WithOrigins(corsOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .SetPreflightMaxAge(TimeSpan.FromSeconds(86400)) // Cache preflight for 24h
-        .AllowCredentials()); // Required for SignalR WebSocket and JWT cookies
+        .SetPreflightMaxAge(TimeSpan.FromSeconds(86400))
+        .AllowCredentials());
 });
 
 // Forwarded headers for IIS deployment (X-Forwarded-Proto, X-Forwarded-For)
@@ -233,18 +262,24 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline - Swagger enabled for testing on IIS
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// Swagger: Development only — never expose API surface on production/staging hosts
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Logo Design Portal API v1");
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Logo Design Portal API v1");
+        c.DocumentTitle = "Logo Design Portal API (Development)";
+    });
+}
 
 // Forwarded headers first (required for IIS - correct scheme/host when behind reverse proxy)
 app.UseForwardedHeaders();
 
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
 // CORS must run BEFORE authentication so preflight OPTIONS requests succeed without 401
-app.UseCors("AllowAdmin");
+app.UseCors(CorsAllowedOrigins.PolicyName);
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<SlowRequestPerformanceMiddleware>();
@@ -255,7 +290,16 @@ app.UseSerilogRequestLogging(options =>
     {
         var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
         diagnosticContext.Set("UserId", string.IsNullOrEmpty(userId) ? null : userId);
+        var role = httpContext.User.FindFirstValue(ClaimTypes.Role);
+        diagnosticContext.Set("UserRole", string.IsNullOrEmpty(role) ? null : role);
         diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+        if (httpContext.Items.TryGetValue(CorrelationIdMiddleware.ItemKey, out var cid) && cid is string correlationId)
+            diagnosticContext.Set("CorrelationId", correlationId);
+        if (httpContext.Request.RouteValues.TryGetValue("orderId", out var oid) && oid != null)
+            diagnosticContext.Set("OrderId", oid.ToString());
+        if (httpContext.Request.RouteValues.TryGetValue("id", out var id) &&
+            httpContext.Request.Path.Value?.Contains("/invoices", StringComparison.OrdinalIgnoreCase) == true)
+            diagnosticContext.Set("InvoiceId", id.ToString());
     };
     options.MessageTemplate =
         "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms; UserId={UserId}";
@@ -271,6 +315,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseAuthentication();
+app.UseMiddleware<CsrfValidationMiddleware>();
 app.UseAuthorization();
 
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
@@ -295,6 +340,12 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready"),
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
+});
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("live"),
     ResponseWriter = HealthCheckResponseWriter.WriteAsync
 });
 

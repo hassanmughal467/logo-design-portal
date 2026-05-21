@@ -1,5 +1,6 @@
 using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.Application.DTOs.Payments;
+using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,8 +30,13 @@ public class PaymentsController : ControllerBase
         try
         {
             var userId = User.GetUserIdOrThrow();
-            var payment = await _paymentService.CreatePaymentAsync(request, userId);
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            var payment = await _paymentService.CreatePaymentAsync(request, userId, userRole);
             return CreatedAtAction(nameof(GetPayment), new { id = payment.Id }, payment);
+        }
+        catch (ForbiddenAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -83,11 +89,17 @@ public class PaymentsController : ControllerBase
         try
         {
             var userId = User.GetUserIdOrThrow();
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
             var paymentLink = await _paymentService.GeneratePaymentLinkAsync(
-                request.InvoiceId, 
-                request.PaymentMethod, 
-                userId);
+                request.InvoiceId,
+                request.PaymentMethod,
+                userId,
+                userRole);
             return Ok(paymentLink);
+        }
+        catch (ForbiddenAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -108,8 +120,13 @@ public class PaymentsController : ControllerBase
         try
         {
             var userId = User.GetUserIdOrThrow();
-            var payment = await _paymentService.ProcessPaymentAsync(request, userId);
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            var payment = await _paymentService.ProcessPaymentAsync(request, userId, userRole);
             return Ok(payment);
+        }
+        catch (ForbiddenAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

@@ -1,5 +1,7 @@
+using LogoDesignPortal.API.Attributes;
 using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.API.Models;
+using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.Application.DTOs.Files;
 using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Interfaces;
@@ -24,7 +26,8 @@ public class FilesController : ControllerBase
     }
 
     [HttpPost("upload/{orderId}")]
-    [RequestSizeLimit(50 * 1024 * 1024)]
+    [RequirePermission("UploadFile")]
+    [RequestSizeLimit(UploadLimits.MaxMultipartBytes)]
     [ProducesResponseType(typeof(FileUploadResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UploadFile(Guid orderId, IFormFile file, [FromForm] string? fileType = "Reference", [FromForm] string? description = null, [FromForm] int? designCategory = null, [FromForm] int? designType = null, [FromForm] decimal? proposedPrice = null)
@@ -47,7 +50,8 @@ public class FilesController : ControllerBase
     }
 
     [HttpPost("upload-multiple/{orderId}")]
-    [RequestSizeLimit(50 * 1024 * 1024)]
+    [RequirePermission("UploadFile")]
+    [RequestSizeLimit(UploadLimits.MaxMultipartBytes)]
     [ProducesResponseType(typeof(List<FileUploadResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UploadMultipleFiles(Guid orderId, [FromForm] IFormFile[] files, [FromForm] string? fileType = "Reference", [FromForm] string? description = null, [FromForm] int? designCategory = null, [FromForm] int? designType = null, [FromForm] decimal? proposedPrice = null)
@@ -88,6 +92,7 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("{id}/download")]
+    [RequirePermission("DownloadFile")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -184,6 +189,8 @@ public class FilesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [RequirePermission("DeleteFile")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteFile(Guid id)

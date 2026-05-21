@@ -1,0 +1,73 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: pr-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-quality:
+    name: Backend quality gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore LogoDesignPortal.sln
+
+      - name: Verify formatting
+        run: dotnet format LogoDesignPortal.sln --verify-no-changes --verbosity diagnostic
+
+      - name: Build (Release)
+        run: dotnet build LogoDesignPortal.sln -c Release --no-restore
+
+      - name: Unit tests (Domain + Application)
+        run: |
+          dotnet test src/LogoDesignPortal.Domain.Tests/LogoDesignPortal.Domain.Tests.csproj -c Release --no-build --verbosity normal
+          dotnet test src/LogoDesignPortal.Application.Tests/LogoDesignPortal.Application.Tests.csproj -c Release --no-build --verbosity normal
+
+  frontend-quality:
+    name: Frontend quality gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install
+        working-directory: Frontend
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: Frontend
+        run: npx tsc -p tsconfig.app.json --noEmit
+
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Unit tests
+        working-directory: Frontend
+        env:
+          CHROME_BIN: google-chrome-stable
+        run: npm run test:ci -- --browsers=ChromeHeadlessCI
+
+      - name: Production build
+        working-directory: Frontend
+        run: npx ng build --configuration=production

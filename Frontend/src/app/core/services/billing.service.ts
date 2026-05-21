@@ -9,6 +9,8 @@ export interface BillingQueueOverview {
   companyName: string;
   uninvoicedOrderCount: number;
   totalPendingAmount: number;
+  /** Present when all uninvoiced orders for this client use the same currency. */
+  currencyCode?: string | null;
 }
 
 export interface BillingEligibleOrder {
@@ -16,6 +18,7 @@ export interface BillingEligibleOrder {
   orderNumber: string;
   title: string;
   price: number;
+  currencyCode?: string | null;
   completedDate?: string;
 }
 

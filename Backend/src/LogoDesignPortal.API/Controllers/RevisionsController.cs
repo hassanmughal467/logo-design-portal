@@ -1,4 +1,5 @@
 using LogoDesignPortal.API.Extensions;
+using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Revisions;
 using LogoDesignPortal.Application.Exceptions;
@@ -26,7 +27,7 @@ public class RevisionsController : ControllerBase
 
     [HttpPost("orders/{orderId}/request")]
     [Authorize(Roles = "Client")]
-    [RequestSizeLimit(50 * 1024 * 1024)]
+    [RequestSizeLimit(UploadLimits.MaxMultipartBytes)]
     [ProducesResponseType(typeof(RevisionResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

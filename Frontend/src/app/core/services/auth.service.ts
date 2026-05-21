@@ -6,6 +6,9 @@ import { ApiService } from './api.service';
 import { SharedListDataService } from './shared-list-data.service';
 import { DashboardService } from './dashboard.service';
 import { LoginRequest, LoginResponse, RegisterRequest, User } from '@shared/models/user.model';
+import { environment } from '@environments/environment';
+
+const useCookieAuth = !!(environment as { useCookieAuth?: boolean }).useCookieAuth;
 
 const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'auth_refresh_token';
@@ -48,14 +51,16 @@ export class AuthService {
   }
 
   refreshToken(): Observable<LoginResponse> {
-    const stored = this.getStoredTokensForRefresh();
-    if (!stored) {
-      return throwError(() => new Error('No refresh token available'));
+    let body: { token?: string; refreshToken?: string } = {};
+    if (!useCookieAuth) {
+      const stored = this.getStoredTokensForRefresh();
+      if (!stored) {
+        return throwError(() => new Error('No refresh token available'));
+      }
+      body = { token: stored.token, refreshToken: stored.refreshToken };
     }
-    return this.apiService.post<LoginResponse>('auth/refresh-token', {
-      token: stored.token,
-      refreshToken: stored.refreshToken
-    }).pipe(
+
+    return this.apiService.post<LoginResponse>('auth/refresh-token', body).pipe(
       tap(response => {
         this.setAuthData(response);
       }),
@@ -77,24 +82,32 @@ export class AuthService {
   }
 
   logout(): void {
-    this.injector.get(SharedListDataService).clearAll();
-    try {
-      this.injector.get(DashboardService).invalidateDashboardCache();
-    } catch {
-      /* avoid hard failure if DI graph changes */
+    const finish = () => {
+      this.injector.get(SharedListDataService).clearAll();
+      try {
+        this.injector.get(DashboardService).invalidateDashboardCache();
+      } catch {
+        /* avoid hard failure if DI graph changes */
+      }
+      this.clearStoredAuth();
+      this.router.navigate(['/login']);
+    };
+
+    if (useCookieAuth) {
+      this.apiService.post('auth/logout', {}).subscribe({
+        next: () => finish(),
+        error: () => finish()
+      });
+      return;
     }
-    this.accessToken = null;
-    this.tokenExpiry = null;
-    this.currentUserSubject.next(null);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(EXPIRES_AT_KEY);
-    localStorage.removeItem(USER_KEY);
-    sessionStorage.removeItem('user');
-    this.router.navigate(['/login']);
+
+    finish();
   }
 
   getAccessToken(): string | null {
+    if (useCookieAuth) {
+      return null;
+    }
     // Use in-memory token if available and not expired
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
       return this.accessToken;
@@ -116,10 +129,12 @@ export class AuthService {
   }
 
   isAuthenticated(): boolean {
-    const token = this.getAccessToken();
     const user = this.currentUserSubject.value;
+    if (useCookieAuth) {
+      return !!user;
+    }
+    const token = this.getAccessToken();
     const hasRefreshToken = !!localStorage.getItem(REFRESH_TOKEN_KEY);
-    // Valid token + user, or user + refresh token (will try refresh on next API call)
     return (!!token && !!user) || (!!user && hasRefreshToken);
   }
 
@@ -158,22 +173,23 @@ export class AuthService {
   }
 
   private setAuthData(response: LoginResponse): void {
-    this.accessToken = response.token;
-    const expiresAt = new Date(response.expiresAt);
-    this.tokenExpiry = expiresAt.getTime();
-    
     const user: User = {
       ...response.user,
       role: (response.user as any).roleName || (response.user as any).role || 'Client'
     };
-    
-    // Persist in localStorage so session survives page refresh
-    localStorage.setItem(TOKEN_KEY, response.token);
-    if (response.refreshToken) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+
+    if (!useCookieAuth) {
+      this.accessToken = response.token;
+      const expiresAt = new Date(response.expiresAt);
+      this.tokenExpiry = expiresAt.getTime();
+      localStorage.setItem(TOKEN_KEY, response.token);
+      if (response.refreshToken) {
+        localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+      }
+      localStorage.setItem(EXPIRES_AT_KEY, String(this.tokenExpiry));
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
     }
-    localStorage.setItem(EXPIRES_AT_KEY, String(this.tokenExpiry));
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+
     sessionStorage.setItem('user', JSON.stringify(user));
     this.currentUserSubject.next(user);
   }
@@ -190,12 +206,34 @@ export class AuthService {
   }
 
   private loadUserFromStorage(): void {
+    const userStr = useCookieAuth
+      ? sessionStorage.getItem('user')
+      : (localStorage.getItem(USER_KEY) || sessionStorage.getItem('user'));
+
+    if (!userStr) {
+      this.clearStoredAuth();
+      return;
+    }
+
+    if (useCookieAuth) {
+      try {
+        const userData = JSON.parse(userStr);
+        const user: User = {
+          ...userData,
+          role: userData.role || userData.roleName || 'Client'
+        };
+        this.currentUserSubject.next(user);
+      } catch {
+        this.clearStoredAuth();
+      }
+      return;
+    }
+
     const storedToken = localStorage.getItem(TOKEN_KEY);
     const storedExpiry = localStorage.getItem(EXPIRES_AT_KEY);
     const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    const userStr = localStorage.getItem(USER_KEY) || sessionStorage.getItem('user');
-    
-    if (!storedToken || !userStr) {
+
+    if (!storedToken) {
       this.clearStoredAuth();
       return;
     }

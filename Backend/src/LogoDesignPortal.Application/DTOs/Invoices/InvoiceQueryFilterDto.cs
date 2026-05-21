@@ -9,4 +9,7 @@ public class InvoiceQueryFilterDto
     public DateTime? IssueDateTo { get; set; }
     public BillingType? BillingType { get; set; }
     public InvoiceStatus? Status { get; set; }
+
+    /// <summary>When true, returns all invoices except paid (overrides <see cref="Status"/>).</summary>
+    public bool ExcludePaid { get; set; }
 }

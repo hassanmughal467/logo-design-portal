@@ -329,8 +329,7 @@ public class InvoiceService : IInvoiceService
             return null;
         }
 
-        // Access control: Client can only access their own invoices; Admin/SuperAdmin can access all
-        if (userRole == "Client" && (invoice.Client == null || invoice.Client.UserId != userId))
+        if (!PaymentInvoiceAccessHelper.CanAccessInvoice(invoice, userId, userRole))
         {
             return null;
         }
@@ -425,6 +424,8 @@ public class InvoiceService : IInvoiceService
 
         if (userRole == "Client" && userId.HasValue)
             query = query.Where(i => i.Client.UserId == userId.Value);
+        else if (userRole is not "Admin" and not "SuperAdmin")
+            query = query.Where(_ => false);
 
         if (filters == null)
             return query;
@@ -433,7 +434,9 @@ public class InvoiceService : IInvoiceService
             query = query.Where(i => i.ClientId == filters.ClientId.Value);
         if (filters.BillingType.HasValue)
             query = query.Where(i => i.BillingType == filters.BillingType.Value);
-        if (filters.Status.HasValue)
+        if (filters.ExcludePaid)
+            query = query.Where(i => i.Status != InvoiceStatus.Paid);
+        else if (filters.Status.HasValue)
             query = query.Where(i => i.Status == filters.Status.Value);
         if (filters.IssueDateFrom.HasValue)
         {
@@ -449,20 +452,20 @@ public class InvoiceService : IInvoiceService
         return query;
     }
 
-    private async Task<Dictionary<Guid, (string? Title, DateTime CreatedAt)>> LoadInvoiceOrderLineInfoAsync(List<Invoice> invoices)
+    private async Task<Dictionary<Guid, (string? Title, DateTime CreatedAt, string CurrencyCode)>> LoadInvoiceOrderLineInfoAsync(List<Invoice> invoices)
     {
         var orderIds = invoices
             .SelectMany(i => i.InvoiceOrders.Where(io => io.OrderId.HasValue).Select(io => io.OrderId!.Value))
             .Distinct()
             .ToList();
         if (orderIds.Count == 0)
-            return new Dictionary<Guid, (string?, DateTime)>();
+            return new Dictionary<Guid, (string?, DateTime, string)>();
 
         return await _context.LogoOrders
             .AsNoTracking()
             .Where(o => orderIds.Contains(o.Id))
-            .Select(o => new { o.Id, o.Title, o.CreatedAt })
-            .ToDictionaryAsync(x => x.Id, x => (x.Title, x.CreatedAt));
+            .Select(o => new { o.Id, o.Title, o.CreatedAt, o.CurrencyCode })
+            .ToDictionaryAsync(x => x.Id, x => ((string?)x.Title, x.CreatedAt, x.CurrencyCode));
     }
 
     public async Task<InvoiceResponseDto> GenerateFlexibleInvoiceAsync(GenerateFlexibleInvoiceRequestDto request, Guid createdBy)
@@ -990,7 +993,7 @@ public class InvoiceService : IInvoiceService
         => MapToInvoiceResponseDto(invoice, null);
 
     private InvoiceResponseDto MapToInvoiceResponseDto(Invoice invoice,
-        IReadOnlyDictionary<Guid, (string? Title, DateTime CreatedAt)>? orderLineInfo)
+        IReadOnlyDictionary<Guid, (string? Title, DateTime CreatedAt, string CurrencyCode)>? orderLineInfo)
     {
         var orderIds = invoice.InvoiceOrders
             .Where(io => io.OrderId.HasValue)
@@ -1037,6 +1040,16 @@ public class InvoiceService : IInvoiceService
             return io.Order?.CreatedAt;
         }
 
+        string? ResolveItemCurrency(InvoiceOrder io)
+        {
+            if (!io.OrderId.HasValue)
+                return null;
+            if (orderLineInfo != null && orderLineInfo.TryGetValue(io.OrderId.Value, out var meta))
+                return string.IsNullOrWhiteSpace(meta.CurrencyCode) ? null : meta.CurrencyCode.Trim();
+            var fromNav = io.Order?.CurrencyCode;
+            return string.IsNullOrWhiteSpace(fromNav) ? null : fromNav.Trim();
+        }
+
         var items = invoice.InvoiceOrders.Select(io => new InvoiceItemDto
         {
             Id = io.Id,
@@ -1044,8 +1057,19 @@ public class InvoiceService : IInvoiceService
             OrderTitle = ResolveTitle(io),
             OrderDate = ResolveDate(io),
             Description = io.Description,
-            Amount = io.Amount
+            Amount = io.Amount,
+            CurrencyCode = ResolveItemCurrency(io)
         }).ToList();
+
+        var distinctLineCurrencies = items
+            .Select(i => i.CurrencyCode)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c!.ToUpperInvariant())
+            .Distinct()
+            .ToList();
+        string? invoiceCurrency = distinctLineCurrencies.Count == 1
+            ? distinctLineCurrencies[0]
+            : distinctLineCurrencies.FirstOrDefault();
 
         if (invoice.Client == null)
             throw new InvalidOperationException("Invoice has no associated client.");
@@ -1074,7 +1098,8 @@ public class InvoiceService : IInvoiceService
             BillingPeriod = invoice.BillingPeriod,
             Items = items,
             CreatedAt = invoice.CreatedAt,
-            IsLocked = invoice.Status == InvoiceStatus.Paid
+            IsLocked = invoice.Status == InvoiceStatus.Paid,
+            CurrencyCode = invoiceCurrency
         };
     }
 
@@ -1106,6 +1131,22 @@ public class InvoiceService : IInvoiceService
         var unpaidAmount = await query.Where(i => i.Status != InvoiceStatus.Paid).SumAsync(i => i.TotalAmount);
         var overdueAmount = await query.Where(i => i.Status == InvoiceStatus.Overdue).SumAsync(i => i.TotalAmount);
 
+        var todayUtc = DateTime.UtcNow.Date;
+        var weekStart = todayUtc.AddDays(-(int)todayUtc.DayOfWeek);
+        var weekEnd = weekStart.AddDays(7);
+        var monthStart = new DateTime(todayUtc.Year, todayUtc.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var monthEnd = monthStart.AddMonths(1);
+
+        var weekQuery = query.Where(i => i.CreatedAt >= weekStart && i.CreatedAt < weekEnd);
+        var weekTotal = await weekQuery.SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
+        var weekPaid = await weekQuery.Where(i => i.Status == InvoiceStatus.Paid).SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
+        var weekPending = await weekQuery.Where(i => i.Status != InvoiceStatus.Paid).SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
+
+        var monthQuery = query.Where(i => i.CreatedAt >= monthStart && i.CreatedAt < monthEnd);
+        var monthTotal = await monthQuery.SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
+        var monthPaid = await monthQuery.Where(i => i.Status == InvoiceStatus.Paid).SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
+        var monthPending = await monthQuery.Where(i => i.Status != InvoiceStatus.Paid).SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
+
         return new InvoiceStatisticsDto
         {
             TotalInvoices = totalInvoices,
@@ -1115,7 +1156,19 @@ public class InvoiceService : IInvoiceService
             TotalAmount = totalAmount,
             PaidAmount = paidAmount,
             DueAmount = unpaidAmount,
-            OverdueAmount = overdueAmount
+            OverdueAmount = overdueAmount,
+            WeekSummary = new InvoicePeriodSummaryDto
+            {
+                TotalAmount = weekTotal,
+                PaidAmount = weekPaid,
+                PendingAmount = weekPending
+            },
+            MonthSummary = new InvoicePeriodSummaryDto
+            {
+                TotalAmount = monthTotal,
+                PaidAmount = monthPaid,
+                PendingAmount = monthPending
+            }
         };
     }
 }

@@ -9,8 +9,8 @@ public static class OrderStatusStateMachine
 {
     private static readonly Dictionary<OrderStatus, HashSet<OrderStatus>> AllowedTransitions = new()
     {
-        [OrderStatus.WaitingForAdminApproval] = new() { OrderStatus.InProgress, OrderStatus.PriceApprovalPending, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin },
-        [OrderStatus.PriceApprovalPending] = new() { OrderStatus.InProgress, OrderStatus.WaitingForAdminApproval, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin },
+        [OrderStatus.WaitingForAdminApproval] = new() { OrderStatus.InProgress, OrderStatus.PriceApprovalPending, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin, OrderStatus.CancelledByUser },
+        [OrderStatus.PriceApprovalPending] = new() { OrderStatus.InProgress, OrderStatus.WaitingForAdminApproval, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin, OrderStatus.CancelledByUser },
         [OrderStatus.InProgress] = new() { OrderStatus.PreviewDelivered, OrderStatus.PriceApprovalPending, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin },
         [OrderStatus.PreviewDelivered] = new() { OrderStatus.RevisionRequested, OrderStatus.ClientApproved, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin },
         [OrderStatus.RevisionRequested] = new() { OrderStatus.PreviewDelivered, OrderStatus.InProgress, OrderStatus.PriceApprovalPending, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin },

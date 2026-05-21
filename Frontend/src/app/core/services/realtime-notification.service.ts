@@ -53,22 +53,26 @@ export class RealtimeNotificationService implements OnDestroy {
   }
 
   private getHubUrl(): string {
-    const base = environment.apiUrl.replace(/\/$/, '');
+    const base = (environment.signalRUrl ?? environment.apiUrl).replace(/\/$/, '');
     return `${base}/hubs/notifications`;
   }
 
   private async connect(userId: string): Promise<void> {
+    const useCookies = !!(environment as { useCookieAuth?: boolean }).useCookieAuth;
     const token = this.authService.getAccessToken();
-    if (!token) {
+    if (!useCookies && !token) {
       this.realtimeStatus.setConnected(false);
       return;
     }
 
     try {
+      const hubOptions: signalR.IHttpConnectionOptions = { withCredentials: true };
+      if (!useCookies) {
+        hubOptions.accessTokenFactory = () => this.authService.getAccessToken() ?? '';
+      }
+
       this.connection = new signalR.HubConnectionBuilder()
-        .withUrl(this.getHubUrl(), {
-          accessTokenFactory: () => this.authService.getAccessToken() ?? ''
-        })
+        .withUrl(this.getHubUrl(), hubOptions)
         .withAutomaticReconnect()
         .build();
 

@@ -63,6 +63,9 @@ public static class DependencyInjection
         // Email
         services.AddScoped<IEmailService, EmailService>();
 
+        // File storage (local disk default; swap for S3/R2/Azure in multi-instance production)
+        services.AddSingleton<LogoDesignPortal.Application.Interfaces.Storage.IFileStorageProvider, Storage.LocalFileStorageProvider>();
+
         return services;
     }
 }

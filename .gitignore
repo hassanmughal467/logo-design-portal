@@ -13,4 +13,7 @@ Backend/migrate_*.sql
 
 # Uploaded files and API stdout logs — never version user content
 Backend/src/LogoDesignPortal.API/Files/
+Backend/src/LogoDesignPortal.API/Files_Dev/
+Backend/src/LogoDesignPortal.API/Files_Test/
+Backend/src/LogoDesignPortal.API/Files_Staging/
 Backend/src/LogoDesignPortal.API/logs/

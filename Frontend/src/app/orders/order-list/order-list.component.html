@@ -390,6 +390,7 @@
       <div class="form-group">
         <label>Upload Final Files <span class="required">*</span></label>
         <p-fileUpload #quickCompletedFileUpload mode="basic" [multiple]="true" [auto]="false" (onSelect)="onQuickCompletedFileSelect($event)"
+          [maxFileSize]="maxUploadFileSize"
           chooseLabel="Choose Final Files" [showUploadButton]="false" [showCancelButton]="false"></p-fileUpload>
         <div class="preview-list" *ngIf="quickCompletedFiles.length > 0">
           <div class="preview-item" *ngFor="let file of quickCompletedFiles; let i = index">
@@ -520,7 +521,7 @@
           [multiple]="true"
           [auto]="false"
           accept="image/*,.pdf,.ai,.eps,.psd,.svg,.pes,.dst,.jef,.exp,.vp3,.xxx,.hus,.art,.vip,.vip3,.shv,.pec,.jpm,.sew,.emb,.csd,.pcs,.phb,.phc,.stx,.s10,.dsb,.zsk"
-          [maxFileSize]="26214400"
+          [maxFileSize]="maxUploadFileSize"
           (onSelect)="onFileSelect($event)"
           chooseLabel="Choose Files"
           [showUploadButton]="false"
@@ -529,7 +530,7 @@
         </p-fileUpload>
         <small class="help-text">
           <i class="pi pi-info-circle"></i>
-          Maximum file size: 10MB (images), 25MB (vector/embroidery)<br>
+          Up to 500MB total per upload; each file may be up to 500MB.<br>
           Supported formats: JPG, PNG, GIF, SVG, PDF, AI, EPS, PSD, embroidery (PES, DST, JEF, EXP, etc.)<br>
           You can select multiple files at once
         </small>
