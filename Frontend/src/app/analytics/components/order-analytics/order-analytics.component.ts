@@ -7,6 +7,7 @@ import {
   OrdersByPackageItem,
   DailyActivityItem
 } from '@core/services/admin-analytics.service';
+import { getOrderStatusLabel } from '@shared/utils/order-status-display';
 
 @Component({
   selector: 'app-order-analytics',
@@ -176,7 +177,6 @@ export class OrderAnalyticsComponent implements OnChanges {
   }
 
   formatStatus(status: string): string {
-    if (status === 'ClientApproved') return 'Approved';
-    return status.replace(/([A-Z])/g, ' $1').trim();
+    return getOrderStatusLabel(status);
   }
 }

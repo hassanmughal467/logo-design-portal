@@ -74,5 +74,69 @@ public class AnalyticsServiceOverviewTests
         Assert.Equal(1, overview.OrdersInProgress);
         Assert.Equal(1, overview.OverdueOrders);
         Assert.Equal(100m, overview.TotalRevenue);
+        Assert.Equal("USD", overview.RevenueCurrencyCode);
+        Assert.False(overview.RevenueCurrencyMixed);
+    }
+
+    [Fact]
+    public async Task GetOverviewAsync_UsesGbpCurrencyCode_WhenAllCompletedOrdersAreGbp()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase("AnalyticsOverview_GBP_" + Guid.NewGuid())
+            .Options;
+
+        await using var context = new ApplicationDbContext(options);
+        var clientId = Guid.NewGuid();
+        context.ClientProfiles.Add(new ClientProfile
+        {
+            Id = clientId,
+            UserId = Guid.NewGuid(),
+            CompanyName = "Kelvin Co",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        context.LogoOrders.AddRange(
+            new LogoOrder
+            {
+                Id = Guid.NewGuid(),
+                ClientId = clientId,
+                Title = "Logo 1",
+                Description = "d",
+                Status = OrderStatus.Completed,
+                Price = 3m,
+                CurrencyCode = "GBP",
+                ClientBasePrice = 3m,
+                ClientChargePrice = 3m,
+                CreatedAt = DateTime.UtcNow.AddDays(-2),
+                UpdatedAt = DateTime.UtcNow
+            },
+            new LogoOrder
+            {
+                Id = Guid.NewGuid(),
+                ClientId = clientId,
+                Title = "Logo 2",
+                Description = "d",
+                Status = OrderStatus.Completed,
+                Price = 6m,
+                CurrencyCode = "GBP",
+                ClientBasePrice = 6m,
+                ClientChargePrice = 6m,
+                CreatedAt = DateTime.UtcNow.AddDays(-1),
+                UpdatedAt = DateTime.UtcNow
+            });
+        await context.SaveChangesAsync();
+
+        var cache = new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
+        var sut = new AnalyticsService(
+            context,
+            cache,
+            new ReadModelCacheVersions(),
+            Mock.Of<ILogger<AnalyticsService>>());
+
+        var overview = await sut.GetOverviewAsync();
+
+        Assert.Equal(9m, overview.TotalRevenue);
+        Assert.Equal("GBP", overview.RevenueCurrencyCode);
+        Assert.False(overview.RevenueCurrencyMixed);
     }
 }

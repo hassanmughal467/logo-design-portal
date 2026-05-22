@@ -6,6 +6,7 @@ using Xunit;
 using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.Services;
+using LogoDesignPortal.Application.DTOs.Notifications;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
@@ -202,6 +203,44 @@ public class OrderServiceWorkflowTests
             () => orderService.ApproveOrderAsync(orderId, adminUserId));
     }
 
+    [Fact]
+    public async Task ApproveOrderAsync_NotifiesClientThatOrderWasReceived()
+    {
+        var (context, orderId, adminUserId) = await SeedOrderAsync(OrderStatus.WaitingForAdminApproval, useAdmin: true);
+        var clientUserId = await context.LogoOrders
+            .Where(o => o.Id == orderId)
+            .Select(o => o.Client!.UserId)
+            .FirstAsync();
+
+        var notificationMock = new Mock<INotificationService>();
+        notificationMock
+            .Setup(n => n.CreateNotificationAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<NotificationType>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<NotificationReferenceType>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<Guid?>()))
+            .ReturnsAsync(new NotificationResponseDto());
+
+        var orderService = CreateOrderService(context, notificationMock.Object);
+        await orderService.ApproveOrderAsync(orderId, adminUserId);
+
+        notificationMock.Verify(
+            n => n.CreateNotificationAsync(
+                clientUserId,
+                "Order Received",
+                It.Is<string>(m => m.Contains("has been received", StringComparison.OrdinalIgnoreCase)),
+                NotificationType.OrderStatusChange,
+                orderId,
+                NotificationReferenceType.Order,
+                orderId,
+                It.IsAny<Guid?>()),
+            Times.Once);
+    }
+
     private static async Task<(ApplicationDbContext context, Guid clientUserId)> SeedClientAsync()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -306,7 +345,9 @@ public class OrderServiceWorkflowTests
         return (context, orderId, designerUserId, adminUserId);
     }
 
-    private static OrderService CreateOrderService(ApplicationDbContext context)
+    private static OrderService CreateOrderService(
+        ApplicationDbContext context,
+        INotificationService? notificationService = null)
     {
         var mapperConfig = new MapperConfiguration(cfg => cfg.AddProfile<LogoDesignPortal.Application.Mappings.MappingProfile>());
         var mapper = mapperConfig.CreateMapper();
@@ -314,7 +355,7 @@ public class OrderServiceWorkflowTests
         return new OrderService(
             context,
             mapper,
-            Mock.Of<INotificationService>(),
+            notificationService ?? Mock.Of<INotificationService>(),
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Mock.Of<IFileService>(),
             Mock.Of<IClientLogoPricingService>(),

@@ -65,6 +65,48 @@ public class OrdersControllerTests
     }
 
     [Fact]
+    public async Task CreateOrder_AsClient_AdminAndSuperAdminReceiveNewOrderNotification()
+    {
+        var clientHttp = _factory.CreateClient();
+        var clientToken = await AuthHelper.GetClientTokenAsync(clientHttp);
+        clientHttp.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", clientToken);
+
+        var createResponse = await clientHttp.PostAsJsonAsync("/api/orders", new
+        {
+            title = "Notify Admin Test Order",
+            description = "Integration test for admin notifications",
+            price = 99,
+            designCategory = DesignCategory.EmbroideryDigitizing,
+            designType = DesignType.LeftChest
+        }, JsonOptions);
+        createResponse.EnsureSuccessStatusCode();
+        var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        var adminHttp = _factory.CreateClient();
+        var adminToken = await AuthHelper.GetAdminTokenAsync(adminHttp);
+        adminHttp.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+
+        var adminNotifications = await adminHttp.GetFromJsonAsync<List<NotificationItem>>("/api/notifications", JsonOptions);
+        Assert.NotNull(adminNotifications);
+        Assert.Contains(adminNotifications!, n =>
+            n.Title == "New Order Submitted"
+            && (n.Message?.Contains("placed a new order", StringComparison.OrdinalIgnoreCase) ?? false)
+            && (n.OrderId == created.Id || n.ReferenceId == created.Id));
+
+        var superAdminHttp = _factory.CreateClient();
+        var superAdminToken = await AuthHelper.GetSuperAdminTokenAsync(superAdminHttp);
+        superAdminHttp.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
+
+        var superAdminNotifications = await superAdminHttp.GetFromJsonAsync<List<NotificationItem>>("/api/notifications", JsonOptions);
+        Assert.NotNull(superAdminNotifications);
+        Assert.Contains(superAdminNotifications!, n =>
+            n.Title == "New Order Submitted"
+            && (n.Message?.Contains("placed a new order", StringComparison.OrdinalIgnoreCase) ?? false)
+            && (n.OrderId == created.Id || n.ReferenceId == created.Id));
+    }
+
+    [Fact]
     public async Task GetMyOrders_AsClient_ReturnsOnlyOwnOrders()
     {
         var token = await AuthHelper.GetClientTokenAsync(_client);
@@ -286,6 +328,15 @@ public class OrdersControllerTests
         public string Status { get; set; } = string.Empty;
         public string OrderSource { get; set; } = string.Empty;
         public object? Designer { get; set; }
+    }
+
+    private class NotificationItem
+    {
+        public Guid Id { get; set; }
+        public Guid? OrderId { get; set; }
+        public Guid? ReferenceId { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
     }
 
 }

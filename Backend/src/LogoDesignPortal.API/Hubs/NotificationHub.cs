@@ -8,7 +8,7 @@ public class NotificationHub : Hub
 {
     public async Task JoinUserGroup(string userId)
     {
-        if (Context.UserIdentifier != userId)
+        if (!string.Equals(Context.UserIdentifier, userId, StringComparison.OrdinalIgnoreCase))
         {
             throw new HubException("You can only join your own notification group.");
         }

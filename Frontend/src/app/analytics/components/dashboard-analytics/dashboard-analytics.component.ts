@@ -1,6 +1,7 @@
 import { Component, Input } from '@angular/core';
 import { Router } from '@angular/router';
 import { AnalyticsOverview } from '@core/services/admin-analytics.service';
+import { getOrderStatusLabel, getOrderStatusSeverity } from '@shared/utils/order-status-display';
 
 @Component({
   selector: 'app-dashboard-analytics',
@@ -33,17 +34,11 @@ export class DashboardAnalyticsComponent {
   }
 
   formatStatus(status: string): string {
-    if (status === 'ClientApproved') return 'Approved';
-    return status.replace(/([A-Z])/g, ' $1').trim();
+    return getOrderStatusLabel(status);
   }
 
   getStatusSeverity(status: string): string {
-    const m: Record<string, string> = {
-      'Pending': 'warning', 'InProgress': 'info', 'PreviewDelivered': 'info',
-      'RevisionRequested': 'warning', 'ClientApproved': 'success', 'Completed': 'success', 'Cancelled': 'danger',
-      'WaitingForAdminApproval': 'warning', 'PriceApprovalPending': 'warning'
-    };
-    return m[status] || 'secondary';
+    return getOrderStatusSeverity(status);
   }
 
   formatDate(d: Date | string | undefined): string {

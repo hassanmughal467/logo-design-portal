@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
+using LogoDesignPortal.Application.DTOs.Notifications;
 using LogoDesignPortal.Application.Services;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
@@ -25,6 +26,7 @@ public class RevisionWorkflowTests : IDisposable
     private readonly string _tempStoragePath;
     private readonly ApplicationDbContext _context;
     private readonly RevisionService _revisionService;
+    private readonly Mock<INotificationService> _notificationService;
     private readonly Guid _clientUserId;
     private readonly Guid _designerUserId;
     private readonly Guid _adminUserId;
@@ -61,7 +63,17 @@ public class RevisionWorkflowTests : IDisposable
             .Build();
 
         var logger = new Mock<ILogger<RevisionService>>();
-        var notificationService = new Mock<INotificationService>();
+        _notificationService = new Mock<INotificationService>();
+        _notificationService
+            .Setup(n => n.CreateNotificationForRoleAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<NotificationType>(),
+                It.IsAny<NotificationReferenceType>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<Guid?>()))
+            .ReturnsAsync(new List<NotificationResponseDto> { new() { Id = Guid.NewGuid() } });
         var entityUpdateSender = new Mock<IRealtimeEntityUpdateSender>();
 
         _revisionService = new RevisionService(
@@ -69,7 +81,7 @@ public class RevisionWorkflowTests : IDisposable
             Mock.Of<AutoMapper.IMapper>(),
             config,
             logger.Object,
-            notificationService.Object,
+            _notificationService.Object,
             entityUpdateSender.Object,
             Mock.Of<IInvoiceService>());
     }
@@ -285,6 +297,28 @@ public class RevisionWorkflowTests : IDisposable
         await _context.SaveChangesAsync();
 
         await _revisionService.ApproveLogoAsync(_orderId, new Application.DTOs.Revisions.ApproveLogoDto { Notes = "Approved" }, _clientUserId);
+
+        _notificationService.Verify(
+            n => n.CreateNotificationAsync(
+                _designerUserId,
+                "Client Approved Logo",
+                It.IsAny<string>(),
+                It.IsAny<NotificationType>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<NotificationReferenceType>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<Guid?>()),
+            Times.Never);
+        _notificationService.Verify(
+            n => n.CreateNotificationForRoleAsync(
+                "Admin",
+                "Client Approved Logo",
+                It.IsAny<string>(),
+                NotificationType.OrderStatusChange,
+                NotificationReferenceType.Order,
+                _orderId,
+                _clientUserId),
+            Times.Once);
 
         // ASSERT 3: Only final files remain (no Preview files; Reference + Final)
         var previewFilesAfterApproval = await _context.LogoFiles

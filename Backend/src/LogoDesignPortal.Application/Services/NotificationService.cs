@@ -40,6 +40,7 @@ public class NotificationService : INotificationService
 
         var existing = await _context.Notifications
             .Where(n => n.UserId == userId
+                && n.Title == title
                 && n.ReferenceType == referenceType
                 && n.Type == type
                 && !n.IsDeleted
@@ -122,7 +123,7 @@ public class NotificationService : INotificationService
         }
 
         var userIds = await _context.Users
-            .Where(u => !u.IsDeleted && u.RoleId == role.Id)
+            .Where(u => !u.IsDeleted && u.IsActive && u.RoleId == role.Id)
             .Select(u => u.Id)
             .ToListAsync();
 

@@ -40,8 +40,9 @@ export class RealtimeNotificationService implements OnDestroy {
     private messageService: MessageService
   ) {
     this.authService.currentUser$.subscribe(user => {
-      if (user) {
-        this.connect(user.id);
+      const userId = this.resolveUserId(user);
+      if (userId) {
+        this.connect(userId);
       } else {
         this.disconnect();
       }
@@ -82,31 +83,43 @@ export class RealtimeNotificationService implements OnDestroy {
 
       // Entity update events for data grid synchronization (separate from notifications)
       this.connection.on('OrderCreated', (data: { orderId: string }) => {
-        this.orderUpdateSubject.next({ orderId: data.orderId });
+        const orderId = data?.orderId ?? (data as { OrderId?: string })?.OrderId ?? '';
+        if (!orderId) return;
+        this.orderUpdateSubject.next({ orderId });
+        // Refresh bell/list only — toast comes from ReceiveNotification (avoid duplicate popups)
+        this.notificationService.refreshNotifications();
       });
-      this.connection.on('OrderAssigned', (data: { orderId: string }) => {
-        this.orderUpdateSubject.next({ orderId: data.orderId });
+      this.connection.on('OrderAssigned', (data: unknown) => {
+        const payload = this.resolveOrderUpdatePayload(data);
+        if (payload) this.orderUpdateSubject.next(payload);
       });
-      this.connection.on('PreviewUploaded', (data: { orderId: string }) => {
-        this.orderUpdateSubject.next({ orderId: data.orderId });
+      this.connection.on('PreviewUploaded', (data: unknown) => {
+        const payload = this.resolveOrderUpdatePayload(data);
+        if (payload) this.orderUpdateSubject.next(payload);
       });
-      this.connection.on('OrderStatusChanged', (data: { orderId: string; status: string; updatedBy?: string }) => {
-        this.orderUpdateSubject.next({ orderId: data.orderId, status: data.status, updatedBy: data.updatedBy });
+      this.connection.on('OrderStatusChanged', (data: unknown) => {
+        const payload = this.resolveOrderUpdatePayload(data);
+        if (payload) this.orderUpdateSubject.next(payload);
       });
-      this.connection.on('PreviewApproved', (data: { orderId: string; clientName?: string; status: string }) => {
-        this.orderUpdateSubject.next({ orderId: data.orderId, status: data.status, clientName: data.clientName });
+      this.connection.on('PreviewApproved', (data: unknown) => {
+        const payload = this.resolveOrderUpdatePayload(data);
+        if (payload) this.orderUpdateSubject.next(payload);
       });
-      this.connection.on('PreviewRejected', (data: { orderId: string; clientName?: string }) => {
-        this.orderUpdateSubject.next({ orderId: data.orderId });
+      this.connection.on('PreviewRejected', (data: unknown) => {
+        const payload = this.resolveOrderUpdatePayload(data);
+        if (payload) this.orderUpdateSubject.next(payload);
       });
-      this.connection.on('PreviewDelivered', (data: { orderId: string; status: string }) => {
-        this.orderUpdateSubject.next({ orderId: data.orderId, status: data.status });
+      this.connection.on('PreviewDelivered', (data: unknown) => {
+        const payload = this.resolveOrderUpdatePayload(data);
+        if (payload) this.orderUpdateSubject.next(payload);
       });
-      this.connection.on('OrderUpdated', (data: { orderId: string; status?: string }) => {
-        this.orderUpdateSubject.next({ orderId: data.orderId, status: data.status });
+      this.connection.on('OrderUpdated', (data: unknown) => {
+        const payload = this.resolveOrderUpdatePayload(data);
+        if (payload) this.orderUpdateSubject.next(payload);
       });
-      this.connection.on('InvoiceGenerated', (data: { orderId: string; invoiceId: string }) => {
-        this.orderUpdateSubject.next({ orderId: data.orderId, invoiceId: data.invoiceId });
+      this.connection.on('InvoiceGenerated', (data: unknown) => {
+        const payload = this.resolveOrderUpdatePayload(data);
+        if (payload) this.orderUpdateSubject.next(payload);
       });
 
       this.connection.onreconnecting(() => {
@@ -133,6 +146,12 @@ export class RealtimeNotificationService implements OnDestroy {
     }
   }
 
+  private resolveUserId(user: { id?: string; Id?: string } | null): string | null {
+    if (!user) return null;
+    const id = String(user.id ?? user.Id ?? '').trim();
+    return id || null;
+  }
+
   private async joinUserGroup(userId: string): Promise<void> {
     if (this.connection?.state === signalR.HubConnectionState.Connected) {
       await this.connection.invoke('JoinUserGroup', userId);
@@ -147,13 +166,42 @@ export class RealtimeNotificationService implements OnDestroy {
     const message = (p?.['message'] ?? p?.['Message'] ?? '') as string;
     const severity = this.mapTypeToSeverity(type);
     const redirectUrl = this.buildRedirectUrl(p);
+    const notificationId = this.resolveNotificationId(p);
+    const toastData =
+      redirectUrl || notificationId
+        ? { ...(redirectUrl ? { redirectUrl } : {}), ...(notificationId ? { notificationId } : {}) }
+        : undefined;
     this.messageService.add({
       severity,
       summary: title,
       detail: message,
       life: 10000,
-      data: redirectUrl ? { redirectUrl } : undefined
+      data: toastData
     });
+  }
+
+  /** Normalize hub payloads (camelCase or PascalCase) for grid/dashboard sync. */
+  private resolveOrderUpdatePayload(data: unknown): OrderUpdatePayload | null {
+    const d = data as Record<string, unknown> | null | undefined;
+    const orderId = String(d?.['orderId'] ?? d?.['OrderId'] ?? '').trim();
+    if (!orderId) return null;
+    const status = (d?.['status'] ?? d?.['Status']) as string | undefined;
+    const updatedBy = (d?.['updatedBy'] ?? d?.['UpdatedBy']) as string | undefined;
+    const clientName = (d?.['clientName'] ?? d?.['ClientName']) as string | undefined;
+    const invoiceId = String(d?.['invoiceId'] ?? d?.['InvoiceId'] ?? '').trim() || undefined;
+    return {
+      orderId,
+      ...(status ? { status: String(status) } : {}),
+      ...(updatedBy ? { updatedBy: String(updatedBy) } : {}),
+      ...(clientName ? { clientName: String(clientName) } : {}),
+      ...(invoiceId ? { invoiceId } : {})
+    };
+  }
+
+  private resolveNotificationId(p: Record<string, unknown>): string | undefined {
+    const raw = String(p?.['id'] ?? p?.['Id'] ?? '').trim();
+    if (!raw || raw === '00000000-0000-0000-0000-000000000000') return undefined;
+    return raw;
   }
 
   /** Build redirect URL for all notification types (Order, Invoice, Message, System). */

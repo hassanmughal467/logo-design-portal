@@ -3,6 +3,8 @@
 **Scope:** `Backend/src/` (canonical API) + `Frontend/` (Angular 15)  
 **Last updated:** May 2026
 
+> **Full architecture package:** [docs/architecture/ARCHITECTURE_INDEX.md](./architecture/ARCHITECTURE_INDEX.md) — production-grade docs (system, frontend, backend, database, security, testing, deployment, workflows, tech debt, stack reference). This file remains the **short onboarding** summary.
+
 **Week 1 hardening:** See `docs/WEEK1_SECURITY_HARDENING.md`, `docs/CI_CD_SETUP.md`, `docs/PRODUCTION_SECURITY_CHECKLIST.md`. Swagger is **Development-only**. Upload policy is centralized in `UploadSecurityHelper`.
 
 ---
@@ -251,8 +253,12 @@ Dual pricing fields on orders: client charge (USD) vs designer payout (PKR-centr
 
 | Workflow | Purpose |
 |----------|---------|
-| `.github/workflows/test.yml` | Domain, Application, Integration tests; Angular unit; production build; coverage gates |
-| `.github/workflows/e2e-playwright.yml` | Playwright E2E (`Frontend/e2e/tests/`) |
+| `.github/workflows/pr-validation.yml` | Fast PR: unit tests + Angular build |
+| `.github/workflows/test.yml` | Full matrix, integration coverage gate, smoke Playwright |
+| `.github/workflows/e2e-playwright.yml` | Full Playwright + MySQL (path triggered) |
+| `.github/workflows/deploy-artifacts.yml` | Release zips on `v*.*.*` tags |
+
+See [TESTING_ARCHITECTURE.md](./architecture/TESTING_ARCHITECTURE.md) for CI flow diagrams.
 
 | Layer | Location |
 |-------|----------|
@@ -328,6 +334,24 @@ Frontend: `environment.prod.ts` → `apiUrl`, `useCookieAuth: true`.
 ---
 
 ## 17. Related documents
+
+### Architecture package (`docs/architecture/`)
+
+| Doc | Topic |
+|-----|-------|
+| [ARCHITECTURE_INDEX.md](./architecture/ARCHITECTURE_INDEX.md) | Master index |
+| [SYSTEM_OVERVIEW.md](./architecture/SYSTEM_OVERVIEW.md) | Platform overview |
+| [FRONTEND_ARCHITECTURE.md](./architecture/FRONTEND_ARCHITECTURE.md) | Angular SPA |
+| [BACKEND_ARCHITECTURE.md](./architecture/BACKEND_ARCHITECTURE.md) | .NET API layers |
+| [DATABASE_ARCHITECTURE.md](./architecture/DATABASE_ARCHITECTURE.md) | EF Core + MySQL |
+| [SECURITY_ARCHITECTURE.md](./architecture/SECURITY_ARCHITECTURE.md) | Auth, CSRF, uploads |
+| [TESTING_ARCHITECTURE.md](./architecture/TESTING_ARCHITECTURE.md) | Test pyramid + CI |
+| [ENVIRONMENT_AND_DEPLOYMENT_ARCHITECTURE.md](./architecture/ENVIRONMENT_AND_DEPLOYMENT_ARCHITECTURE.md) | Staging/production |
+| [BUSINESS_WORKFLOW_ARCHITECTURE.md](./architecture/BUSINESS_WORKFLOW_ARCHITECTURE.md) | Order/billing flows |
+| [ARCHITECTURE_DECISIONS_AND_TECH_DEBT.md](./architecture/ARCHITECTURE_DECISIONS_AND_TECH_DEBT.md) | Roadmap |
+| [COMPLETE_TECH_STACK_REFERENCE.md](./architecture/COMPLETE_TECH_STACK_REFERENCE.md) | Packages |
+
+### Operations & QA
 
 - `docs/SECURITY_AUDIT_REPORT.md`
 - `docs/QA_TESTING_STRATEGY.md`

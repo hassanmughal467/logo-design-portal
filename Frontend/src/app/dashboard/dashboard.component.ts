@@ -15,6 +15,16 @@ import { Observable, Subject, firstValueFrom, forkJoin } from 'rxjs';
 import { takeUntil, catchError, finalize, timeout, map, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
+import {
+  buildOrderStatusFilterOptions,
+  getOrderStatusChartColor,
+  getOrderStatusLabel,
+  getOrderStatusSeverity
+} from '@shared/utils/order-status-display';
+import {
+  DEFAULT_INVOICE_CURRENCY,
+  formatCurrencyAmount
+} from '@core/utils/currency-format';
 
 export interface ActionRequiredItem {
   type: 'approval' | 'revision' | 'invoice' | 'price' | 'designerPrice';
@@ -67,6 +77,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   /** Batches SignalR order events so the dashboard is not fully reloaded on every hub message. */
   private readonly dashboardRealtimeRefresh$ = new Subject<void>();
+  /** Ignores stale HTTP responses when a newer dashboard load was started. */
+  private dashboardLoadGeneration = 0;
 
   // Chart data
   statusChartData: any;
@@ -86,6 +98,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ];
 
   stats: any[] = [];
+  /** Currency for admin/client revenue KPIs and charts (from order/invoice data). */
+  revenueCurrencyCode = DEFAULT_INVOICE_CURRENCY;
+  revenueCurrencyMixed = false;
 
   // Client analytics card groups
   clientOrderAnalytics: any[] = [];
@@ -142,17 +157,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   orderStatusFilter = '';
   orderSearchFilter = '';
   showArchived = false;
-  orderStatusOptions = [
-    { label: 'All Statuses', value: '' },
-    { label: 'In Progress', value: 'InProgress' },
-    { label: 'Preview Delivered', value: 'PreviewDelivered' },
-    { label: 'Revision Requested', value: 'RevisionRequested' },
-    { label: 'Completed', value: 'Completed' },
-    { label: 'Waiting Approval', value: 'WaitingForAdminApproval' },
-    { label: 'Price Approval', value: 'PriceApprovalPending' },
-    { label: 'Cancelled', value: 'Cancelled' },
-    { label: 'Archived', value: 'Archived' }
-  ];
+  orderStatusOptions = buildOrderStatusFilterOptions();
 
   // Quick Reorder
   reorderData: any = null;
@@ -227,7 +232,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       )
       .subscribe(user => {
         this.user = user;
-        this.loadDashboardData();
+        // Client: bypass cached empty snapshot from a failed first load during API warm-up.
+        this.loadDashboardData(this.isClientRole(user));
       });
 
     this.dashboardRealtimeRefresh$
@@ -240,7 +246,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .subscribe((data) => this.handleOrderUpdate(data));
   }
 
-  private handleOrderUpdate(data?: { orderId?: string }): void {
+  private handleOrderUpdate(data?: { orderId?: string; status?: string }): void {
     if (!data?.orderId) return;
 
     if (data.orderId === '**reconnect**') {
@@ -248,7 +254,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (data.status) {
+      this.patchDashboardOrderStatus(data.orderId, data.status);
+    }
+
     this.dashboardRealtimeRefresh$.next();
+  }
+
+  /** Immediate status tag update in recent orders while debounced API refresh reloads KPIs. */
+  private patchDashboardOrderStatus(orderId: string, status: string): void {
+    const id = orderId.toLowerCase();
+    const row = this.dashboardData.recentOrders.find(o => (o.id ?? '').toLowerCase() === id);
+    if (row) {
+      row.status = status as OrderStatus;
+    }
   }
 
   /** Resolves id from API rows (camelCase or PascalCase). */
@@ -272,6 +291,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** @param forceFresh When true, clears cached dashboard/list streams before loading (mutations, realtime). */
   private loadDashboardData(forceFresh = false): void {
+    const loadGeneration = ++this.dashboardLoadGeneration;
     this.isDashboardLoading = true;
     if (forceFresh) {
       this.dashboardService.invalidateDashboardCache();
@@ -280,7 +300,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     if (isAdmin) {
       forkJoin({
-        dashboard: this.dashboardService.getDashboardData(),
+        dashboard: this.dashboardService.getDashboardData(forceFresh),
         overview: this.adminAnalytics.getOverview().pipe(catchError(() => of(null))),
         orderAnalytics: this.adminAnalytics.getOrderAnalytics().pipe(catchError(() => of(null))),
         revenueAnalytics: this.adminAnalytics.getRevenueAnalytics().pipe(catchError(() => of(null)))
@@ -289,7 +309,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           timeout(180000),
           takeUntil(this.destroy$),
           catchError(() =>
-            this.dashboardService.getDashboardData().pipe(
+            this.dashboardService.getDashboardData(forceFresh).pipe(
               map((d) => ({
                 dashboard: d,
                 overview: null,
@@ -299,13 +319,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
             )
           ),
           finalize(() => {
-            this.isDashboardLoading = false;
-            this.hasDashboardLoadedOnce = true;
+            if (loadGeneration === this.dashboardLoadGeneration) {
+              this.isDashboardLoading = false;
+              this.hasDashboardLoadedOnce = true;
+            }
           })
         )
         .subscribe({
           next: ({ dashboard: data, overview, orderAnalytics, revenueAnalytics }) => {
+            if (loadGeneration !== this.dashboardLoadGeneration) return;
             this.dashboardData = data;
+            this.applyRevenueCurrencyFromData(data);
             if (overview) {
               const completedFromStatus = orderAnalytics?.ordersByStatus?.find((s: any) => s.status === 'Completed')?.count ?? 0;
               this.dashboardData.stats = {
@@ -319,6 +343,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 totalRevenue: overview.totalRevenue,
                 averageDeliveryTime: overview.averageDeliveryTimeDays
               };
+              if (overview.revenueCurrencyCode) {
+                this.dashboardData.revenueCurrencyCode = overview.revenueCurrencyCode;
+                this.dashboardData.revenueCurrencyMixed = !!overview.revenueCurrencyMixed;
+                this.applyRevenueCurrencyFromData(this.dashboardData);
+              }
             }
             if (orderAnalytics) {
               this.dashboardData.ordersByStatus = orderAnalytics.ordersByStatus || [];
@@ -343,24 +372,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
         });
     } else {
-      this.dashboardService.getDashboardData()
+      this.dashboardService.getDashboardData(forceFresh)
         .pipe(
           timeout(180000),
           takeUntil(this.destroy$),
           finalize(() => {
-            this.isDashboardLoading = false;
-            this.hasDashboardLoadedOnce = true;
+            if (loadGeneration === this.dashboardLoadGeneration) {
+              this.isDashboardLoading = false;
+              this.hasDashboardLoadedOnce = true;
+            }
           })
         )
         .subscribe({
           next: (data) => {
+            if (loadGeneration !== this.dashboardLoadGeneration) return;
             this.dashboardData = data;
+            this.applyRevenueCurrencyFromData(data);
             this.updateStats(data);
             this.setupCharts(data);
           // Load client-specific data
           // Notifications for both Client and Admin
           this.notifications = data.notifications || [];
-          if (this.user?.role === 'Client') {
+          if (this.isClientRole(this.user)) {
             this.invoices = data.invoices || [];
             this.galleryItems = data.galleryItems || [];
             this.filteredGalleryItems = this.galleryItems;
@@ -379,6 +412,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
         },
         error: (error) => {
+          if (loadGeneration !== this.dashboardLoadGeneration) return;
           console.error('Error loading dashboard data:', error);
           // Set empty data on error so UI still renders
           this.dashboardData = {
@@ -408,11 +442,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  private isClientRole(user: User | null | undefined): boolean {
+    const r = user?.roleName || user?.role;
+    return r === 'Client';
+  }
+
   private updateStats(data: DashboardData): void {
     const user = this.authService.getCurrentUser();
     // Fixed: Use optional chaining to handle null user
     const isAdmin = user?.role === 'SuperAdmin' || user?.role === 'Admin';
-    const isClient = user?.role === 'Client';
+    const isClient = this.isClientRole(user);
 
     if (isClient) {
       // Order Analytics row
@@ -520,7 +559,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         { 
           label: 'Total Revenue', 
           value: data.stats.totalRevenue, 
-          icon: 'pi pi-dollar', 
+          icon: this.revenueStatIcon(), 
           color: 'secondary',
           trend: null,
           clickable: true,
@@ -709,7 +748,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           callbacks: {
             label: (context: any) => {
               const val = context.parsed.x ?? context.parsed.y ?? 0;
-              return `Revenue: $${Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              return `Revenue: ${formatCurrencyAmount(Number(val), this.revenueCurrencyCode)}`;
             }
           }
         }
@@ -718,7 +757,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         x: {
           beginAtZero: true,
           ticks: {
-            callback: (value: any) => '$' + Number(value).toLocaleString('en-US')
+            callback: (value: any) =>
+              formatCurrencyAmount(Number(value), this.revenueCurrencyCode)
           },
           grid: { color: '#e2e8f0' }
         },
@@ -782,8 +822,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   formatStatus(status: string): string {
-    if (status === 'ClientApproved') return 'Approved';
-    return status.replace(/([A-Z])/g, ' $1').trim();
+    return getOrderStatusLabel(status);
   }
 
   private formatMonth(monthKey: string): string {
@@ -793,42 +832,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private getStatusColors(statuses: string[]): string[] {
-    const colorMap: { [key: string]: string } = {
-      'Pending': '#f59e0b',
-      'WaitingForAdminApproval': '#f97316',
-      'PriceApprovalPending': '#eab308',
-      'InProgress': '#0d47a1',
-      'PreviewDelivered': '#8b5cf6',
-      'RevisionRequested': '#6366f1',
-      'ClientApproved': '#14b8a6',
-      'Completed': '#10b981',
-      'Cancelled': '#ef4444',
-      'CancelledByUser': '#dc2626',
-      'CancelledByAdmin': '#b91c1c',
-      'Paid': '#059669',
-      'Processing': '#06b6d4',
-      'Refunded': '#6b7280',
-      'Failed': '#991b1b',
-      'Archived': '#9ca3af',
-      'Review': '#8b5cf6'
-    };
-    return statuses.map(s => colorMap[s] || '#64748b');
+    return statuses.map((s) => getOrderStatusChartColor(s));
   }
 
   getStatusSeverity(status: OrderStatus): string {
-    const severityMap: { [key: string]: string } = {
-      'Pending': 'warning',
-      'InProgress': 'info',
-      'Review': 'secondary',
-      'PreviewDelivered': 'info',
-      'RevisionRequested': 'warning',
-      'ClientApproved': 'success',
-      'Completed': 'success',
-      'Cancelled': 'danger',
-      'CancelledByUser': 'danger',
-      'CancelledByAdmin': 'danger'
-    };
-    return severityMap[status] || 'secondary';
+    return getOrderStatusSeverity(status);
   }
 
   /** Count of orders in "other" statuses (not Pending, In Progress, or Completed) */
@@ -1333,11 +1341,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
     };
   }
 
-  formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+  private applyRevenueCurrencyFromData(data: DashboardData): void {
+    this.revenueCurrencyCode = data.revenueCurrencyCode ?? DEFAULT_INVOICE_CURRENCY;
+    this.revenueCurrencyMixed = !!data.revenueCurrencyMixed;
+  }
+
+  /** Stat card icon for revenue KPIs (avoid hard-coded dollar when totals are GBP, etc.). */
+  private revenueStatIcon(): string {
+    const code = (this.revenueCurrencyCode || DEFAULT_INVOICE_CURRENCY).toUpperCase();
+    if (code === 'EUR') {
+      return 'pi pi-euro';
+    }
+    if (code === 'GBP') {
+      return 'pi pi-money-bill';
+    }
+    return 'pi pi-dollar';
+  }
+
+  formatCurrency(amount: number, currencyCode?: string | null): string {
+    return formatCurrencyAmount(amount, currencyCode ?? this.revenueCurrencyCode);
+  }
+
+  formatStatValue(stat: { value: number; isCurrency?: boolean }): string {
+    if (stat.isCurrency) {
+      return this.formatCurrency(stat.value);
+    }
+    return new Intl.NumberFormat().format(stat.value ?? 0);
   }
 
   // ── Action Required Panel ──────────────────────────────────────────
@@ -1415,7 +1444,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         icon: 'pi pi-exclamation-triangle',
         severity: 'danger',
         title: `Overdue Invoice #${inv.invoiceNumber}`,
-        subtitle: `Amount: ${this.formatCurrency(inv.totalAmount || inv.amount)} — Due: ${this.formatDate(inv.dueDate)}`,
+        subtitle: `Amount: ${this.formatCurrency(inv.totalAmount || inv.amount, inv.currencyCode ?? inv.CurrencyCode)} — Due: ${this.formatDate(inv.dueDate)}`,
         actionLabel: 'Pay Now',
         actionIcon: 'pi pi-money-bill',
         data: inv
@@ -1433,7 +1462,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         icon: 'pi pi-clock',
         severity: 'warning',
         title: `Invoice #${inv.invoiceNumber} due soon`,
-        subtitle: `Amount: ${this.formatCurrency(inv.totalAmount || inv.amount)} — Due: ${this.formatDate(inv.dueDate)}`,
+        subtitle: `Amount: ${this.formatCurrency(inv.totalAmount || inv.amount, inv.currencyCode ?? inv.CurrencyCode)} — Due: ${this.formatDate(inv.dueDate)}`,
         actionLabel: 'Pay Now',
         actionIcon: 'pi pi-money-bill',
         data: inv
@@ -1721,7 +1750,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   get isClient(): boolean {
-    return this.user?.role === 'Client';
+    return this.isClientRole(this.user);
   }
 
 

@@ -101,6 +101,20 @@ public class AnalyticsService : IAnalyticsService
         var revisionRate = totalOrders > 0 ? (decimal)ordersWithRevisions / totalOrders * 100 : 0;
         var approvalRate = totalOrders > 0 ? (decimal)completedCount / totalOrders * 100 : 0;
 
+        var completedCurrencyCodes = await q
+            .Where(o => o.Status == OrderStatus.Completed && o.CurrencyCode != null && o.CurrencyCode != "")
+            .Select(o => o.CurrencyCode!.Trim().ToUpper())
+            .Distinct()
+            .ToListAsync()
+            .ConfigureAwait(false);
+
+        var revenueCurrencyCode = "USD";
+        var revenueCurrencyMixed = false;
+        if (completedCurrencyCodes.Count == 1)
+            revenueCurrencyCode = completedCurrencyCodes[0];
+        else if (completedCurrencyCodes.Count > 1)
+            revenueCurrencyMixed = true;
+
         var totalClients = await _context.ClientProfiles.AsNoTracking().CountAsync(c => !c.IsDeleted);
         var activeDesigners = await _context.LogoOrders
             .AsNoTracking()
@@ -116,6 +130,8 @@ public class AnalyticsService : IAnalyticsService
             OrdersThisMonth = overviewAgg?.OrdersThisMonth ?? 0,
             OrdersThisYear = overviewAgg?.OrdersThisYear ?? 0,
             TotalRevenue = totalRevenue,
+            RevenueCurrencyCode = revenueCurrencyCode,
+            RevenueCurrencyMixed = revenueCurrencyMixed,
             MonthlyRevenue = monthlyRevenue,
             AverageOrderValue = completedCount > 0 ? totalRevenue / completedCount : 0,
             TotalClients = totalClients,

@@ -1,11 +1,22 @@
 import { Injectable } from '@angular/core';
 import { Observable, forkJoin, of } from 'rxjs';
-import { map, catchError, shareReplay, timeout } from 'rxjs/operators';
+import { map, catchError, shareReplay, switchMap, timeout } from 'rxjs/operators';
+import { User, UserRole } from '@shared/models/user.model';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
 import { SharedListDataService } from './shared-list-data.service';
 import { Order, OrderStatus } from '@shared/models/order.model';
+import { resolveSingleCurrencyCode } from '@core/utils/currency-format';
+
+/** Client "active" orders — keep in sync with order-list.component getStatusCounts().active */
+const CLIENT_ACTIVE_ORDER_STATUSES: readonly OrderStatus[] = [
+  OrderStatus.WaitingForAdminApproval,
+  OrderStatus.PriceApprovalPending,
+  OrderStatus.InProgress,
+  OrderStatus.PreviewDelivered,
+  OrderStatus.RevisionRequested
+];
 
 export interface DashboardStats {
   totalOrders: number;
@@ -46,6 +57,10 @@ export interface DashboardData {
   notifications?: any[];
   // Client analytics
   ordersByWeek?: { weekLabel: string; count: number }[];
+  /** ISO code for revenue KPIs when all completed orders share one currency (e.g. GBP). */
+  revenueCurrencyCode?: string;
+  /** True when completed orders use more than one currency (KPIs use USD label). */
+  revenueCurrencyMixed?: boolean;
 }
 
 @Injectable({
@@ -61,32 +76,37 @@ export class DashboardService {
     private sharedListData: SharedListDataService
   ) {}
 
-  getDashboardData(): Observable<DashboardData> {
+  getDashboardData(forceFresh = false): Observable<DashboardData> {
     const user = this.authService.getCurrentUser();
     if (!user) {
       return of(this.getEmptyDashboardData());
     }
 
-    const cacheKey = `${user.id}:${user.role}`;
-    if (this.dashboardDataCache?.key === cacheKey) {
+    const role = this.resolveUserRole(user);
+
+    // Client KPIs must not depend on gallery/invoices forkJoin or shareReplay cache.
+    if (role === UserRole.Client) {
+      return this.buildClientDashboard$();
+    }
+
+    const cacheKey = `${user.id}:${role}`;
+    if (!forceFresh && this.dashboardDataCache?.key === cacheKey) {
       return this.dashboardDataCache.stream$;
     }
 
     // Fetch orders based on user role
     let orders$: Observable<Order[]>;
     
-    switch (user.role) {
-      case 'Client':
-        orders$ = this.apiService.get<Order[]>('orders/my-orders');
+    switch (role) {
+      case UserRole.Designer:
+        orders$ = this.fetchOrdersForRole('orders/assigned-orders');
         break;
-      case 'Designer':
-        orders$ = this.apiService.get<Order[]>('orders/assigned-orders');
-        break;
-      case 'SuperAdmin':
-      case 'Admin':
+      case UserRole.SuperAdmin:
+      case UserRole.Admin:
         // Paginated full scan via shared stream (backend caps pageSize at 100).
         orders$ = this.sharedListData.getAllOrdersAdmin().pipe(
-          map((items) => items as Order[])
+          map((items) => this.normalizeOrdersResponse(items)),
+          catchError(() => of([]))
         );
         break;
       default:
@@ -99,7 +119,7 @@ export class DashboardService {
     let galleryItems$: Observable<any[]> = of([]);
     let notifications$: Observable<any[]> = of([]);
     
-    if (user.role === 'SuperAdmin' || user.role === 'Admin') {
+    if (role === UserRole.SuperAdmin || role === UserRole.Admin) {
       // Reuse shared users fetch; filter to clients for dashboard stats.
       clients$ = this.sharedListData.getAllUsers().pipe(
         map((list) =>
@@ -117,19 +137,6 @@ export class DashboardService {
       notifications$ = this.notificationService.getNotifications(false).pipe(
         catchError(() => of([]))
       );
-    } else if (user.role === 'Client') {
-      // Fetch client-specific data
-      invoices$ = this.apiService.get<any[]>('invoices').pipe(
-        catchError(() => of([]))
-      );
-      
-      galleryItems$ = this.apiService.get<any[]>('gallery/my-gallery').pipe(
-        catchError(() => of([]))
-      );
-      
-      notifications$ = this.notificationService.getNotifications(false).pipe(
-        catchError(() => of([]))
-      );
     }
 
     // forkJoin waits for every source to complete; a single hung HTTP would spin the UI forever.
@@ -142,9 +149,11 @@ export class DashboardService {
     }).pipe(
       timeout(120000),
       map(({ orders, clients, invoices, galleryItems, notifications }) =>
-        this.processDashboardData(orders, clients, invoices, galleryItems, notifications, user.role)
+        this.processDashboardData(orders, clients, invoices, galleryItems, notifications, role)
       ),
       catchError(() => {
+        // Do not keep serving a cached empty dashboard after a failed load (e.g. startup timeout).
+        this.dashboardDataCache = null;
         return of(this.getEmptyDashboardData());
       }),
       shareReplay({ bufferSize: 1, refCount: true })
@@ -220,16 +229,12 @@ export class DashboardService {
     let ordersByWeek: { weekLabel: string; count: number }[] = [];
 
     if (userRole === 'Client') {
-      // Active orders (InProgress, PreviewDelivered, RevisionRequested)
-      activeOrders = orders.filter(o => 
-        o.status === OrderStatus.InProgress || 
-        o.status === OrderStatus.PreviewDelivered || 
-        o.status === OrderStatus.RevisionRequested
-      ).length;
+      // Active = non-completed work in progress (includes Awaiting Admin — same as My Orders page)
+      activeOrders = orders.filter(o => CLIENT_ACTIVE_ORDER_STATUSES.includes(o.status)).length;
 
-      // Orders awaiting approval (PreviewDelivered, PriceApprovalPending)
-      ordersAwaitingApproval = orders.filter(o => 
-        o.status === OrderStatus.PreviewDelivered || 
+      // Client action needed on preview/price (excludes WaitingForAdminApproval — admin queue)
+      ordersAwaitingApproval = orders.filter(o =>
+        o.status === OrderStatus.PreviewDelivered ||
         o.status === OrderStatus.PriceApprovalPending
       ).length;
 
@@ -399,6 +404,13 @@ export class DashboardService {
       .map(([packageName, revenue]) => ({ package: packageName, revenue }))
       .sort((a, b) => b.revenue - a.revenue);
 
+    // KPI currency follows completed order pricing (not unrelated paid invoices in other currencies).
+    const revenueCurrency = resolveSingleCurrencyCode(
+      orders
+        .filter((o) => o.status === OrderStatus.Completed)
+        .map((o) => o.currencyCode)
+    );
+
     // Full sorted order list for client history
     const allOrdersSorted = [...orders]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -415,8 +427,186 @@ export class DashboardService {
       galleryItems: userRole === 'Client' ? galleryItems : undefined,
       // Notifications for both Client and Admin (Admin gets "New Order Submitted", etc.)
       notifications: notifications,
-      ordersByWeek: userRole === 'Client' ? ordersByWeek : undefined
+      ordersByWeek: userRole === 'Client' ? ordersByWeek : undefined,
+      revenueCurrencyCode: revenueCurrency.code,
+      revenueCurrencyMixed: revenueCurrency.mixed
     };
+  }
+
+  private resolveUserRole(user: Pick<User, 'role' | 'roleName'>): string {
+    const r = user.roleName || user.role;
+    return r ? String(r) : '';
+  }
+
+  /** Client dashboard: orders load first; invoices/gallery/notifications cannot zero out KPIs. */
+  private buildClientDashboard$(): Observable<DashboardData> {
+    return this.fetchOrdersForRole('orders/my-orders').pipe(
+      switchMap((orders) =>
+        forkJoin({
+          invoices: this.apiService.get<unknown>('invoices').pipe(
+            map((r) => this.normalizeListResponse(r)),
+            catchError(() => of([]))
+          ),
+          galleryItems: this.apiService.get<unknown>('gallery/my-gallery').pipe(
+            timeout(15000),
+            map((r) => this.normalizeListResponse(r)),
+            catchError(() => of([]))
+          ),
+          notifications: this.notificationService.getNotifications(false).pipe(
+            catchError(() => of([]))
+          )
+        }).pipe(
+          map(({ invoices, galleryItems, notifications }) =>
+            this.processDashboardData(
+              orders,
+              [],
+              invoices,
+              galleryItems,
+              notifications,
+              UserRole.Client
+            )
+          ),
+          catchError(() =>
+            of(this.processDashboardData(orders, [], [], [], [], UserRole.Client))
+          )
+        )
+      ),
+      catchError(() => of(this.getEmptyDashboardData()))
+    );
+  }
+
+  private fetchOrdersForRole(endpoint: string): Observable<Order[]> {
+    return this.apiService.get<unknown>(endpoint).pipe(
+      map((response) => this.normalizeOrdersResponse(response)),
+      catchError(() => of([]))
+    );
+  }
+
+  private normalizeListResponse(response: unknown): any[] {
+    if (Array.isArray(response)) {
+      return response;
+    }
+    if (response && typeof response === 'object') {
+      const r = response as Record<string, unknown>;
+      if (Array.isArray(r['data'])) {
+        return r['data'] as any[];
+      }
+      const items = ApiService.extractItems<unknown>(response);
+      if (items.length > 0) {
+        return items;
+      }
+    }
+    return [];
+  }
+
+  private normalizeOrdersResponse(response: unknown): Order[] {
+    const raw = this.extractOrdersArray(response);
+    return raw.map((row) => this.normalizeOrder(row));
+  }
+
+  private extractOrdersArray(response: unknown): unknown[] {
+    if (!response) {
+      return [];
+    }
+    if (Array.isArray(response)) {
+      return response;
+    }
+    if (typeof response === 'object') {
+      const r = response as Record<string, unknown>;
+      if (Array.isArray(r['data'])) {
+        return r['data'];
+      }
+      const items = ApiService.extractItems<unknown>(response);
+      if (items.length > 0) {
+        return items;
+      }
+    }
+    return [];
+  }
+
+  /** Map API status strings/numbers to OrderStatus (aligned with order-list mapStatus). */
+  private normalizeOrder(backendOrder: unknown): Order {
+    const o = backendOrder as Record<string, unknown>;
+    const status = this.mapOrderStatus(
+      (o['status'] ?? o['Status']) as string | number | undefined
+    );
+
+    return {
+      id: String(o['id'] ?? o['Id'] ?? ''),
+      clientId: String(o['clientId'] ?? o['ClientId'] ?? ''),
+      title: String(o['title'] ?? o['Title'] ?? ''),
+      description: String(o['description'] ?? o['Description'] ?? ''),
+      status,
+      createdAt: o['createdAt']
+        ? new Date(o['createdAt'] as string)
+        : o['CreatedAt']
+          ? new Date(o['CreatedAt'] as string)
+          : new Date(),
+      updatedAt: o['updatedAt']
+        ? new Date(o['updatedAt'] as string)
+        : o['UpdatedAt']
+          ? new Date(o['UpdatedAt'] as string)
+          : undefined,
+      dueDate: o['dueDate']
+        ? new Date(o['dueDate'] as string)
+        : o['Deadline']
+          ? new Date(o['Deadline'] as string)
+          : undefined,
+      price: Number(
+        o['clientChargePrice'] ??
+          o['ClientChargePrice'] ??
+          o['price'] ??
+          o['Price'] ??
+          0
+      ),
+      currencyCode: (o['currencyCode'] ?? o['CurrencyCode'] ?? undefined) as string | undefined
+    } as Order;
+  }
+
+  private mapOrderStatus(status: string | number | undefined): OrderStatus {
+    if (status === undefined || status === null) {
+      return OrderStatus.WaitingForAdminApproval;
+    }
+    const statusStr = String(status).trim();
+    switch (statusStr) {
+      case 'WaitingForAdminApproval':
+      case '1':
+        return OrderStatus.WaitingForAdminApproval;
+      case 'PriceApprovalPending':
+      case '2':
+        return OrderStatus.PriceApprovalPending;
+      case 'InProgress':
+      case 'In Progress':
+      case '3':
+        return OrderStatus.InProgress;
+      case 'PreviewDelivered':
+      case '4':
+        return OrderStatus.PreviewDelivered;
+      case 'RevisionRequested':
+      case '5':
+        return OrderStatus.RevisionRequested;
+      case 'FinalApproved':
+      case 'ClientApproved':
+      case '6':
+        return OrderStatus.ClientApproved;
+      case 'Completed':
+      case '7':
+        return OrderStatus.Completed;
+      case 'Cancelled':
+      case '8':
+        return OrderStatus.Cancelled;
+      case 'CancelledByUser':
+      case '13':
+        return OrderStatus.CancelledByUser;
+      case 'CancelledByAdmin':
+      case '14':
+        return OrderStatus.CancelledByAdmin;
+      case 'Refunded':
+      case '15':
+        return OrderStatus.Refunded;
+      default:
+        return OrderStatus.WaitingForAdminApproval;
+    }
   }
 
   private calculateOrdersByWeek(orders: Order[], weeks: number): { weekLabel: string; count: number }[] {

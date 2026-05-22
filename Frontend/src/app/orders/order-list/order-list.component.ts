@@ -11,6 +11,11 @@ import { Observable, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, finalize, map, switchMap, takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus, OrderPriority, OrderSource } from '@shared/models/order.model';
 import { isOrderLocked as checkOrderLocked } from '@shared/utils/order-locking';
+import {
+  getOrderStatusLabel,
+  getOrderStatusSeverity,
+  ORDER_STATUS_DISPLAY_ORDER
+} from '@shared/utils/order-status-display';
 import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
 
 interface SummaryCard {
@@ -64,52 +69,11 @@ export class OrderListComponent implements OnInit, OnDestroy {
   showOrderDetailModal = false;
   selectedOrderId: string | null = null;
 
-  statuses = (() => {
-    const statusValues = Object.values(OrderStatus);
-    const statusMap = statusValues.map(status => {
-      let formattedLabel = status.replace(/([A-Z])/g, ' $1').trim();
-      const labelMap: { [key: string]: string } = {
-        'WaitingForAdminApproval': 'Awaiting Admin',
-        'Waiting For Admin Approval': 'Awaiting Admin',
-        'PriceApprovalPending': 'Price Approval Pending',
-        'Price Approval Pending': 'Price Approval Pending',
-        'InProgress': 'In Progress',
-        'In Progress': 'In Progress',
-        'PreviewDelivered': 'Preview Delivered',
-        'Preview Delivered': 'Preview Delivered',
-        'RevisionRequested': 'Revision Requested',
-        'Revision Requested': 'Revision Requested',
-        'ClientApproved': 'Approved',
-        'Final Approved': 'Approved',
-        'Completed': 'Completed',
-        'Cancelled': 'Cancelled',
-        'Pending': 'Pending',
-        'Paid': 'Paid',
-        'Processing': 'Processing',
-        'CancelledByUser': 'Cancelled By User',
-        'Cancelled By User': 'Cancelled By User',
-        'CancelledByAdmin': 'Cancelled By Admin',
-        'Cancelled By Admin': 'Cancelled By Admin',
-        'Refunded': 'Refunded',
-        'Failed': 'Failed',
-        'Archived': 'Archived'
-      };
-      let displayLabel = labelMap[status] || labelMap[formattedLabel] || formattedLabel;
-      if (!displayLabel) {
-        displayLabel = formattedLabel;
-      }
-      return { label: displayLabel, value: status, originalLabel: formattedLabel };
-    });
-
-    const priority: { [key: string]: number } = {
-      'WaitingForAdminApproval': 1, 'PriceApprovalPending': 2, 'InProgress': 3,
-      'PreviewDelivered': 4, 'RevisionRequested': 5, 'ClientApproved': 6,
-      'Completed': 7, 'Pending': 8, 'Paid': 9, 'Processing': 10,
-      'Cancelled': 11, 'CancelledByUser': 12, 'CancelledByAdmin': 13,
-      'Refunded': 14, 'Failed': 15, 'Archived': 16
-    };
-    return statusMap.sort((a, b) => (priority[a.value] || 99) - (priority[b.value] || 99));
-  })();
+  statuses = ORDER_STATUS_DISPLAY_ORDER.map((status) => ({
+    label: getOrderStatusLabel(status),
+    value: status,
+    originalLabel: status.replace(/([A-Z])/g, ' $1').trim()
+  }));
   priorities = Object.values(OrderPriority);
 
   // Dialog states
@@ -180,7 +144,12 @@ export class OrderListComponent implements OnInit, OnDestroy {
         } else if (scope === 'qd') {
           this.quickDesignerSuggestions = items;
         } else {
-          this.assignDesignerSuggestions = items;
+          const selected = this.selectedAssignDesigner;
+          if (selected?.id && !items.some((i) => i.id === selected.id)) {
+            this.assignDesignerSuggestions = [selected, ...items];
+          } else {
+            this.assignDesignerSuggestions = items;
+          }
         }
       });
 
@@ -201,7 +170,9 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   private handleOrderUpdate(data: { orderId: string; status?: string; invoiceId?: string }): void {
-    const orderId = data.orderId?.toLowerCase?.() ?? data.orderId;
+    const rawId = data?.orderId ?? (data as { OrderId?: string })?.OrderId ?? '';
+    const orderId = rawId?.toLowerCase?.() ?? rawId;
+    const status = data?.status ?? (data as { Status?: string })?.Status;
     if (orderId === '**reconnect**') {
       if (this.isAdminOrSuper) {
         this.sharedListData.clearOrdersAdminCache();
@@ -211,8 +182,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
     }
     const existing = this.orders.find(o => (o.id ?? '').toLowerCase() === orderId);
     if (existing) {
-      if (data.status) {
-        existing.status = data.status as OrderStatus;
+      if (status) {
+        existing.status = status as OrderStatus;
       }
       if (data.invoiceId) {
         existing.hasInvoice = true;
@@ -503,7 +474,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
     return {
       id: backendOrder.id || backendOrder.Id,
       clientId: backendOrder.clientId || backendOrder.ClientId || '',
-      designerId: (backendOrder.designer || backendOrder.Designer)?.userId || (backendOrder.designer || backendOrder.Designer)?.UserId || backendOrder.designerId || backendOrder.DesignerId,
+      designerId: backendOrder.designerId || backendOrder.DesignerId,
       title: backendOrder.title || backendOrder.Title || '',
       description: backendOrder.description || backendOrder.Description || '',
       status: status,
@@ -544,6 +515,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
       } : undefined,
       designer: backendOrder.designer || backendOrder.Designer ? {
         id: (backendOrder.designer || backendOrder.Designer)?.id || (backendOrder.designer || backendOrder.Designer)?.Id,
+        userId: (backendOrder.designer || backendOrder.Designer)?.userId || (backendOrder.designer || backendOrder.Designer)?.UserId,
         firstName: (backendOrder.designer || backendOrder.Designer)?.firstName || (backendOrder.designer || backendOrder.Designer)?.FirstName || '',
         lastName: (backendOrder.designer || backendOrder.Designer)?.lastName || (backendOrder.designer || backendOrder.Designer)?.LastName || '',
         email: (backendOrder.designer || backendOrder.Designer)?.email || (backendOrder.designer || backendOrder.Designer)?.Email
@@ -575,27 +547,11 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
   // ═══ STATUS & FORMATTING ═══
   getStatusSeverity(status: OrderStatus): string {
-    const severityMap: { [key: string]: string } = {
-      'WaitingForAdminApproval': 'warning',
-      'PriceApprovalPending': 'info',
-      'InProgress': 'info',
-      'PreviewDelivered': 'success',
-      'RevisionRequested': 'warning',
-      'ClientApproved': 'success',
-      'Completed': 'success',
-      'Cancelled': 'danger',
-      'CancelledByUser': 'danger',
-      'CancelledByAdmin': 'danger',
-      'Refunded': 'warning',
-      'Failed': 'danger',
-      'Archived': 'secondary'
-    };
-    return severityMap[status] || 'secondary';
+    return getOrderStatusSeverity(status);
   }
 
   getStatusLabel(status: OrderStatus): string {
-    const found = this.statuses.find(s => s.value === status);
-    return found?.label || status;
+    return getOrderStatusLabel(status);
   }
 
   getPrioritySeverity(priority: OrderPriority): string {
@@ -884,11 +840,32 @@ export class OrderListComponent implements OnInit, OnDestroy {
   // ═══ ACTION DIALOGS ═══
   openAssignDialog(order: Order): void {
     this.selectedOrder = order;
-    this.assignDesignerSuggestions = [];
-    this.selectedAssignDesigner = order.designerId
-      ? { id: order.designerId, label: 'Current designer — type to search and replace' }
-      : null;
+    const userId = this.getDesignerUserIdForAssign(order);
+    const label = this.getDesignerDisplayLabel(order);
+
+    if (userId && label) {
+      const current: UserPickOption = { id: userId, label };
+      this.selectedAssignDesigner = current;
+      this.assignDesignerSuggestions = [current];
+      this.userSearch$.next({ scope: 'ad', query: label.split(/\s+/)[0] ?? '' });
+    } else {
+      this.selectedAssignDesigner = null;
+      this.assignDesignerSuggestions = [];
+    }
     this.showAssignDialog = true;
+  }
+
+  /** Assign API expects designer UserId, not DesignerProfile.Id. */
+  private getDesignerUserIdForAssign(order: Order): string | null {
+    const userId = order.designer?.userId;
+    return userId ? String(userId) : null;
+  }
+
+  private getDesignerDisplayLabel(order: Order): string {
+    if (order.designer?.firstName || order.designer?.lastName) {
+      return `${order.designer.firstName ?? ''} ${order.designer.lastName ?? ''}`.trim();
+    }
+    return order.assignedDesignerDisplayName?.trim() ?? '';
   }
 
   assignDesigner(): void {

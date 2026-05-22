@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { RealtimeNotificationService } from '@core/services/realtime-notification.service';
+import { NotificationService } from '@core/services/notification.service';
 import { LoadingService } from '@core/services/loading.service';
 
 @Component({
@@ -50,12 +51,19 @@ export class AppComponent {
 
   constructor(
     private realtimeNotificationService: RealtimeNotificationService,
+    private notificationService: NotificationService,
     private router: Router,
     private messageService: MessageService,
     readonly loading: LoadingService
   ) {}
 
-  onToastClick(message: { data?: { redirectUrl?: string } }): void {
+  onToastClick(message: { data?: { redirectUrl?: string; notificationId?: string } }): void {
+    const notificationId = message.data?.notificationId?.trim();
+    if (notificationId) {
+      this.notificationService.markAsRead(notificationId).subscribe({
+        next: () => this.notificationService.refreshNotifications()
+      });
+    }
     const url = message.data?.redirectUrl?.trim();
     if (url) {
       this.router.navigateByUrl(url.startsWith('/') ? url : `/${url}`);

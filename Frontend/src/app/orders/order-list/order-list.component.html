@@ -434,12 +434,13 @@
           (completeMethod)="onAssignDesignerComplete($event)"
           field="label"
           [dropdown]="true"
-          placeholder="Type to search designers..."
+          [placeholder]="selectedAssignDesigner ? '' : 'Type to search designers...'"
           appendTo="body"
           styleClass="w-full"
           inputStyleClass="w-full">
         </p-autoComplete>
-        <small class="p-help">Loads designers from the server as you type (no full list download).</small>
+        <small class="p-help" *ngIf="selectedAssignDesigner">Current designer is selected. Type to search and replace.</small>
+        <small class="p-help" *ngIf="!selectedAssignDesigner">Loads designers from the server as you type (no full list download).</small>
       </div>
     </div>
     <ng-template pTemplate="footer">

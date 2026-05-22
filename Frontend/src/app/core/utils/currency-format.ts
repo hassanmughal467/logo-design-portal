@@ -28,6 +28,28 @@ export function localeForCurrency(code: string): string {
 /**
  * Formats a numeric amount with Intl (symbol + decimals). Unknown ISO codes fall back to USD.
  */
+/**
+ * Picks one ISO code when all sources agree; otherwise marks mixed (caller may fall back to USD).
+ */
+export function resolveSingleCurrencyCode(
+  sources: (string | null | undefined)[]
+): { code: string; mixed: boolean } {
+  const codes = [
+    ...new Set(
+      sources
+        .map((c) => (c ?? '').trim().toUpperCase())
+        .filter((c) => c.length === 3)
+    )
+  ];
+  if (codes.length === 1) {
+    return { code: codes[0], mixed: false };
+  }
+  if (codes.length > 1) {
+    return { code: DEFAULT_INVOICE_CURRENCY, mixed: true };
+  }
+  return { code: DEFAULT_INVOICE_CURRENCY, mixed: false };
+}
+
 export function formatCurrencyAmount(amount: number, currencyCode?: string | null): string {
   const c =
     currencyCode && currencyCode.trim()

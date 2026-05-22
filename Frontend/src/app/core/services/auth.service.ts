@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { ApiService } from './api.service';
 import { SharedListDataService } from './shared-list-data.service';
 import { DashboardService } from './dashboard.service';
-import { LoginRequest, LoginResponse, RegisterRequest, User } from '@shared/models/user.model';
+import { LoginRequest, LoginResponse, RegisterRequest, User, UserRole } from '@shared/models/user.model';
 import { environment } from '@environments/environment';
 
 const useCookieAuth = !!(environment as { useCookieAuth?: boolean }).useCookieAuth;
@@ -173,9 +173,11 @@ export class AuthService {
   }
 
   private setAuthData(response: LoginResponse): void {
+    const raw = response.user as User & { Id?: string };
     const user: User = {
-      ...response.user,
-      role: (response.user as any).roleName || (response.user as any).role || 'Client'
+      ...raw,
+      id: String(raw.id ?? raw.Id ?? ''),
+      role: (raw.roleName || raw.role || UserRole.Client) as UserRole
     };
 
     if (!useCookieAuth) {
@@ -220,7 +222,8 @@ export class AuthService {
         const userData = JSON.parse(userStr);
         const user: User = {
           ...userData,
-          role: userData.role || userData.roleName || 'Client'
+          id: String(userData.id ?? userData.Id ?? ''),
+          role: (userData.role || userData.roleName || UserRole.Client) as UserRole
         };
         this.currentUserSubject.next(user);
       } catch {
@@ -249,7 +252,8 @@ export class AuthService {
       const userData = JSON.parse(userStr);
       const user: User = {
         ...userData,
-        role: userData.role || userData.roleName || 'Client'
+        id: String(userData.id ?? userData.Id ?? ''),
+        role: (userData.role || userData.roleName || UserRole.Client) as UserRole
       };
       if (!tokenExpired) {
         this.accessToken = storedToken;

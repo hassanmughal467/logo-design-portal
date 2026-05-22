@@ -1,10 +1,11 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { DashboardService } from './dashboard.service';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
 import { SharedListDataService } from './shared-list-data.service';
+import { OrderStatus } from '@shared/models/order.model';
 
 describe('DashboardService', () => {
   let service: DashboardService;
@@ -60,6 +61,102 @@ describe('DashboardService', () => {
 
     service.getDashboardData().subscribe(() => {
       expect(apiService.get).toHaveBeenCalledWith('orders/my-orders');
+      done();
+    });
+  });
+
+  it('still counts orders when gallery request fails for Client', (done) => {
+    authService.getCurrentUser.and.returnValue({
+      id: '1',
+      email: 'c@test.com',
+      firstName: 'C',
+      lastName: 'L',
+      role: 'Client'
+    } as any);
+    const sampleOrder = [
+      {
+        id: 'order-1',
+        title: 'Test',
+        status: OrderStatus.WaitingForAdminApproval,
+        createdAt: new Date().toISOString()
+      }
+    ];
+    apiService.get.withArgs('orders/my-orders').and.returnValue(of(sampleOrder));
+    apiService.get.withArgs('gallery/my-gallery').and.returnValue(throwError(() => new Error('gallery down')));
+    apiService.get.and.returnValue(of([]));
+    notificationService.getNotifications.and.returnValue(of([]));
+
+    service.getDashboardData().subscribe((data) => {
+      expect(data.stats.totalOrders).toBe(1);
+      expect(data.stats.activeOrders).toBe(1);
+      done();
+    });
+  });
+
+  it('counts WaitingForAdminApproval as active for Client dashboard stats', (done) => {
+    authService.getCurrentUser.and.returnValue({
+      id: '1',
+      email: 'c@test.com',
+      firstName: 'C',
+      lastName: 'L',
+      role: 'Client'
+    } as any);
+    apiService.get.withArgs('orders/my-orders').and.returnValue(
+      of([
+        {
+          id: 'order-1',
+          title: 'Test',
+          status: OrderStatus.WaitingForAdminApproval,
+          createdAt: new Date().toISOString()
+        }
+      ])
+    );
+    apiService.get.and.returnValue(of([]));
+    notificationService.getNotifications.and.returnValue(of([]));
+
+    service.getDashboardData().subscribe((data) => {
+      expect(data.stats.totalOrders).toBe(1);
+      expect(data.stats.activeOrders).toBe(1);
+      expect(data.stats.pendingOrders).toBe(1);
+      expect(data.recentOrders.length).toBe(1);
+      done();
+    });
+  });
+
+  it('getDashboardData resolves GBP revenue currency for SuperAdmin completed orders', (done) => {
+    authService.getCurrentUser.and.returnValue({
+      id: '1',
+      email: 'a@test.com',
+      firstName: 'A',
+      lastName: 'D',
+      role: 'SuperAdmin'
+    } as any);
+    sharedListData.getAllOrdersAdmin.and.returnValue(
+      of([
+        {
+          Id: 'o1',
+          Title: 'L1',
+          Status: 'Completed',
+          CurrencyCode: 'GBP',
+          ClientChargePrice: 3,
+          CreatedAt: new Date().toISOString()
+        },
+        {
+          Id: 'o2',
+          Title: 'L2',
+          Status: 'Completed',
+          CurrencyCode: 'GBP',
+          ClientChargePrice: 6,
+          CreatedAt: new Date().toISOString()
+        }
+      ])
+    );
+    apiService.get.and.returnValue(of([]));
+    notificationService.getNotifications.and.returnValue(of([]));
+
+    service.getDashboardData().subscribe((data) => {
+      expect(data.revenueCurrencyCode).toBe('GBP');
+      expect(data.stats.totalRevenue).toBe(9);
       done();
     });
   });

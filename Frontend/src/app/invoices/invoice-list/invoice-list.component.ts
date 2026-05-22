@@ -4,9 +4,13 @@ import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { BillingService, BillingQueueOverview, BillingEligibleOrder } from '@core/services/billing.service';
 import { LazyLoadEvent, MessageService } from 'primeng/api';
-import { Subject, firstValueFrom, of } from 'rxjs';
+import { Subject, firstValueFrom, forkJoin, of } from 'rxjs';
 import { takeUntil, catchError, finalize, map } from 'rxjs/operators';
-import { DEFAULT_INVOICE_CURRENCY, formatCurrencyAmount } from '@core/utils/currency-format';
+import {
+  DEFAULT_INVOICE_CURRENCY,
+  formatCurrencyAmount,
+  resolveSingleCurrencyCode
+} from '@core/utils/currency-format';
 
 export interface InvoiceItem {
   id: string;
@@ -112,6 +116,11 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   showPaymentDialog = false;
   paymentMethod = '';
   selectedInvoiceTabIndex = 0;
+
+  /** Currency for KPI cards and week/month summaries (from loaded invoices). */
+  statsDisplayCurrency = DEFAULT_INVOICE_CURRENCY;
+  statsCurrencyMixed = false;
+  private invoiceCurrencySources: string[] = [];
 
   private destroy$ = new Subject<void>();
   /** Avoid duplicate auto-open when route id unchanged. */
@@ -273,6 +282,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         if (response) {
           const { items, total } = this.parsePagedInvoicesResponse(response);
           this.tabInvoices = items;
+          this.trackInvoiceCurrencies(items);
           this.listTotalRecords = total;
           this.tableFirst = (page - 1) * pageSize;
           this.tableRows = pageSize;
@@ -320,21 +330,27 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   loadInvoiceData(): void {
     if (!this.hasInvoicesLoadedOnce) {
       this.isInvoicesLoading = true;
+      this.invoiceCurrencySources = [];
     } else {
       this.isInvoicesRefreshing = true;
     }
 
-    this.apiService
-      .get<any>('invoices/statistics')
-      .pipe(
-        takeUntil(this.destroy$),
+    forkJoin({
+      stats: this.apiService.get<any>('invoices/statistics').pipe(catchError(() => of(null))),
+      currencyProbe: this.apiService.get<any>('invoices?page=1&pageSize=100').pipe(
         catchError(() => of(null)),
-        map((stats) => {
-          this.applyInvoiceStatistics(stats);
-          return stats;
-        })
+        map((response) => (response ? this.parseInvoicesListResponse(response) : []))
       )
-      .subscribe(() => {
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(({ stats, currencyProbe }) => {
+        this.applyInvoiceStatistics(stats);
+        if (currencyProbe.length > 0) {
+          if (!this.hasInvoicesLoadedOnce) {
+            this.invoiceCurrencySources = [];
+          }
+          this.trackInvoiceCurrencies(currencyProbe);
+        }
         this.cdr.markForCheck();
         const page = Math.floor(this.tableFirst / this.tableRows) + 1;
         this.loadTabInvoicesPage(page, this.tableRows, !this.hasInvoicesLoadedOnce);
@@ -696,9 +712,18 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     return formatCurrencyAmount(amount, currencyCode ?? DEFAULT_INVOICE_CURRENCY);
   }
 
-  /** Dashboard KPIs / week-month stats (amounts may mix currencies server-side). */
+  /** KPI cards and week/month summaries — matches table when all invoices share one currency. */
   formatStatCurrency(amount: number): string {
-    return formatCurrencyAmount(amount, DEFAULT_INVOICE_CURRENCY);
+    return formatCurrencyAmount(amount, this.statsDisplayCurrency);
+  }
+
+  private trackInvoiceCurrencies(invoices: Invoice[]): void {
+    for (const inv of invoices) {
+      this.invoiceCurrencySources.push(this.invoiceDisplayCurrency(inv));
+    }
+    const resolved = resolveSingleCurrencyCode(this.invoiceCurrencySources);
+    this.statsDisplayCurrency = resolved.code;
+    this.statsCurrencyMixed = resolved.mixed;
   }
 
   invoiceDisplayCurrency(invoice: Invoice): string {

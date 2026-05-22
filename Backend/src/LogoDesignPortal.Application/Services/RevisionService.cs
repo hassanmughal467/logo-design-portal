@@ -559,7 +559,7 @@ public class RevisionService : IRevisionService
 
         if (isClientApproval)
         {
-            // Client approved: notify Admin/SuperAdmin and assigned Designer.
+            // Client approved final logo: bell notification for Admin/SuperAdmin only (admin marks Completed next).
             var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
             if (string.IsNullOrEmpty(clientName)) clientName = "Client";
             var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
@@ -569,33 +569,13 @@ public class RevisionService : IRevisionService
             {
                 await _notificationService.CreateNotificationForRoleAsync("Admin", approveTitle, approveMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, approvedBy);
                 await _notificationService.CreateNotificationForRoleAsync("SuperAdmin", approveTitle, approveMessage, NotificationType.OrderStatusChange, NotificationReferenceType.Order, orderId, approvedBy);
-                if (order.DesignerId.HasValue)
-                {
-                    var designerUserId = await _context.DesignerProfiles
-                        .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
-                        .Select(d => d.UserId)
-                        .FirstOrDefaultAsync();
-                    if (designerUserId != Guid.Empty)
-                    {
-                        await _notificationService.CreateNotificationAsync(
-                            designerUserId,
-                            approveTitle,
-                            $"Client approved the logo for order (#{orderNumber}). Admin will finalize completion.",
-                            NotificationType.OrderStatusChange,
-                            orderId,
-                            NotificationReferenceType.Order,
-                            orderId,
-                            approvedBy
-                        );
-                    }
-                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create client-approved notifications for order {OrderId}.", orderId);
             }
 
-            // Real-time: notify Admin/SuperAdmin and assigned designer.
+            // Real-time grid sync: Admin/SuperAdmin and assigned designer (no designer bell notification).
             var adminUserIds = await GetAdminAndSuperAdminUserIdsAsync();
             var recipients = adminUserIds.ToList();
             if (order.DesignerId.HasValue)

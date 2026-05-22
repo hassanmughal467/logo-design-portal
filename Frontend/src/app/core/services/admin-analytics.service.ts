@@ -8,6 +8,8 @@ export interface AnalyticsOverview {
   ordersThisMonth: number;
   ordersThisYear: number;
   totalRevenue: number;
+  revenueCurrencyCode?: string;
+  revenueCurrencyMixed?: boolean;
   monthlyRevenue: number;
   averageOrderValue: number;
   totalClients: number;

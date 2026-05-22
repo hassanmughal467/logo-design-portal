@@ -24,6 +24,9 @@ public class AnalyticsOverviewDto
     public int OrdersThisMonth { get; set; }
     public int OrdersThisYear { get; set; }
     public decimal TotalRevenue { get; set; }
+    /// <summary>ISO 4217 code when all completed orders share one currency; otherwise USD with <see cref="RevenueCurrencyMixed"/>.</summary>
+    public string RevenueCurrencyCode { get; set; } = "USD";
+    public bool RevenueCurrencyMixed { get; set; }
     public decimal MonthlyRevenue { get; set; }
     public decimal AverageOrderValue { get; set; }
     public int TotalClients { get; set; }

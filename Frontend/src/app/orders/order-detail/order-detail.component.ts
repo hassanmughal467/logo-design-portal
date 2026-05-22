@@ -9,6 +9,7 @@ import { Subject, Subscription } from 'rxjs';
 import { takeUntil, finalize, timeout } from 'rxjs/operators';
 import { Order, OrderStatus } from '@shared/models/order.model';
 import { isOrderLocked } from '@shared/utils/order-locking';
+import { getOrderStatusLabel, getOrderStatusSeverity } from '@shared/utils/order-status-display';
 import { LogoFile, FileType } from '@shared/models/file.model';
 import { OrderRevision, RevisionAttachment } from '@shared/models/revision.model';
 import { OrderComment, OrderCommentUnreadCounts } from '@shared/models/comment.model';
@@ -1210,31 +1211,11 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   formatStatus(status: string): string {
-    const labelMap: { [key: string]: string } = {
-      'ClientApproved': 'Approved',
-      'PreviewDelivered': 'Preview Delivered',
-      'RevisionRequested': 'Revision Requested',
-      'WaitingForAdminApproval': 'Waiting For Admin Approval',
-      'PriceApprovalPending': 'Price Approval Pending',
-      'InProgress': 'In Progress',
-      'CancelledByUser': 'Cancelled By User',
-      'CancelledByAdmin': 'Cancelled By Admin'
-    };
-    return labelMap[status] || status.replace(/([A-Z])/g, ' $1').trim();
+    return getOrderStatusLabel(status);
   }
 
   getStatusSeverity(status: string): string {
-    const severityMap: { [key: string]: string } = {
-      'WaitingForAdminApproval': 'warning',
-      'PriceApprovalPending': 'info',
-      'InProgress': 'info',
-      'PreviewDelivered': 'success',
-      'RevisionRequested': 'warn',
-      'ClientApproved': 'success',
-      'Completed': 'success',
-      'Cancelled': 'danger'
-    };
-    return severityMap[status] || 'secondary';
+    return getOrderStatusSeverity(status);
   }
 
   canApproveOrder(): boolean {

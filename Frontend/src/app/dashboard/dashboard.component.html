@@ -226,7 +226,7 @@
               <div class="stat-icon-wrapper"><div class="stat-icon" [class]="'bg-' + stat.color"><i [class]="stat.icon"></i></div></div>
               <div class="stat-content">
                 <h3 class="stat-value">
-                  <span *ngIf="stat.isCurrency">$</span>{{ stat.isCurrency ? (stat.value | number:'1.2-2') : (stat.value | number) }}
+                  {{ formatStatValue(stat) }}
                 </h3>
                 <p class="stat-label">{{ stat.label }}</p>
               </div>
@@ -241,7 +241,7 @@
               <div class="stat-icon-wrapper"><div class="stat-icon" [class]="'bg-' + stat.color"><i [class]="stat.icon"></i></div></div>
               <div class="stat-content" [class.clickable]="stat.clickable" (click)="stat.clickable && navigateToRoute(stat.route)">
                 <h3 class="stat-value">
-                  <span *ngIf="stat.isCurrency">$</span>{{ stat.isCurrency ? (stat.value | number:'1.2-2') : (stat.value | number) }}
+                  {{ formatStatValue(stat) }}
                 </h3>
                 <p class="stat-label">{{ stat.label }}</p>
               </div>
@@ -611,7 +611,7 @@
           </div>
           <div class="stat-content" [class.clickable]="stat.clickable" (click)="stat.clickable && navigateToRoute(stat.route)">
             <h3 class="stat-value">
-              <span *ngIf="stat.isCurrency">$</span>{{ stat.isCurrency ? (stat.value | number:'1.2-2') : (stat.value | number) }}<span *ngIf="stat.suffix">{{ stat.suffix }}</span>
+              {{ formatStatValue(stat) }}<span *ngIf="stat.suffix">{{ stat.suffix }}</span>
             </h3>
             <p class="stat-label">{{ stat.label }}</p>
           </div>

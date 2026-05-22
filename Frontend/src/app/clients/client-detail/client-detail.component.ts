@@ -6,6 +6,7 @@ import { MessageService } from 'primeng/api';
 import { Subject, forkJoin } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus } from '@shared/models/order.model';
+import { getOrderStatusLabel, getOrderStatusSeverity } from '@shared/utils/order-status-display';
 
 export interface Client {
   id: string;
@@ -357,23 +358,20 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
   }
 
   formatStatus(status: string): string {
-    if (status === 'ClientApproved') return 'Approved';
-    return status.replace(/([A-Z])/g, ' $1').trim();
+    return getOrderStatusLabel(status);
   }
 
   getStatusSeverity(status: string): string {
-    const severityMap: { [key: string]: string } = {
-      'Pending': 'warning',
-      'InProgress': 'info',
-      'Review': 'secondary',
-      'ClientApproved': 'success',
-      'Completed': 'success',
-      'Cancelled': 'danger',
-      'Paid': 'success',
-      'Unpaid': 'warning',
-      'Overdue': 'danger'
+    const orderSeverity = getOrderStatusSeverity(status);
+    if (orderSeverity !== 'secondary') {
+      return orderSeverity;
+    }
+    const invoiceSeverityMap: Record<string, string> = {
+      Paid: 'success',
+      Unpaid: 'warning',
+      Overdue: 'danger'
     };
-    return severityMap[status] || 'secondary';
+    return invoiceSeverityMap[status] || 'secondary';
   }
 
   goBack(): void {

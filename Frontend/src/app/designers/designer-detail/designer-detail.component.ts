@@ -5,6 +5,7 @@ import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Order } from '@shared/models/order.model';
+import { getOrderStatusLabel, getOrderStatusSeverity } from '@shared/utils/order-status-display';
 
 export interface DesignerDetail {
   user: {
@@ -122,25 +123,20 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
   }
 
   formatStatus(status: string): string {
-    if (status === 'ClientApproved') return 'Approved';
-    return status.replace(/([A-Z])/g, ' $1').trim();
+    return getOrderStatusLabel(status);
   }
 
   getStatusSeverity(status: string): string {
-    const severityMap: { [key: string]: string } = {
-      'Pending': 'warning',
-      'InProgress': 'info',
-      'WaitingForAdminApproval': 'warning',
-      'PriceApprovalPending': 'info',
-      'Assigned': 'info',
-      'PreviewUploaded': 'info',
-      'Approved': 'success',
-      'ClientApproved': 'success',
-      'Completed': 'success',
-      'Cancelled': 'danger',
-      'RevisionRequested': 'warn'
+    const orderSeverity = getOrderStatusSeverity(status);
+    if (orderSeverity !== 'secondary') {
+      return orderSeverity;
+    }
+    const designerSeverityMap: Record<string, string> = {
+      Assigned: 'info',
+      PreviewUploaded: 'info',
+      Approved: 'success'
     };
-    return severityMap[status] || 'secondary';
+    return designerSeverityMap[status] || 'secondary';
   }
 
   goBack(): void {
