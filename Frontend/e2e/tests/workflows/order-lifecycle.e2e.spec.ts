@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { LoginPage, MainLayoutPage, OrdersListPage } from '../../pom';
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from '../../utils/env';
 import { apiUrl, cancelOrderApi, createOrderApi, getOrderApi, loginApi } from '../../utils/api-client';
-import { getAdminToken, provisionClientUser, teardownUsers } from '../../utils/api-helpers';
+import { getAdminToken, provisionLoggedInClient, teardownUsers } from '../../utils/api-helpers';
 import { uniqueSuffix } from '../../utils/test-data';
 
 /**
@@ -22,8 +22,7 @@ test.describe('Workflow — client order and admin approval', () => {
 
   test('client creates order in UI; admin approves in UI; API shows InProgress', async ({ page, request }) => {
     test.slow();
-    const adminAuth = await loginApi(request, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
-    const client = await provisionClientUser(request, adminAuth.token, test.info(), 'Test@123');
+    const client = await provisionLoggedInClient(request, test.info(), 'Test@123');
     cleanupIds.push(client.userId);
 
     const suffix = uniqueSuffix(test.info());
@@ -43,6 +42,7 @@ test.describe('Workflow — client order and admin approval', () => {
       orderTitle,
       'Automated end-to-end scenario — description meets minimum length.'
     );
+    await orders.orderDetail.closeIfOpen();
 
     await mainLayout.logout();
 
@@ -67,15 +67,15 @@ test.describe('Workflow — client order and admin approval', () => {
   });
 
   test('admin can reject a pending order via cancel API (backend contract)', async ({ request }) => {
-    const token = await getAdminToken(request);
-    const client = await provisionClientUser(request, token, test.info(), 'Test@123');
+    const client = await provisionLoggedInClient(request, test.info(), 'Test@123');
     cleanupIds.push(client.userId);
-    const clientToken = (await loginApi(request, client.email, client.password)).token;
+    const clientToken = client.token;
     const suffix = uniqueSuffix(test.info());
     const created = await createOrderApi(request, clientToken, {
       title: `E2E Cancel ${suffix}`,
       description: 'Order to be cancelled by admin for workflow negative path.',
     });
+    const token = await getAdminToken(request);
 
     await cancelOrderApi(request, token, created.id, 'E2E: admin rejects pending work — needs rewrite of brief.');
 

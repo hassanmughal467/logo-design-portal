@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createOrderApi, loginApi } from '../../utils/api-client';
+import { apiUrl, createOrderApi, loginApi } from '../../utils/api-client';
 import { getAdminToken, provisionClientUser, teardownUsers } from '../../utils/api-helpers';
 import { uniqueSuffix } from '../../utils/test-data';
 
@@ -20,8 +20,7 @@ test.describe('Security — invalid state transitions', () => {
       description: 'State machine must block illegal Completed transition.',
       price: 30,
     });
-    const res = await request.put(
-      `${process.env.E2E_API_URL ?? 'http://localhost:5000'}/api/orders/${order.id}/status`,
+    const res = await request.put(apiUrl(`/orders/${order.id}/status`),
       {
         headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
         data: { status: 'Completed', notes: '' },

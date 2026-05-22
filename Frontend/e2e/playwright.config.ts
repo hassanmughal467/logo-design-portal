@@ -9,20 +9,17 @@ import dotenv from 'dotenv';
  */
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-const adminStorageState = path.join(__dirname, '.auth', 'admin.json');
+const e2eRoot = __dirname;
+const testDir = path.join(e2eRoot, 'tests');
+const adminStorageState = path.join(e2eRoot, '.auth', 'admin.json');
+const outputDir = path.join(e2eRoot, 'test-results');
+const reportDir = path.join(e2eRoot, 'playwright-report');
 
-/** Artifacts next to this config (`e2e/`), keeps the Frontend root clean. */
-const outputDir = path.join(__dirname, 'test-results');
-const reportDir = path.join(__dirname, 'playwright-report');
+/** True on GitHub Actions — not when `e2e/.env` sets CI=true locally (that broke webServer). */
+const isCi = Boolean(process.env.CI) && Boolean(process.env.GITHUB_ACTIONS);
+/** Skip Playwright `webServer` when Angular is already on :4200 (see `e2e/.env`). */
+const reuseAppServer = process.env.E2E_REUSE_SERVER === 'true';
 
-const isCi = !!process.env.CI;
-
-/**
- * Worker count: Playwright default uses ~half of logical CPUs (good for local).
- * On CI we cap parallelism so Angular + API + DB are not starved (fewer flakes).
- *
- * Override anytime: `PW_WORKERS=6 npx playwright test ...`
- */
 function resolveWorkers(): number | undefined {
   if (process.env.PW_WORKERS !== undefined && process.env.PW_WORKERS !== '') {
     const n = parseInt(process.env.PW_WORKERS, 10);
@@ -37,15 +34,6 @@ function resolveWorkers(): number | undefined {
   return undefined;
 }
 
-/**
- * Retries: transient UI/network flakes without slowing every run on the happy path
- * (retries only execute after a failure).
- *
- * - CI: 2 (common default for forked PRs / shared runners)
- * - Local: 1 unless `E2E_RETRIES=0` for fastest feedback while iterating
- *
- * Override: `E2E_RETRIES=0|1|2|...`
- */
 function resolveRetries(): number {
   if (process.env.E2E_RETRIES !== undefined && process.env.E2E_RETRIES !== '') {
     const n = parseInt(process.env.E2E_RETRIES, 10);
@@ -54,10 +42,6 @@ function resolveRetries(): number {
   return isCi ? 2 : 1;
 }
 
-/**
- * Reporters: always write HTML to a stable folder; list gives fast terminal feedback.
- * `github` annotations only when CI is set (matches Actions).
- */
 function buildReporters(): ReporterDescription[] {
   const reporters: ReporterDescription[] = [
     ['list', { printSteps: false }],
@@ -76,20 +60,11 @@ function buildReporters(): ReporterDescription[] {
 }
 
 /**
- * Playwright configuration for the Logo Design Portal (Angular + ASP.NET API).
- *
- * Projects:
- * - `setup` — logs in once as the admin operator and writes `e2e/.auth/admin.json` (storageState).
- * - `admin-chromium` — role suites that should start already authenticated as that operator.
- * - `chromium` — anonymous / multi-actor flows (workflows log in as different users).
- *
- * Parallelism:
- * - `fullyParallel: true` + per-project workers so independent files run concurrently.
- * - `setup` runs first (no retries); `admin-chromium` and `chromium` run in parallel after it.
- * - Serial suites remain opt-in via `test.describe.configure({ mode: 'serial' })`.
+ * Playwright — Logo Design Portal E2E.
+ * `baseURL` / `ignoreHTTPSErrors` live only on global `use`; projects add devices (and auth state).
  */
 export default defineConfig({
-  testDir: './tests',
+  testDir,
   testMatch: '**/*.spec.ts',
   outputDir,
 
@@ -107,7 +82,8 @@ export default defineConfig({
   },
 
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:4200',
+    baseURL: 'http://localhost:4200',
+    ignoreHTTPSErrors: true,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: isCi ? 'retain-on-failure' : 'off',
@@ -135,7 +111,7 @@ export default defineConfig({
     {
       name: 'chromium',
       dependencies: [],
-      testIgnore: [/auth\.setup\.ts/, /roles\/admin\/.*\.spec\.ts/],
+      testIgnore: [/auth\.setup\.ts/, /roles\/admin\/.*\.spec\.ts/, /smoke\/.*\.spec\.ts/],
       fullyParallel: true,
       use: {
         ...devices['Desktop Chrome'],
@@ -145,16 +121,18 @@ export default defineConfig({
       name: 'mobile-chrome',
       dependencies: [],
       testMatch: /smoke\/.*\.spec\.ts/,
-      use: { ...devices['Pixel 5'] },
+      use: {
+        ...devices['Pixel 5'],
+      },
     },
   ],
 
-  webServer: isCi
+  webServer: reuseAppServer || isCi
     ? undefined
     : {
         command: 'npx ng serve --configuration=e2e --port 4200',
-        url: process.env.E2E_BASE_URL ?? 'http://localhost:4200',
-        reuseExistingServer: !isCi,
+        url: 'http://localhost:4200',
+        reuseExistingServer: true,
         timeout: 180_000,
       },
 });

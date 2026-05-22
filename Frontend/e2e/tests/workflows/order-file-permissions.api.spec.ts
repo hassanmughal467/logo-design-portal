@@ -1,22 +1,28 @@
 import { test, expect } from '@playwright/test';
-import { apiUrl, loginApi } from '../../utils/api-client';
-import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from '../../utils/env';
+import { apiUrl, getOrderApi } from '../../utils/api-client';
+import { getAdminToken, provisionLoggedInClient, teardownUsers } from '../../utils/api-helpers';
+import { uniqueSuffix } from '../../utils/test-data';
 
-/**
- * Happy-path API regression for order + file permissions (seeded test users).
- */
+/** Happy-path API regression for order + file permissions (provisioned Client user). */
 test.describe('Workflow — order file permissions API', () => {
-  test('client creates order and uploads reference png', async ({ request }) => {
-    const clientAuth = await loginApi(request, 'client@test.com', 'Test@123');
+  const cleanup: string[] = [];
+
+  test.afterAll(async ({ request }) => {
+    await teardownUsers(request, cleanup);
+  });
+
+  test('client creates order and uploads reference png', async ({ request }, testInfo) => {
+    const client = await provisionLoggedInClient(request, testInfo);
+    cleanup.push(client.userId);
 
     const create = await request.post(apiUrl('/orders'), {
       headers: {
-        Authorization: `Bearer ${clientAuth.token}`,
+        Authorization: `Bearer ${client.token}`,
         'Content-Type': 'application/json',
       },
       data: {
-        title: `E2E order ${Date.now()}`,
-        description: 'API workflow test',
+        title: `E2E order ${uniqueSuffix(testInfo)}`,
+        description: 'API workflow test with sufficient description length.',
         price: 75,
       },
     });
@@ -26,7 +32,7 @@ test.describe('Workflow — order file permissions API', () => {
 
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const upload = await request.post(apiUrl(`/files/upload/${order.id}`), {
-      headers: { Authorization: `Bearer ${clientAuth.token}` },
+      headers: { Authorization: `Bearer ${client.token}` },
       multipart: {
         file: { name: 'ref.png', mimeType: 'image/png', buffer: png },
         fileType: 'Reference',
@@ -35,20 +41,36 @@ test.describe('Workflow — order file permissions API', () => {
     expect(upload.ok()).toBeTruthy();
   });
 
-  test('admin assigns designer to client order', async ({ request }) => {
-    const clientAuth = await loginApi(request, 'client@test.com', 'Test@123');
+  test('admin assigns designer to client order', async ({ request }, testInfo) => {
+    const client = await provisionLoggedInClient(request, testInfo);
+    cleanup.push(client.userId);
+
     const create = await request.post(apiUrl('/orders'), {
       headers: {
-        Authorization: `Bearer ${clientAuth.token}`,
+        Authorization: `Bearer ${client.token}`,
         'Content-Type': 'application/json',
       },
-      data: { title: 'Assign flow', description: 'd', price: 100 },
+      data: {
+        title: `Assign flow ${uniqueSuffix(testInfo)}`,
+        description: 'Assign designer workflow order with valid description.',
+        price: 100,
+      },
     });
+    expect(create.status()).toBe(201);
     const order = (await create.json()) as { id: string };
 
-    const adminAuth = await loginApi(request, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
+    const adminToken = await getAdminToken(request);
+    const approve = await request.post(apiUrl(`/orders/${order.id}/approve`), {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      data: {},
+    });
+    expect(approve.ok()).toBeTruthy();
+
     const designers = await request.get(apiUrl('/users/designers'), {
-      headers: { Authorization: `Bearer ${adminAuth.token}` },
+      headers: { Authorization: `Bearer ${adminToken}` },
     });
     test.skip(!designers.ok(), 'Designer list endpoint unavailable in this environment');
 
@@ -58,7 +80,7 @@ test.describe('Workflow — order file permissions API', () => {
 
     const assign = await request.post(apiUrl(`/orders/${order.id}/assign`), {
       headers: {
-        Authorization: `Bearer ${adminAuth.token}`,
+        Authorization: `Bearer ${adminToken}`,
         'Content-Type': 'application/json',
       },
       data: { designerId: designerUserId },
@@ -66,22 +88,25 @@ test.describe('Workflow — order file permissions API', () => {
     expect(assign.ok()).toBeTruthy();
   });
 
-  test('client order detail masks designer', async ({ request }) => {
-    const clientAuth = await loginApi(request, 'client@test.com', 'Test@123');
+  test('client order detail masks designer', async ({ request }, testInfo) => {
+    const client = await provisionLoggedInClient(request, testInfo);
+    cleanup.push(client.userId);
+
     const create = await request.post(apiUrl('/orders'), {
       headers: {
-        Authorization: `Bearer ${clientAuth.token}`,
+        Authorization: `Bearer ${client.token}`,
         'Content-Type': 'application/json',
       },
-      data: { title: 'Mask check', description: 'd', price: 20 },
+      data: {
+        title: `Mask check ${uniqueSuffix(testInfo)}`,
+        description: 'Masking regression order with valid description length.',
+        price: 20,
+      },
     });
+    expect(create.status()).toBe(201);
     const order = (await create.json()) as { id: string };
 
-    const get = await request.get(apiUrl(`/orders/${order.id}`), {
-      headers: { Authorization: `Bearer ${clientAuth.token}` },
-    });
-    expect(get.ok()).toBeTruthy();
-    const body = await get.text();
-    expect(body.toLowerCase()).not.toContain('designer@test.com');
+    const body = await getOrderApi(request, client.token, order.id);
+    expect(JSON.stringify(body).toLowerCase()).not.toContain('designer@test.com');
   });
 });

@@ -1,13 +1,16 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import { gotoExpectUnauthenticatedRedirect } from '../../utils/nav';
 
 test.describe('Auth — unauthorized redirects', () => {
   test('orders route without session redirects to login', async ({ page }) => {
-    await page.goto('/orders');
-    await expect(page).toHaveURL(/\/auth\/login|\/login/);
+    await gotoExpectUnauthenticatedRedirect(page, '/orders');
   });
 
   test('invoices route without session redirects to login', async ({ page }) => {
-    await page.goto('/invoices');
-    await expect(page).toHaveURL(/\/auth\/login|\/login/);
+    // Invoices lazy chunk is large; allow extra time before AuthGuard redirect completes.
+    await gotoExpectUnauthenticatedRedirect(page, '/invoices', {
+      navigationTimeout: 90_000,
+      redirectTimeout: 45_000,
+    });
   });
 });

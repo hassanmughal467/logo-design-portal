@@ -3,14 +3,15 @@
  * Values are supplied via `e2e/.env`, the shell, or CI workflow env — never hard-code secrets.
  */
 
-/** Web origin where the Angular app is served (Playwright `baseURL`). */
-export const E2E_BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200';
+/** Web origin where the Angular app is served. Must match `PLAYWRIGHT_BASE_URL` in `playwright.config.ts`. */
+export const E2E_BASE_URL = 'http://localhost:4200';
 
 /**
  * ASP.NET API root (no trailing `/api`). The frontend `environment.e2e.ts` should match this
  * so UI and `request` calls hit the same backend.
  */
-export const E2E_API_URL = process.env.E2E_API_URL ?? 'http://localhost:5000';
+/** IIS Express / Visual Studio local API (matches `environment.development.ts`). */
+export const E2E_API_URL = process.env.E2E_API_URL ?? 'https://localhost:44398';
 
 /** Primary privileged operator for admin / SuperAdmin UI scenarios (seeded on fresh DB). */
 export const E2E_ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'superadmin@logodesign.com';

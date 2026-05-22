@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { protectedProbe } from '../../commands/auth.commands';
+import { apiUrl } from '../../utils/api-client';
 
 test.describe('Auth — token expiry / tampering', () => {
   test('expired-style JWT is rejected', async ({ request }) => {
@@ -11,8 +12,7 @@ test.describe('Auth — token expiry / tampering', () => {
   });
 
   test('refresh with invalid token returns 400 or 401', async ({ request }) => {
-    const res = await request.post(
-      `${process.env.E2E_API_URL ?? 'http://localhost:5000'}/api/auth/refresh-token`,
+    const res = await request.post(apiUrl('/auth/refresh-token'),
       {
         data: { refreshToken: 'invalid-refresh' },
         headers: { 'Content-Type': 'application/json' },

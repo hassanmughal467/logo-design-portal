@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import {
+  apiUrl,
   approveOrderApi,
   assignDesignerApi,
   createInvoiceApi,
@@ -48,8 +49,7 @@ test.describe('Invoices — lifecycle', () => {
     const paid = await getInvoiceApi(request, clientAuth.token, invoice.id);
     expect(String(paid.status).toLowerCase()).toMatch(/paid/);
 
-    const dup = await request.put(
-      `${process.env.E2E_API_URL ?? 'http://localhost:5000'}/api/invoices/${invoice.id}/mark-paid`,
+    const dup = await request.put(apiUrl(`/invoices/${invoice.id}/mark-paid`),
       {
         headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
         data: { paymentMethod: 'BankTransfer' },

@@ -29,7 +29,9 @@ export class OrdersListPage extends BasePage {
   }
 
   async openCreateOrderModal(): Promise<void> {
-    await this.page.getByTestId(OrdersListSelectors.openCreate).click();
+    const createBtn = this.page.getByTestId(OrdersListSelectors.openCreate);
+    await expect(createBtn).toBeVisible({ timeout: 30_000 });
+    await createBtn.click();
     await this.createOrder.expectVisible();
   }
 

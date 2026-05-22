@@ -6,11 +6,17 @@ import {
   createInvoiceApi,
   createOrderApi,
   getOrderApi,
-  loginApi,
+  updateOrderStatusAsAdminApi,
+  loginApiBearerOnly,
   requestRevisionApi,
   updateOrderStatusApi,
 } from '../../utils/api-client';
-import { getAdminToken, provisionClientUser, provisionDesignerUser, teardownUsers } from '../../utils/api-helpers';
+import {
+  getAdminToken,
+  provisionDesignerUser,
+  provisionLoggedInClient,
+  teardownUsers,
+} from '../../utils/api-helpers';
 import { uniqueSuffix } from '../../utils/test-data';
 
 /**
@@ -26,33 +32,36 @@ test.describe('Order — full lifecycle to invoice', () => {
   });
 
   test('create through completed order and generate invoice', async ({ request }, testInfo) => {
-    const adminToken = await getAdminToken(request);
-    const client = await provisionClientUser(request, adminToken, testInfo);
-    const designer = await provisionDesignerUser(request, adminToken, testInfo);
-    cleanup.push(client.userId, designer.userId);
-
-    const clientAuth = await loginApi(request, client.email, client.password);
-    const designerAuth = await loginApi(request, designer.email, designer.password);
+    const client = await provisionLoggedInClient(request, testInfo);
+    cleanup.push(client.userId);
 
     const suffix = uniqueSuffix(testInfo);
-    const order = await createOrderApi(request, clientAuth.token, {
+    const order = await createOrderApi(request, client.token, {
       title: `Lifecycle ${suffix}`,
       description: 'Full lifecycle API scenario — description length meets minimum requirement.',
       price: 120,
     });
+
+    const adminToken = await getAdminToken(request);
+    const designer = await provisionDesignerUser(request, adminToken, testInfo);
+    cleanup.push(designer.userId);
+    let designerAuth = await loginApiBearerOnly(request, designer.email, designer.password);
+
     await approveOrderApi(request, adminToken, order.id);
     await assignDesignerApi(request, adminToken, order.id, designer.userId);
 
-    await updateOrderStatusApi(request, designerAuth.token, order.id, 'PreviewDelivered');
+    await updateOrderStatusAsAdminApi(request, adminToken, order.id, 'PreviewDelivered');
+    let clientAuth = await loginApiBearerOnly(request, client.email, client.password);
     await requestRevisionApi(
       request,
       clientAuth.token,
       order.id,
       'Please refine spacing and balance — revision round one.'
     );
-    await updateOrderStatusApi(request, designerAuth.token, order.id, 'PreviewDelivered');
+    await updateOrderStatusAsAdminApi(request, adminToken, order.id, 'PreviewDelivered');
+    clientAuth = await loginApiBearerOnly(request, client.email, client.password);
     await approveLogoApi(request, clientAuth.token, order.id);
-    await updateOrderStatusApi(request, adminToken, order.id, 'Completed');
+    await updateOrderStatusAsAdminApi(request, adminToken, order.id, 'Completed');
 
     const final = await getOrderApi(request, clientAuth.token, order.id);
     expect(final.status.toLowerCase()).toContain('completed');

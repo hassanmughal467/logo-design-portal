@@ -1,5 +1,7 @@
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { E2E_BASE_URL } from '../../utils/env';
+import { appUrl } from '../../utils/nav';
 import { BasePage } from '../base.page';
 
 /** Routes and `data-testid` values for the login screen — single source of truth for locators. */
@@ -18,12 +20,25 @@ export class LoginPage extends BasePage {
   }
 
   async goto(): Promise<void> {
-    await this.page.goto('/auth/login');
+    const url = appUrl('/auth/login');
+    const response = await this.page.goto(url, { waitUntil: 'domcontentloaded' });
+    if (!response?.ok()) {
+      throw new Error(
+        `Login page did not load (${response?.status() ?? 'no response'} at ${url}). ` +
+          `Start the Angular app: cd Frontend && npx ng serve --port 4200 (or set E2E_REUSE_SERVER=true in e2e/.env only when it is already running at ${E2E_BASE_URL}).`
+      );
+    }
   }
 
   async login(email: string, password: string): Promise<void> {
-    await this.page.getByTestId(LoginSelectors.email).fill(email);
-    await this.page.getByTestId(LoginSelectors.password).locator('input').fill(password);
+    const emailInput = this.page.getByTestId(LoginSelectors.email);
+    await expect(emailInput).toBeVisible();
+    await emailInput.fill(email);
+    const passwordInput = this.page
+      .getByTestId(LoginSelectors.password)
+      .locator('input[type="password"]');
+    await expect(passwordInput).toBeVisible();
+    await passwordInput.fill(password);
     await this.page.getByTestId(LoginSelectors.submit).click();
   }
 

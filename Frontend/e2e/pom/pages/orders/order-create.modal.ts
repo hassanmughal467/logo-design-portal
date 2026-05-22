@@ -8,7 +8,8 @@ const minimalPng = Buffer.from(
 );
 
 const OrderCreateSelectors = {
-  modalHeading: /Create New Order/i,
+  /** PrimeNG p-dialog exposes the header as the dialog accessible name, not a heading role. */
+  dialogName: /Create New Order/i,
   title: 'order-create-title',
   description: 'order-create-description',
   submit: 'order-create-submit',
@@ -20,8 +21,12 @@ const OrderCreateSelectors = {
 export class OrderCreateModalPage {
   constructor(private readonly page: Page) {}
 
+  private dialog() {
+    return this.page.getByRole('dialog', { name: OrderCreateSelectors.dialogName });
+  }
+
   async expectVisible(): Promise<void> {
-    await expect(this.page.getByRole('heading', { name: OrderCreateSelectors.modalHeading })).toBeVisible();
+    await expect(this.dialog()).toBeVisible();
   }
 
   /** Attaches at least one file so submit passes reference-file validation. */
@@ -38,8 +43,6 @@ export class OrderCreateModalPage {
     await this.page.getByTestId(OrderCreateSelectors.description).fill(description);
     await this.attachMinimalReferenceFile();
     await this.page.getByTestId(OrderCreateSelectors.submit).click();
-    await expect(this.page.getByRole('heading', { name: OrderCreateSelectors.modalHeading })).toBeHidden({
-      timeout: 60_000,
-    });
+    await expect(this.dialog()).toBeHidden({ timeout: 60_000 });
   }
 }

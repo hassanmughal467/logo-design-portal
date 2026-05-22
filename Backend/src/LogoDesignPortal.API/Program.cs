@@ -14,6 +14,7 @@ using LogoDesignPortal.API.Middleware;
 using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.Infrastructure;
 using LogoDesignPortal.Infrastructure.Persistence;
+using LogoDesignPortal.Infrastructure.Persistence.Seeding;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -132,6 +133,14 @@ builder.Services.AddAuthentication(options =>
             if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
             {
                 context.Token = accessToken;
+                return Task.CompletedTask;
+            }
+
+            // Prefer explicit Bearer header over auth cookies (E2E/API clients send Bearer; cookies may be stale from a prior login).
+            var authorization = context.Request.Headers.Authorization.ToString();
+            if (!string.IsNullOrWhiteSpace(authorization)
+                && authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
                 return Task.CompletedTask;
             }
 
@@ -355,6 +364,20 @@ fileStorageInitializer.Initialize();
 
 // Recurring jobs (skipped in test environment).
 ScalabilityServiceRegistration.AddRecurringJobsIfEnabled(app.Environment);
+
+if (args.Contains("--repair-database", StringComparer.OrdinalIgnoreCase))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseRepair");
+    if (context.Database.IsRelational())
+    {
+        await context.Database.MigrateAsync();
+    }
+    await DatabaseStartupSeeder.EnsureRolesPermissionsAndLinksAsync(context, logger);
+    Log.Information("Database repair completed (roles, permissions, role-permission links).");
+    return;
+}
 
 try
 {

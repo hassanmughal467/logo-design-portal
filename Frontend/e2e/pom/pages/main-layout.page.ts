@@ -20,7 +20,13 @@ export class MainLayoutPage extends BasePage {
 
   async logout(): Promise<void> {
     await this.openUserMenu();
-    await this.page.getByRole('menuitem', { name: /^Logout$/i }).click();
+
+    await this.page.locator('.p-menu-overlay').waitFor({
+      state: 'visible',
+    });
+
+    await this.page.getByText('Logout').click();
+
     await this.page.waitForURL(/\/(auth\/)?login/);
   }
 

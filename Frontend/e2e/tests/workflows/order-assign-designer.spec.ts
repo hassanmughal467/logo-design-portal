@@ -6,7 +6,12 @@ import {
   loginApi,
   approveOrderApi,
 } from '../../utils/api-client';
-import { getAdminToken, provisionClientUser, provisionDesignerUser, teardownUsers } from '../../utils/api-helpers';
+import {
+  getAdminToken,
+  provisionDesignerUser,
+  provisionLoggedInClient,
+  teardownUsers,
+} from '../../utils/api-helpers';
 import { uniqueSuffix } from '../../utils/test-data';
 
 /**
@@ -22,17 +27,18 @@ test.describe('Assign designer workflow', () => {
   });
 
   test('admin assigns designer; designer sees order in assigned-orders', async ({ request }, testInfo) => {
-    const adminToken = await getAdminToken(request);
-    const client = await provisionClientUser(request, adminToken, testInfo);
-    const designer = await provisionDesignerUser(request, adminToken, testInfo);
-    cleanup.push(client.userId, designer.userId);
+    const client = await provisionLoggedInClient(request, testInfo);
+    cleanup.push(client.userId);
 
-    const clientAuth = await loginApi(request, client.email, client.password);
     const suffix = uniqueSuffix(testInfo);
-    const order = await createOrderApi(request, clientAuth.token, {
+    const order = await createOrderApi(request, client.token, {
       title: `Assign test ${suffix}`,
       description: 'Designer assignment E2E — minimum description length ok.',
     });
+
+    const adminToken = await getAdminToken(request);
+    const designer = await provisionDesignerUser(request, adminToken, testInfo);
+    cleanup.push(designer.userId);
 
     await approveOrderApi(request, adminToken, order.id);
     await assignDesignerApi(request, adminToken, order.id, designer.userId);
