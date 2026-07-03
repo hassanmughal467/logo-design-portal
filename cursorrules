@@ -1,0 +1,304 @@
+# Hawk Merchandising Portal — Cursor Rules
+# Place this file at the project root (same level as Backend/ and Frontend/)
+# Cursor reads this automatically in every session — no need to re-explain the stack.
+#
+# NOTE: The maintained source of truth is AGENTS.md (root) and the docs/ set:
+# docs/architecture.md, docs/module-map.md, docs/api.md, docs/database.md,
+# docs/coding-rules.md, docs/testing-plan.md, docs/deployment.md,
+# docs/incident-response.md, docs/PRODUCTION_READINESS_CHECKLIST.md.
+# If this file and AGENTS.md ever disagree, AGENTS.md wins.
+
+## Project identity
+This is the Hawk Merchandising Web Portal — a B2B platform for outsourced logo and
+merchandising design. Clients submit work, admins coordinate designers, billing runs
+in USD (clients) and PKR (designer payouts).
+
+---
+
+## Tech stack
+
+### Backend
+- Runtime: .NET 8 (ASP.NET Core)
+- Architecture: Clean Architecture — 4 layers in strict dependency order:
+  Domain → Application → Infrastructure → API
+- ORM: EF Core 8 + Pomelo.EntityFrameworkCore.MySql
+- Database: MySQL 8
+- Cache: Redis 6+ (StackExchange.Redis)
+- Auth: JWT Bearer + HttpOnly cookies (ldp_access, ldp_refresh) + CSRF double-submit (ldp_csrf / X-XSRF-TOKEN)
+- Background jobs: Hangfire (Redis storage in prod, in-memory in dev)
+- Real-time: SignalR hub at /hubs/notifications (Redis backplane in prod)
+- PDF: QuestPDF
+- HTTP resilience: Polly
+- Logging: Serilog (structured)
+- Mapping: AutoMapper
+- Password hashing: BCrypt
+- Testing: xUnit + Moq + WebApplicationFactory
+
+### Frontend
+- Framework: Angular 17
+- UI library: PrimeNG 17 — NO Material UI ever
+- Charts: ApexCharts (primary), Chart.js (legacy — consolidating to ApexCharts)
+- Real-time: @microsoft/signalr
+- Reactive: RxJS
+- State: Services + RxJS (no NgRx)
+- Unit tests: Karma + Jasmine
+- E2E tests: Playwright
+
+---
+
+## Project structure
+
+```
+Web Portal/
+├── Backend/
+│   ├── LogoDesignPortal.sln
+│   └── src/
+│       ├── LogoDesignPortal.Domain/           # Entities, enums, OrderStatusStateMachine
+│       ├── LogoDesignPortal.Application/      # Services, DTOs, interfaces, business logic
+│       ├── LogoDesignPortal.Infrastructure/   # EF Core, JWT, Redis, email, file storage
+│       ├── LogoDesignPortal.API/              # Controllers, middleware, SignalR, Hangfire, Program.cs
+│       ├── LogoDesignPortal.Domain.Tests/
+│       ├── LogoDesignPortal.Application.Tests/
+│       └── LogoDesignPortal.API.IntegrationTests/
+├── Frontend/
+│   ├── src/app/                # Feature modules
+│   ├── src/environments/       # environment.ts per environment
+│   └── e2e/                    # Playwright tests
+├── ops/                        # Deployment and backup scripts (PowerShell)
+├── docs/                       # Architecture and ops documentation
+└── .github/workflows/          # CI/CD pipelines
+```
+
+---
+
+## Roles and permissions
+
+| Role | Access level |
+|------|-------------|
+| Client | Orders, quotes, invoices, gallery, payments |
+| Designer | Assigned orders, file uploads, payout info — NO client PII |
+| Admin | Full operations — cannot edit permission matrix |
+| SuperAdmin | Everything — bypasses [RequirePermission] checks |
+
+16 granular permissions supplement roles (CreateOrder, AssignOrder, UploadFile, etc.)
+
+---
+
+## Absolute rules — never break these
+
+1. **Clean Architecture boundaries**: Domain has zero dependencies on other layers.
+   Application depends only on Domain. Infrastructure depends on Application + Domain.
+   API depends on all. Never import Infrastructure directly into Domain or Application.
+
+2. **State machine is authoritative**: All order status changes MUST go through
+   `OrderStatusStateMachine` in the Domain layer. Never bypass it. Never set order
+   status directly on the entity from a service.
+
+3. **Server-side role masking**: Designer identity is never exposed to clients.
+   Client PII is never exposed to designers. This masking happens in Application
+   service DTOs — never rely on Angular guards alone.
+
+4. **API re-validates everything**: Never trust frontend-sent permissions or role claims
+   for business decisions. Every API endpoint re-checks authorization server-side.
+
+5. **No secrets in code**: JWT keys, DB passwords, SMTP credentials, API keys, Redis
+   connection strings — all must come from environment variables or User Secrets.
+   Never in appsettings.json committed to git. If you see a secret in code, flag it.
+
+6. **PrimeNG only**: Never suggest or add Angular Material, ng-bootstrap, or any other
+   UI component library. PrimeNG is the only permitted UI library.
+
+7. **Controllers stay thin**: Business logic belongs in Application services, not controllers.
+   Controllers only: parse request → call service → return response.
+
+8. **Tests required**: Any feature or fix that touches business logic needs a unit test
+   (Application.Tests) and ideally an integration test (API.IntegrationTests).
+
+---
+
+## Environments
+
+| Environment | .NET env | Angular build | Database | Redis |
+|-------------|----------|---------------|----------|-------|
+| Local dev | Development | ng serve | Local MySQL | Optional (in-memory fallback ok) |
+| CI/Testing | Testing | build:testing | InMemory/SQLite | Skipped |
+| Staging | Staging | build:staging | Staging MySQL | Required |
+| Production | Production | build:production | Production MySQL | Required |
+
+- Swagger: Development only
+- Hangfire dashboard: Admin and SuperAdmin only (HangfireAuthorizationFilter)
+- Kill switches: ProductionSafetyOptions (disable uploads, billing, payouts during deploys)
+
+---
+
+## Authentication flow
+
+- Cookie-based (default for browser): HttpOnly ldp_access + ldp_refresh + ldp_csrf CSRF token
+- Bearer token (E2E/testing): useCookieAuth: false in environment.testing.ts
+- SignalR: access_token query param
+- JWT validation: supports current key + previous key (rotation — see Jwt:PreviousKey config)
+
+---
+
+## Key services (Application layer — 29; full list in docs/module-map.md)
+
+Important ones to know:
+- `OrderService` — order CRUD, calls OrderStatusStateMachine for all status changes
+- `OrderStatusStateMachine` — authoritative state machine, Domain layer
+- `FileService` / `IFileStorageService` — file upload/download, supports Local + R2 providers
+- `JwtService` — token issue and validation (supports key rotation via PreviousKey)
+- `CurrencyService` — live USD/PKR rate via ExchangeRate-API, Redis cached, fallback safe
+- `HangfireAuthorizationFilter` — restricts /hangfire dashboard to Admin/SuperAdmin
+- `NotificationService` — SignalR push notifications
+- `InvoiceService` — invoice generation + QuestPDF rendering
+- `DesignerPayoutService` — PKR payout calculations
+
+---
+
+## File storage
+
+Provider is configured via `Storage:Provider` in appsettings:
+- `"Local"` — dev default, stores in Files/ / Files_Dev/ / Files_Staging/
+- `"R2"` — production/staging, Cloudflare R2 via AWSSDK.S3 (S3-compatible)
+
+All file access goes through authorized API endpoints — never direct public URLs
+unless `Storage:R2:PublicDomain` is configured. `UploadSecurityHelper` validates
+type, size, and duplicate window on every upload.
+
+---
+
+## Database conventions
+
+- Migrations live in: `LogoDesignPortal.Infrastructure/Migrations/`
+- Run migrations at release time — `Database:RunAfterStartup: false` in production
+- Never run raw SQL — always use EF Core migrations for schema changes
+- Connection string env var: `ConnectionStrings__DefaultConnection`
+
+---
+
+## Configuration hierarchy (highest wins)
+
+```
+Environment variables
+  └── appsettings.{Environment}.json
+        └── appsettings.json
+              └── User Secrets (Development only)
+```
+
+Key env vars:
+- `ConnectionStrings__DefaultConnection` — MySQL connection string
+- `ConnectionStrings__Redis` — Redis connection string
+- `Jwt__Key` — current JWT signing key (min 32 chars)
+- `Jwt__PreviousKey` — previous JWT key (rotation window)
+- `Storage__R2__AccountId` / `AccessKeyId` / `SecretAccessKey` — Cloudflare R2
+- `ExchangeRate__ApiKey` — ExchangeRate-API key
+- `SMTP credentials` — never committed
+
+---
+
+## CI/CD
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| pr-validation.yml | Pull requests | Fast PR checks |
+| test.yml | Push/PR to main, develop | Full backend + frontend tests, ≥80% coverage |
+| e2e-playwright.yml | Path-triggered | Full E2E with MySQL |
+| deploy-artifacts.yml | Tags v*.*.* | Build API zip + Angular dist |
+
+Deployment is manual to IIS via ops/deploy.ps1 (versioned releases + rollback).
+Rollback command: `.\ops\deploy.ps1 -Rollback`
+
+---
+
+## Coding style preferences
+
+### C# (.NET)
+- Use `async/await` throughout — no `.Result` or `.Wait()`
+- Use `CancellationToken` parameters on all async public methods
+- Use record types for DTOs where possible
+- Prefer `ILogger<T>` injected via constructor
+- Use `[RequirePermission("PermissionName")]` for granular permission checks
+- XML doc comments on all public interfaces and service methods
+- Guard clauses at the top of methods — fail fast, fail early
+
+### Angular / TypeScript
+- Use typed observables — never `any` unless absolutely unavoidable
+- Use `OnPush` change detection on new components
+- Services are singleton (providedIn: 'root') unless feature-scoped
+- Unsubscribe in ngOnDestroy or use `takeUntilDestroyed()`
+- All API calls go through a typed service — never HttpClient directly in components
+- PrimeNG components only — no custom UI from scratch if PrimeNG has it
+
+### General
+- No magic strings — use constants or enums
+- No commented-out code in commits
+- Every new file gets a corresponding test file
+- Ops scripts (PowerShell) use variables at the top for all configurable paths
+
+---
+
+## What NOT to do — ever
+
+- Do not add NgRx (no Redux pattern — RxJS services are the state solution)
+- Do not add MediatR or CQRS patterns (not in scope)
+- Do not add Angular Material or any UI library other than PrimeNG
+- Do not edit anything in Backend/ outside of Backend/src/ (legacy folders excluded)
+- Do not expose Swagger in Staging or Production environments
+- Do not hardcode any environment-specific URL, key, or credential
+- Do not set order status directly — always use OrderStatusStateMachine
+- Do not expose designer identity to client DTOs or vice versa
+- Do not create migrations manually — always use `dotnet ef migrations add`
+- Do not use `.Result` or `.Wait()` on async calls (deadlock risk in ASP.NET)
+
+---
+
+## Quick commands
+
+```bash
+# Run all backend tests
+cd Backend && dotnet test LogoDesignPortal.sln
+
+# Run backend only (dev)
+cd Backend/src/LogoDesignPortal.API && dotnet run
+
+# Run frontend (dev)
+cd Frontend && npm start
+
+# Add EF migration
+cd Backend/src/LogoDesignPortal.Infrastructure
+dotnet ef migrations add {MigrationName} --startup-project ../LogoDesignPortal.API
+
+# Deploy to IIS (staging/prod)
+.\ops\deploy.ps1 -Version "1.4.3"
+
+# Rollback IIS deploy
+.\ops\deploy.ps1 -Rollback
+
+# Run MySQL backup manually
+.\ops\backup-mysql.ps1
+
+# Format backend code
+cd Backend && dotnet format LogoDesignPortal.sln
+```
+
+---
+
+## Modules overview
+
+| Module | Backend controller | Frontend route | Roles |
+|--------|--------------------|----------------|-------|
+| Auth | AuthController | /auth/* | All |
+| Orders | OrdersController + StateMachine | /orders/* | Client, Designer, Admin |
+| Quotes | QuotesController | /quotes | Client, Admin |
+| Files | FilesController | /files/* | All (scoped) |
+| Revisions | RevisionsController | Order detail | Client, Admin |
+| Comments/Messages | CommentsController, MessagesController | /messages | All (masked) |
+| Notifications | NotificationsController + SignalR | /notifications | All |
+| Invoices/Billing | InvoicesController, BillingController | /invoices | Client, Admin |
+| Payments | PaymentsController | Embedded in invoices | Client |
+| Designer Payout | DesignerPayoutController | /financial/designer-payout | Admin |
+| Pricing | Pricing controllers | /client-pricing, /designer-pricing | Admin |
+| Analytics | Analytics controllers | /analytics, /financial | Admin |
+| Gallery | GalleryController | /gallery | Client only |
+| Users/Permissions | UsersController, RolesController | /users, /permissions | Admin, SuperAdmin |
+| Settings/Audit | SettingsController, AuditLogsController | /settings | SuperAdmin |

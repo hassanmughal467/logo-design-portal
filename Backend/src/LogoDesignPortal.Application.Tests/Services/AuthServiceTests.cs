@@ -24,7 +24,7 @@ public class AuthServiceTests
         _contextMock = new Mock<IApplicationDbContext>();
         _jwtTokenServiceMock = new Mock<IJwtTokenService>();
         _configurationMock = new Mock<IConfiguration>();
-        
+
         _authService = new AuthService(
             _contextMock.Object,
             _jwtTokenServiceMock.Object,
@@ -49,7 +49,7 @@ public class AuthServiceTests
 
         var usersMock = new Mock<DbSet<User>>();
         usersMock.Setup(m => m.FindAsync(It.IsAny<object[]>())).ReturnsAsync(user);
-        
+
         _contextMock.Setup(c => c.Users).Returns(usersMock.Object);
         _jwtTokenServiceMock.Setup(s => s.GenerateTokenAsync(It.IsAny<User>())).ReturnsAsync("test-token");
         _jwtTokenServiceMock.Setup(s => s.GenerateRefreshToken()).Returns("refresh-token");

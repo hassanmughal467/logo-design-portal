@@ -65,7 +65,9 @@ public class OrdersControllerPrivacyTests
         var body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
+        {
             return;
+        }
 
         foreach (var order in doc.RootElement.EnumerateArray())
         {

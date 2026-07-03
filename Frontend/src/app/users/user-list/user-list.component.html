@@ -404,6 +404,23 @@
             </div>
 
             <div class="form-field">
+              <label for="currencyCode">
+                <i class="pi pi-dollar"></i>
+                Default Currency <span class="required">*</span>
+              </label>
+              <p-dropdown
+                id="currencyCode"
+                formControlName="currencyCode"
+                [options]="currencyOptions"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Select currency"
+                styleClass="w-full">
+              </p-dropdown>
+              <small class="form-hint">Used for quotes, orders, and invoices for this client.</small>
+            </div>
+
+            <div class="form-field">
               <label for="contactName">
                 <i class="pi pi-user"></i>
                 Contact Name <span class="required">*</span>
@@ -965,6 +982,16 @@
             </div>
           </div>
 
+          <div class="detail-item" *ngIf="getClientProfile()?.currencyCode">
+            <div class="detail-icon">
+              <i class="pi pi-dollar"></i>
+            </div>
+            <div class="detail-content">
+              <div class="detail-label">Default Currency</div>
+              <div class="detail-value">{{ getClientProfile()?.currencyCode }}</div>
+            </div>
+          </div>
+
           <div class="detail-item" *ngIf="getClientProfile()?.contactName">
             <div class="detail-icon">
               <i class="pi pi-user"></i>
@@ -1412,6 +1439,22 @@
                 optionValue="value"
                 placeholder="Select customer type"
                 [showClear]="true"
+                styleClass="w-full">
+              </p-dropdown>
+            </div>
+
+            <div class="form-field">
+              <label for="editCurrencyCode">
+                <i class="pi pi-dollar"></i>
+                Default Currency
+              </label>
+              <p-dropdown
+                id="editCurrencyCode"
+                formControlName="currencyCode"
+                [options]="currencyOptions"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Select currency"
                 styleClass="w-full">
               </p-dropdown>
             </div>

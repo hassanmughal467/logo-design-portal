@@ -52,25 +52,56 @@
           <span class="kpi-label">Orders This Year</span>
         </div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-icon bg-secondary"><i class="pi pi-dollar"></i></div>
+      <div class="kpi-card" [class.kpi-card-multicurrency]="revenueCurrencyMixed">
+        <div class="kpi-icon bg-secondary"><i [class]="revenueIconClass"></i></div>
         <div class="kpi-content">
-          <span class="kpi-value">{{ formatCurrency(overview.totalRevenue) }}</span>
-          <span class="kpi-label">Total Revenue</span>
+          <ng-container *ngIf="!revenueCurrencyMixed; else totalRevenueMixed">
+            <span class="kpi-value">{{ formatCurrency(overview.totalRevenue) }}</span>
+            <span class="kpi-label">Total Revenue</span>
+          </ng-container>
+          <ng-template #totalRevenueMixed>
+            <span class="kpi-label kpi-label--top">Total Revenue</span>
+            <ul class="kpi-currency-list">
+              <li *ngFor="let row of revenueByCurrency">
+                <span class="kpi-currency-amount">{{ formatCurrencyLine(row, 'total') }}</span>
+                <span class="kpi-currency-meta">· {{ row.completedCount }} {{ row.completedCount === 1 ? 'order' : 'orders' }}</span>
+              </li>
+            </ul>
+          </ng-template>
         </div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-icon bg-success"><i class="pi pi-dollar"></i></div>
+      <div class="kpi-card" [class.kpi-card-multicurrency]="revenueCurrencyMixed">
+        <div class="kpi-icon bg-success"><i [class]="revenueIconClass"></i></div>
         <div class="kpi-content">
-          <span class="kpi-value">{{ formatCurrency(overview.monthlyRevenue != null ? overview.monthlyRevenue : overview.totalRevenue) }}</span>
-          <span class="kpi-label">Monthly Revenue</span>
+          <ng-container *ngIf="!revenueCurrencyMixed; else monthlyRevenueMixed">
+            <span class="kpi-value">{{ formatCurrency(overview.monthlyRevenue != null ? overview.monthlyRevenue : overview.totalRevenue) }}</span>
+            <span class="kpi-label">Monthly Revenue</span>
+          </ng-container>
+          <ng-template #monthlyRevenueMixed>
+            <span class="kpi-label kpi-label--top">Monthly Revenue</span>
+            <ul class="kpi-currency-list">
+              <li *ngFor="let row of revenueByCurrency">
+                <span class="kpi-currency-amount">{{ formatCurrencyLine(row, 'monthly') }}</span>
+              </li>
+            </ul>
+          </ng-template>
         </div>
       </div>
-      <div class="kpi-card">
+      <div class="kpi-card" [class.kpi-card-multicurrency]="revenueCurrencyMixed">
         <div class="kpi-icon bg-warning"><i class="pi pi-percentage"></i></div>
         <div class="kpi-content">
-          <span class="kpi-value">{{ formatCurrency(overview.averageOrderValue) }}</span>
-          <span class="kpi-label">Avg Order Value</span>
+          <ng-container *ngIf="!revenueCurrencyMixed; else aovMixed">
+            <span class="kpi-value">{{ formatCurrency(overview.averageOrderValue) }}</span>
+            <span class="kpi-label">Avg Order Value</span>
+          </ng-container>
+          <ng-template #aovMixed>
+            <span class="kpi-label kpi-label--top">Avg Order Value</span>
+            <ul class="kpi-currency-list">
+              <li *ngFor="let row of revenueByCurrency">
+                <span class="kpi-currency-amount">{{ formatCurrencyLine(row, 'aov') }}</span>
+              </li>
+            </ul>
+          </ng-template>
         </div>
       </div>
       <div class="kpi-card">

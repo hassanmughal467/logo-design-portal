@@ -10,9 +10,11 @@ using LogoDesignPortal.API.BackgroundJobs;
 using LogoDesignPortal.API.Configuration;
 using LogoDesignPortal.API.Services;
 using LogoDesignPortal.API.Hosting;
+using LogoDesignPortal.API.Infrastructure;
 using LogoDesignPortal.API.Middleware;
 using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.Infrastructure;
+using LogoDesignPortal.Infrastructure.Authentication;
 using LogoDesignPortal.Infrastructure.Persistence;
 using LogoDesignPortal.Infrastructure.Persistence.Seeding;
 using StackExchange.Redis;
@@ -24,6 +26,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Security.Claims;
@@ -99,7 +102,10 @@ if (builder.Environment.IsDevelopment())
 // Configure JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured. Use User Secrets (dev) or environment variables (production).");
 if (jwtKey.Length < 32)
+{
     throw new InvalidOperationException("JWT Key must be at least 32 characters for security. Use a strong random key in production.");
+}
+
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("JWT Issuer not configured");
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? throw new InvalidOperationException("JWT Audience not configured");
 
@@ -110,22 +116,27 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtIssuer,
-        ValidAudience = jwtAudience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-        ClockSkew = TimeSpan.FromMinutes(1),
-        RequireExpirationTime = true,
-        RequireSignedTokens = true
-    };
+    options.TokenValidationParameters = JwtSigningKeyRotationHelper.CreateTokenValidationParameters(
+        builder.Configuration,
+        jwtIssuer,
+        jwtAudience,
+        validateLifetime: true,
+        clockSkew: TimeSpan.FromMinutes(1));
     // SignalR uses WebSockets - token must come from query string (browsers don't support custom headers for WS)
     options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
     {
+        OnTokenValidated = context =>
+        {
+            if (JwtSigningKeyRotationHelper.WasSignedWithPreviousKey(context.SecurityToken))
+            {
+                var jwtLogger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("JwtAuthentication");
+                JwtSigningKeyRotationHelper.LogPreviousKeyValidationWarning(jwtLogger, builder.Configuration);
+            }
+
+            return Task.CompletedTask;
+        },
         OnMessageReceived = context =>
         {
             var accessToken = context.Request.Query["access_token"];
@@ -171,6 +182,7 @@ using (var scalabilityLoggerFactory = LoggerFactory.Create(b => b.AddConfigurati
         builder.Environment,
         scalabilityLogger);
     builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection(RateLimitingOptions.SectionName));
+    builder.Services.Configure<ScalabilityOptions>(builder.Configuration.GetSection(ScalabilityOptions.SectionName));
     ScalabilityServiceRegistration.AddHangfireForPortal(
         builder.Services,
         builder.Configuration,
@@ -207,9 +219,14 @@ builder.Services.Configure<InvoiceBrandingOptions>(
 
 // Background jobs: must register before AddApplication (Auth/Notification require IBackgroundJobScheduler).
 if (builder.Environment.IsEnvironment("Testing"))
+{
     builder.Services.AddSingleton<IBackgroundJobScheduler, NullBackgroundJobScheduler>();
+}
 else
+{
     builder.Services.AddSingleton<IBackgroundJobScheduler, HangfireBackgroundJobScheduler>();
+}
+
 builder.Services.AddTransient<EmailHangfireJobs>();
 builder.Services.AddTransient<MaintenanceHangfireJobs>();
 
@@ -239,7 +256,13 @@ var healthChecks = builder.Services.AddHealthChecks()
 
 var redisHealth = builder.Configuration.GetConnectionString("Redis") ?? builder.Configuration["Redis:Configuration"];
 if (!string.IsNullOrWhiteSpace(redisHealth))
-    healthChecks.AddRedis(redisHealth, name: "redis", tags: new[] { "ready" });
+{
+    healthChecks.AddRedis(
+        redisHealth,
+        name: "redis",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "ready" });
+}
 
 // File storage initialization at startup (ensures directories exist before first upload)
 builder.Services.AddSingleton<LogoDesignPortal.API.Services.FileStorageInitializer>();
@@ -285,10 +308,11 @@ if (app.Environment.IsDevelopment())
 // Forwarded headers first (required for IIS - correct scheme/host when behind reverse proxy)
 app.UseForwardedHeaders();
 
-app.UseMiddleware<SecurityHeadersMiddleware>();
-
-// CORS must run BEFORE authentication so preflight OPTIONS requests succeed without 401
+// CORS before auth and before other middleware that might short-circuit OPTIONS (IIS preflight fix)
+app.UseMiddleware<CorsPreflightMiddleware>();
 app.UseCors(CorsAllowedOrigins.PolicyName);
+
+app.UseMiddleware<SecurityHeadersMiddleware>();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<SlowRequestPerformanceMiddleware>();
@@ -303,12 +327,20 @@ app.UseSerilogRequestLogging(options =>
         diagnosticContext.Set("UserRole", string.IsNullOrEmpty(role) ? null : role);
         diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
         if (httpContext.Items.TryGetValue(CorrelationIdMiddleware.ItemKey, out var cid) && cid is string correlationId)
+        {
             diagnosticContext.Set("CorrelationId", correlationId);
+        }
+
         if (httpContext.Request.RouteValues.TryGetValue("orderId", out var oid) && oid != null)
+        {
             diagnosticContext.Set("OrderId", oid.ToString());
+        }
+
         if (httpContext.Request.RouteValues.TryGetValue("id", out var id) &&
             httpContext.Request.Path.Value?.Contains("/invoices", StringComparison.OrdinalIgnoreCase) == true)
+        {
             diagnosticContext.Set("InvoiceId", id.ToString());
+        }
     };
     options.MessageTemplate =
         "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms; UserId={UserId}";
@@ -327,9 +359,14 @@ app.UseAuthentication();
 app.UseMiddleware<CsrfValidationMiddleware>();
 app.UseAuthorization();
 
+app.UseMiddleware<HangfireDashboardAccessMiddleware>();
+
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
-    Authorization = new[] { new HangfireDashboardAuthorizationFilter() }
+    Authorization = new[] { new HangfireAuthorizationFilter() },
+    IsReadOnlyFunc = HangfireReadOnlyFilter.IsReadOnly,
+    DashboardTitle = "Hawk — Background Jobs",
+    StatsPollingInterval = 5000
 });
 
 // Security Middleware (after CORS and auth to allow preflight requests)

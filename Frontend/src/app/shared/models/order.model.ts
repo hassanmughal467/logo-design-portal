@@ -92,6 +92,12 @@ export interface Order {
   // Upload control fields
   allowUploads?: boolean;
   orderSource?: OrderSource;
+
+  // Unassigned Orders Alert System — populated when admin approves an order.
+  // approvedAt is non-null whenever an order has left the WaitingForAdminApproval queue.
+  // assignedAt is non-null whenever a designer has been assigned (combine with status === ApprovedUnassigned to detect "approved but never assigned").
+  approvedAt?: Date;
+  assignedAt?: Date;
 }
 
 export enum OrderSource {
@@ -100,11 +106,17 @@ export enum OrderSource {
   Quote = 'Quote'
 }
 
-/** Order lifecycle: WaitingForAdminApproval → PriceApprovalPending → InProgress →
+/** Order lifecycle: WaitingForAdminApproval → (ApprovedUnassigned →) InProgress →
  * PreviewDelivered → RevisionRequested → ClientApproved → Completed */
 export enum OrderStatus {
   WaitingForAdminApproval = 'WaitingForAdminApproval',
   PriceApprovalPending = 'PriceApprovalPending',
+  /**
+   * Approved by Admin without designer assignment. Surfaces in the SuperAdmin
+   * "Unassigned Orders Alert" widget so approved orders are never forgotten.
+   * Assigning a designer auto-transitions the order to {@link OrderStatus.InProgress}.
+   */
+  ApprovedUnassigned = 'ApprovedUnassigned',
   InProgress = 'InProgress',
   PreviewDelivered = 'PreviewDelivered',
   RevisionRequested = 'RevisionRequested',
@@ -140,6 +152,16 @@ export interface CreateOrderRequest {
 
 export interface AssignOrderRequest {
   designerId: string;
+  notes?: string;
+}
+
+/**
+ * Payload for POST /orders/{id}/approve.
+ * - Omit / null designerId → "Approve Only" → backend parks the order in {@link OrderStatus.ApprovedUnassigned}.
+ * - Provide designerId → "Approve & Assign Designer" → backend approves and assigns in one step → {@link OrderStatus.InProgress}.
+ */
+export interface ApproveOrderRequest {
+  designerId?: string | null;
   notes?: string;
 }
 

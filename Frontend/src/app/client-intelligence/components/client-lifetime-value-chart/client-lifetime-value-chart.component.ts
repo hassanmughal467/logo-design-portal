@@ -1,4 +1,5 @@
 import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { formatCurrencyAmount } from '@core/utils/currency-format';
 
 @Component({
   selector: 'app-client-lifetime-value-chart',
@@ -27,12 +28,18 @@ export class ClientLifetimeValueChartComponent implements OnChanges {
       legend: { position: 'bottom', horizontalAlign: 'center' },
       dataLabels: { enabled: true, formatter: (v: number) => v.toFixed(1) + '%' },
       tooltip: {
-        y: { formatter: (v: number) => '$' + v.toLocaleString() }
+        y: {
+          formatter: (v: number, opts: any) => {
+            const idx = opts?.seriesIndex ?? 0;
+            const code = displayItems[idx]?.currencyCode;
+            return formatCurrencyAmount(v, code);
+          }
+        }
       }
     };
   }
 
-  formatCurrency(value: number): string {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
+  formatCurrency(value: number, code?: string): string {
+    return formatCurrencyAmount(value, code);
   }
 }

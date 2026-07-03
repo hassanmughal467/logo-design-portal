@@ -29,6 +29,17 @@ public class EnvironmentAppSettingsValidationTests
     }
 
     [Theory]
+    [InlineData("Development", "Local")]
+    [InlineData("Testing", "Local")]
+    [InlineData("Staging", "R2")]
+    [InlineData("Production", "R2")]
+    public void AppSettings_StorageProvider_MatchesEnvironment(string envName, string expectedProvider)
+    {
+        var config = LoadMergedConfiguration(envName);
+        Assert.Equal(expectedProvider, config["Storage:Provider"], ignoreCase: true);
+    }
+
+    [Theory]
     [MemberData(nameof(DeployedEnvironments))]
     public void AppSettings_DeployedEnvironment_DisablesRunAfterStartupMigration(string envName)
     {
@@ -131,11 +142,15 @@ public class EnvironmentAppSettingsValidationTests
         {
             var candidate = Path.Combine(dir, "LogoDesignPortal.API", "appsettings.json");
             if (File.Exists(candidate))
+            {
                 return Path.Combine(dir, "LogoDesignPortal.API");
+            }
 
             var srcCandidate = Path.Combine(dir, "src", "LogoDesignPortal.API", "appsettings.json");
             if (File.Exists(srcCandidate))
+            {
                 return Path.Combine(dir, "src", "LogoDesignPortal.API");
+            }
 
             dir = Directory.GetParent(dir)?.FullName;
         }

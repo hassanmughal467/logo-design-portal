@@ -39,7 +39,7 @@ public class RequirePermissionAttribute : Attribute, IAsyncAuthorizationFilter
         if (permissionService == null)
         {
             // Deny access when permission service is not configured to prevent bypass in misconfigured environments
-            context.Result = new ForbidResult();
+            context.Result = PermissionDeniedResult("Permission service is not configured.");
             return;
         }
 
@@ -54,7 +54,11 @@ public class RequirePermissionAttribute : Attribute, IAsyncAuthorizationFilter
 
         if (!hasPermission)
         {
-            context.Result = new ForbidResult();
+            context.Result = PermissionDeniedResult(
+                $"You do not have permission to perform this action ({_permissionName}). Please contact an administrator.");
         }
     }
+
+    private static ObjectResult PermissionDeniedResult(string message) =>
+        new(new { error = message }) { StatusCode = StatusCodes.Status403Forbidden };
 }

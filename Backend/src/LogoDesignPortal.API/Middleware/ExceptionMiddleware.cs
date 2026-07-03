@@ -61,7 +61,10 @@ public class ExceptionMiddleware
 
         // CorrelationIdMiddleware already set this when the response hadn't started.
         if (!context.Response.Headers.ContainsKey("X-Correlation-Id"))
+        {
             context.Response.Headers.Append("X-Correlation-Id", correlationId);
+        }
+
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)statusCode;
 

@@ -10,6 +10,8 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { User } from '@shared/models/user.model';
 import { RoleOption } from '@shared/models/role.model';
+import { DEFAULT_CLIENT_CURRENCY, SUPPORTED_CURRENCY_OPTIONS } from '@core/constants/currency-options';
+import { TagSeverity } from '@shared/types/primeng.types';
 
 @Component({
   selector: 'app-user-list',
@@ -50,6 +52,8 @@ export class UserListComponent implements OnInit, OnDestroy {
     { label: 'Business', value: 'Business' },
     { label: 'Student', value: 'Student' }
   ];
+
+  readonly currencyOptions = SUPPORTED_CURRENCY_OPTIONS;
   
   @ViewChild('editRoleDropdown') editRoleDropdown?: Dropdown;
   
@@ -84,6 +88,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       // Client profile fields
       companyName: [''],
       billingType: [1], // 1=PerLogo, 2=Weekly, 3=Monthly
+      currencyCode: [DEFAULT_CLIENT_CURRENCY],
       contactName: [''],
       phoneNumber: [''],
       cell: [''],
@@ -111,16 +116,19 @@ export class UserListComponent implements OnInit, OnDestroy {
         this.createUserForm.get('companyName')?.setValidators([Validators.required]);
         this.createUserForm.get('contactName')?.setValidators([Validators.required]);
         this.createUserForm.get('phoneNumber')?.setValidators([Validators.required]);
+        this.createUserForm.get('currencyCode')?.setValidators([Validators.required]);
       } else {
         this.createUserForm.get('invoiceEmail')?.setValidators([Validators.email]);
         this.createUserForm.get('companyName')?.clearValidators();
         this.createUserForm.get('contactName')?.clearValidators();
         this.createUserForm.get('phoneNumber')?.clearValidators();
+        this.createUserForm.get('currencyCode')?.clearValidators();
       }
       this.createUserForm.get('invoiceEmail')?.updateValueAndValidity({ emitEvent: false });
       this.createUserForm.get('companyName')?.updateValueAndValidity({ emitEvent: false });
       this.createUserForm.get('contactName')?.updateValueAndValidity({ emitEvent: false });
       this.createUserForm.get('phoneNumber')?.updateValueAndValidity({ emitEvent: false });
+      this.createUserForm.get('currencyCode')?.updateValueAndValidity({ emitEvent: false });
     });
 
     this.resetPasswordForm = this.fb.group({
@@ -140,6 +148,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       // Client profile fields
       companyName: [''],
       billingType: [1], // 1=PerLogo, 2=Weekly, 3=Monthly
+      currencyCode: [DEFAULT_CLIENT_CURRENCY],
       contactName: [''],
       phoneNumber: [''],
       cell: [''],
@@ -268,6 +277,8 @@ export class UserListComponent implements OnInit, OnDestroy {
       secondaryEmail: '',
       invoiceEmail: '',
       companyName: '',
+      billingType: 1,
+      currencyCode: DEFAULT_CLIENT_CURRENCY,
       contactName: '',
       phoneNumber: '',
       cell: '',
@@ -288,7 +299,12 @@ export class UserListComponent implements OnInit, OnDestroy {
     Object.keys(this.createUserForm.controls).forEach(key => {
       const control = this.createUserForm.get(key);
       if (control) {
-        const defaultValue = key === 'isAvailable' ? true : (key === 'hourlyRate' ? null : '');
+        const defaultValue =
+          key === 'isAvailable' ? true
+          : key === 'hourlyRate' ? null
+          : key === 'billingType' ? 1
+          : key === 'currencyCode' ? DEFAULT_CLIENT_CURRENCY
+          : '';
         control.setValue(defaultValue, { emitEvent: false });
         control.markAsUntouched();
         control.markAsPristine();
@@ -420,6 +436,7 @@ export class UserListComponent implements OnInit, OnDestroy {
       // Mandatory fields for Client
       createRequest.companyName = formValue.companyName || '';
       createRequest.billingType = formValue.billingType ?? 1;
+      createRequest.currencyCode = formValue.currencyCode || DEFAULT_CLIENT_CURRENCY;
       createRequest.contactName = formValue.contactName || '';
       createRequest.phoneNumber = formValue.phoneNumber || '';
       // Optional fields
@@ -494,8 +511,8 @@ export class UserListComponent implements OnInit, OnDestroy {
     return names.filter(n => n.toLowerCase() !== 'superadmin').sort((a, b) => a.localeCompare(b));
   }
 
-  getRoleSeverity(role: string): string {
-    const severityMap: { [key: string]: string } = {
+  getRoleSeverity(role: string): TagSeverity {
+    const severityMap: Record<string, TagSeverity> = {
       'SuperAdmin': 'danger',
       'Admin': 'info',
       'Designer': 'secondary',
@@ -588,6 +605,7 @@ export class UserListComponent implements OnInit, OnDestroy {
             // Client profile fields
             companyName: (fullUser as any).clientProfile?.companyName || '',
             billingType: (fullUser as any).clientProfile?.billingType ?? 1,
+            currencyCode: (fullUser as any).clientProfile?.currencyCode || DEFAULT_CLIENT_CURRENCY,
             contactName: (fullUser as any).clientProfile?.contactName || '',
             phoneNumber: (fullUser as any).clientProfile?.phoneNumber || '',
             cell: (fullUser as any).clientProfile?.cell || '',
@@ -684,6 +702,7 @@ export class UserListComponent implements OnInit, OnDestroy {
     if (formValue.role === 'Client') {
       updateRequest.companyName = formValue.companyName || null;
       updateRequest.billingType = formValue.billingType ?? 1;
+      updateRequest.currencyCode = formValue.currencyCode || DEFAULT_CLIENT_CURRENCY;
       updateRequest.contactName = formValue.contactName || null;
       updateRequest.phoneNumber = formValue.phoneNumber || null;
       updateRequest.cell = formValue.cell || null;

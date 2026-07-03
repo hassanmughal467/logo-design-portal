@@ -16,6 +16,11 @@ public class ClientProfileConfiguration : IEntityTypeConfiguration<ClientProfile
             .HasConversion<int>()
             .HasDefaultValue(BillingType.PerLogo);
 
+        builder.Property(e => e.CurrencyCode)
+            .IsRequired()
+            .HasMaxLength(3)
+            .HasDefaultValue("USD");
+
         builder.Property(e => e.CompanyName)
             .IsRequired()
             .HasMaxLength(200);

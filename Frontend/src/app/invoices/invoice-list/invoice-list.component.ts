@@ -3,7 +3,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { BillingService, BillingQueueOverview, BillingEligibleOrder } from '@core/services/billing.service';
-import { LazyLoadEvent, MessageService } from 'primeng/api';
+import { TableLazyLoadEvent } from 'primeng/table';
+import { MessageService } from 'primeng/api';
 import { Subject, firstValueFrom, forkJoin, of } from 'rxjs';
 import { takeUntil, catchError, finalize, map } from 'rxjs/operators';
 import {
@@ -11,6 +12,7 @@ import {
   formatCurrencyAmount,
   resolveSingleCurrencyCode
 } from '@core/utils/currency-format';
+import { TagSeverity } from '@shared/types/primeng.types';
 
 export interface InvoiceItem {
   id: string;
@@ -43,7 +45,19 @@ export interface Invoice {
   items: InvoiceItem[];
   isLocked: boolean;
   createdAt: Date;
+  /** Last time invoice lines, totals, or due date were changed by staff. */
+  updatedAt?: Date;
   /** When all order lines share one ISO code (e.g. GBP); manual-only may be absent. */
+  currencyCode?: string | null;
+}
+
+/** Order option for the amend-invoice picker (and per-row manual line picker). */
+export interface AmendEligibleOrderOption {
+  label: string;
+  value: string;
+  orderNumber: string;
+  title: string;
+  price: number;
   currencyCode?: string | null;
 }
 
@@ -95,8 +109,21 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   editTaxAmount: number = 0;
   editPaymentMethod: string = '';
   editNotes: string = '';
-  editItems: { id?: string; orderId?: string; description: string; amount: number; isNew?: boolean }[] = [];
+  editItems: {
+    id?: string;
+    /** Order already linked on an existing line (read-only). */
+    orderId?: string;
+    /** Optional link for new manual lines — marks order invoiced when saved. */
+    linkedOrderId?: string | null;
+    description: string;
+    amount: number;
+    isNew?: boolean;
+  }[] = [];
   removedItemIds: string[] = [];
+  /** Uninvoiced completed logos for this client — amend unpaid invoice or link on manual lines. */
+  amendEligibleOrders: AmendEligibleOrderOption[] = [];
+  amendSelectedOrderIds: string[] = [];
+  loadingAmendOrders = false;
 
   // Statistics (KPI + period buckets from GET invoices/statistics)
   invoiceStats = {
@@ -185,7 +212,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.loadTabInvoicesPage(1, this.tableRows, false);
   }
 
-  onInvoicesLazyLoad(event: LazyLoadEvent): void {
+  onInvoicesLazyLoad(event: TableLazyLoadEvent): void {
     const rows = event.rows ?? this.tableRows;
     const first = event.first ?? 0;
     const page = Math.floor(first / rows) + 1;
@@ -515,6 +542,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         String(raw.status ?? raw.Status ?? '')
           .toLowerCase() === 'paid',
       createdAt: new Date(raw.createdAt ?? raw.CreatedAt ?? Date.now()),
+      updatedAt: (raw.updatedAt ?? raw.UpdatedAt)
+        ? new Date(raw.updatedAt ?? raw.UpdatedAt)
+        : undefined,
       currencyCode: raw.currencyCode ?? raw.CurrencyCode ?? null
     };
   }
@@ -600,20 +630,91 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.editItems = (invoice.items || []).map(item => ({
       id: item.id,
       orderId: item.orderId,
+      linkedOrderId: null,
       description: item.description,
       amount: item.amount
     }));
     this.removedItemIds = [];
+    this.amendSelectedOrderIds = [];
+    this.amendEligibleOrders = [];
+    this.loadAmendEligibleOrders(invoice.clientId);
     this.showEditDialog = true;
     this.cdr.markForCheck();
+  }
+
+  loadAmendEligibleOrders(clientId: string): void {
+    this.loadingAmendOrders = true;
+    this.billingService.getEligibleOrders(clientId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (orders: BillingEligibleOrder[]) => {
+          const onInvoice = new Set(
+            (this.editInvoice?.items ?? [])
+              .map(i => i.orderId)
+              .filter((id): id is string => !!id)
+          );
+          this.amendEligibleOrders = orders
+            .filter(o => !onInvoice.has(o.orderId))
+            .map(o => ({
+              label: `Order #${o.orderNumber} – ${o.title} – ${formatCurrencyAmount(o.price, o.currencyCode)}`,
+              value: o.orderId,
+              orderNumber: o.orderNumber,
+              title: o.title,
+              price: o.price,
+              currencyCode: o.currencyCode
+            }));
+          this.loadingAmendOrders = false;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.amendEligibleOrders = [];
+          this.loadingAmendOrders = false;
+          this.cdr.markForCheck();
+        }
+      });
   }
 
   addManualEditItem(): void {
     this.editItems.push({
       description: 'Manual Item',
       amount: 0,
-      isNew: true
+      isNew: true,
+      linkedOrderId: null
     });
+    this.editItems = [...this.editItems];
+    this.cdr.markForCheck();
+  }
+
+  /** Order options for a new manual line (excludes invoice lines, bulk-add selection, other manual picks). */
+  manualOrderOptionsForItem(item: { linkedOrderId?: string | null; isNew?: boolean }): AmendEligibleOrderOption[] {
+    if (!item.isNew) return [];
+    const reserved = new Set(this.amendSelectedOrderIds);
+    for (const row of this.editItems) {
+      if (row.linkedOrderId) reserved.add(row.linkedOrderId);
+    }
+    return this.amendEligibleOrders.filter(o => !reserved.has(o.value) || o.value === item.linkedOrderId);
+  }
+
+  onManualLineOrderChange(item: { linkedOrderId?: string | null; description: string; amount: number }): void {
+    if (!item.linkedOrderId) return;
+    const order = this.amendEligibleOrders.find(o => o.value === item.linkedOrderId);
+    if (!order) return;
+    item.description = `${order.title} — Order #${order.orderNumber}`;
+    item.amount = order.price;
+    this.cdr.markForCheck();
+  }
+
+  orderLabelForExistingLine(orderId: string | undefined): string {
+    if (!orderId) return '';
+    const onList = this.amendEligibleOrders.find(o => o.value === orderId);
+    if (onList) return `Order #${onList.orderNumber}`;
+    const onInvoice = this.editInvoice?.items?.find(i => i.orderId === orderId);
+    if (onInvoice?.orderTitle) {
+      return onInvoice.description?.includes('Order #')
+        ? onInvoice.description.split('—').pop()?.trim() ?? `Order linked`
+        : onInvoice.orderTitle;
+    }
+    return 'Order linked';
   }
 
   removeEditItem(index: number): void {
@@ -649,14 +750,31 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          const manualItems = this.editItems
-            .filter(x => x.isNew && !x.id)
-            .map(x => ({ description: x.description, amount: x.amount }));
+          const newManualLines = this.editItems.filter(x => x.isNew && !x.id);
+          const manualWithOrder = newManualLines.filter(x => !!x.linkedOrderId);
+          const bulkAddIds = new Set(this.amendSelectedOrderIds);
+          const overlap = manualWithOrder.find(x => bulkAddIds.has(x.linkedOrderId!));
+          if (overlap) {
+            this.messageService.add({
+              severity: 'warn',
+              summary: 'Duplicate logo',
+              detail: 'A logo cannot be added both via “Add completed logo(s)” and as a manual line with the same order.'
+            });
+            return;
+          }
 
-          if (this.removedItemIds.length > 0 || manualItems.length > 0) {
+          const manualItems = newManualLines.map(x => ({
+            description: x.description,
+            amount: x.amount,
+            orderId: x.linkedOrderId || undefined
+          }));
+
+          const addOrderIds = this.amendSelectedOrderIds.length > 0 ? this.amendSelectedOrderIds : undefined;
+          if (this.removedItemIds.length > 0 || manualItems.length > 0 || addOrderIds?.length) {
             this.apiService.put(`invoices/${this.editInvoice!.id}/items`, {
-              removeItemIds: this.removedItemIds,
-              addManualItems: manualItems
+              removeItemIds: this.removedItemIds.length > 0 ? this.removedItemIds : undefined,
+              addOrderIds,
+              addManualItems: manualItems.length > 0 ? manualItems : undefined
             }).pipe(takeUntil(this.destroy$)).subscribe({
               next: () => {
                 this.messageService.add({
@@ -696,8 +814,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       });
   }
 
-  getStatusSeverity(status: string): string {
-    const severityMap: { [key: string]: string } = {
+  getStatusSeverity(status: string): TagSeverity {
+    const severityMap: Record<string, TagSeverity> = {
       'Paid': 'success',
       'Unpaid': 'warning',
       'Overdue': 'danger'
@@ -784,8 +902,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     return type?.label || 'Unknown';
   }
   
-  getBillingTypeSeverity(billingType: number): string {
-    const severityMap: { [key: number]: string } = {
+  getBillingTypeSeverity(billingType: number): TagSeverity {
+    const severityMap: Record<number, TagSeverity> = {
       1: 'info',      // PerLogo
       2: 'warning',   // Weekly
       3: 'success',   // Monthly

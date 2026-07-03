@@ -164,9 +164,15 @@ public class TestDataSeeder : IHostedService
             foreach (var name in names)
             {
                 if (!permissionIds.TryGetValue(name, out var permissionId))
+                {
                     continue;
+                }
+
                 if (context.RolePermissions.Any(rp => rp.RoleId == roleId && rp.PermissionId == permissionId && !rp.IsDeleted))
+                {
                     continue;
+                }
+
                 context.RolePermissions.Add(new RolePermission
                 {
                     Id = Guid.NewGuid(),

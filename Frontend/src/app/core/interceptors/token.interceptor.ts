@@ -31,6 +31,9 @@ export class TokenInterceptor implements HttpInterceptor {
           if (canRefresh) {
             return this.authService.refreshToken().pipe(
               switchMap(() => {
+                if (useCookieAuth) {
+                  return next.handle(request);
+                }
                 const newToken = this.authService.getAccessToken();
                 const retryRequest = request.clone({
                   setHeaders: { Authorization: `Bearer ${newToken}` }

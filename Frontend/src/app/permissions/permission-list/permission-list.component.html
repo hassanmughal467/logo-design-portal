@@ -90,7 +90,7 @@
   </p-card>
 
   <!-- Permission Matrix View -->
-  <p-card styleClass="permissions-card" *ngIf="displayMatrix" style="margin-top: 2rem;">
+  <p-card styleClass="permissions-card" *ngIf="displayMatrix" [ngStyle]="{ 'margin-top': '2rem' }">
     <div class="matrix-header">
       <h2>Permission Matrix</h2>
       <p class="matrix-subtitle">Toggle permissions for each role. SuperAdmin has all permissions automatically.</p>

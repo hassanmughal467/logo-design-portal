@@ -1,5 +1,6 @@
 import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { RevenueForecastItem } from '@core/services/financial-analytics.service';
+import { compactCurrencyLabel, formatCurrencyAmount } from '@core/utils/currency-format';
 
 @Component({
   selector: 'app-revenue-forecast-chart',
@@ -8,16 +9,21 @@ import { RevenueForecastItem } from '@core/services/financial-analytics.service'
 })
 export class RevenueForecastChartComponent implements OnChanges {
   @Input() items: RevenueForecastItem[] = [];
+  @Input() currencyCode = 'USD';
+  @Input() currencyMixed = false;
 
   chartOptions: any = null;
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['items'] && this.items?.length) {
+    if ((changes['items'] || changes['currencyCode'] || changes['currencyMixed']) && this.items?.length) {
       this.buildChart();
     }
   }
 
   private buildChart(): void {
+    const code = this.currencyMixed ? undefined : this.currencyCode;
+    const fmt = (v: number) => (v != null ? formatCurrencyAmount(v, code) : '-');
+    const axis = (v: number) => compactCurrencyLabel(v, code, this.currencyMixed);
     const actualData = this.items.map(i => i.actual ?? null);
     const predictedData = this.items.map(i => i.predicted ?? null);
     this.chartOptions = {
@@ -29,15 +35,12 @@ export class RevenueForecastChartComponent implements OnChanges {
       stroke: { curve: 'smooth', width: 2 },
       colors: ['#10b981', '#8b5cf6'],
       xaxis: { categories: this.items.map(i => i.month), labels: { rotate: -45 } },
-      yaxis: { min: 0, labels: { formatter: (v: number) => '$' + v } },
+      yaxis: { min: 0, labels: { formatter: axis } },
       legend: { position: 'top' },
       dataLabels: { enabled: false },
       tooltip: {
         shared: true,
-        y: [
-          { formatter: (v: number) => v != null ? '$' + v.toLocaleString() : '-' },
-          { formatter: (v: number) => v != null ? '$' + v.toLocaleString() : '-' }
-        ]
+        y: [{ formatter: fmt }, { formatter: fmt }]
       }
     };
   }

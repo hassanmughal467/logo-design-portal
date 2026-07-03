@@ -14,7 +14,7 @@
       </apx-chart>
     </div>
     <div class="chart-card" *ngIf="revenueForecastChart">
-      <h3 class="chart-title"><i class="pi pi-dollar"></i> Revenue Forecast</h3>
+      <h3 class="chart-title"><i [class]="revenueIconClass"></i> Revenue Forecast</h3>
       <p class="chart-subtitle">Moving average (2-month) prediction</p>
       <apx-chart [series]="revenueForecastChart.series" [chart]="revenueForecastChart.chart"
         [xaxis]="revenueForecastChart.xaxis" [stroke]="revenueForecastChart.stroke"

@@ -22,7 +22,16 @@ public interface IOrderService
     Task<OrderResponseDto> RequestPriceApprovalAsync(Guid orderId, RequestPriceApprovalDto request, Guid requestedBy);
     Task<OrderResponseDto> ApprovePriceAsync(Guid orderId, ApprovePriceDto request, Guid approvedBy);
     Task<OrderResponseDto> RespondToPriceApprovalAsync(Guid orderId, RespondPriceApprovalDto request, Guid userId);
-    Task<OrderResponseDto> ApproveOrderAsync(Guid orderId, Guid approvedBy);
+    /// <summary>
+    /// Admin approves a pending order.
+    /// - When <paramref name="request"/>.DesignerId is null the order moves to <c>ApprovedUnassigned</c>
+    ///   so it surfaces in the SuperAdmin Unassigned Orders alert widget.
+    /// - When a designer is supplied the order is approved and assigned in one operation, moving directly to <c>InProgress</c>.
+    /// </summary>
+    Task<OrderResponseDto> ApproveOrderAsync(Guid orderId, ApproveOrderRequestDto request, Guid approvedBy);
+
+    /// <summary>Count of orders currently in the <c>ApprovedUnassigned</c> state. Powers the SuperAdmin alert widget.</summary>
+    Task<int> GetUnassignedApprovedCountAsync();
     Task<OrderResponseDto> SendFilesToClientAsync(Guid orderId, List<Guid> fileIds, Guid sentBy);
     /// <summary>
     /// Sends entire preview batch to client. Admin must send full batch - no partial delivery.

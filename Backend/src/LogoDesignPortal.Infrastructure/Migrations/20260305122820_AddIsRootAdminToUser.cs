@@ -3,22 +3,22 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace LogoDesignPortal.Infrastructure.Migrations
+namespace LogoDesignPortal.Infrastructure.Migrations;
+
+/// <inheritdoc />
+public partial class AddIsRootAdminToUser : Migration
 {
     /// <inheritdoc />
-    public partial class AddIsRootAdminToUser : Migration
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.AddColumn<bool>(
-                name: "IsRootAdmin",
-                table: "Users",
-                type: "tinyint(1)",
-                nullable: false,
-                defaultValue: false);
+        migrationBuilder.AddColumn<bool>(
+            name: "IsRootAdmin",
+            table: "Users",
+            type: "tinyint(1)",
+            nullable: false,
+            defaultValue: false);
 
-            migrationBuilder.Sql(@"
+        migrationBuilder.Sql(@"
                 UPDATE Users u
                 SET u.IsRootAdmin = 1
                 WHERE u.Id = (
@@ -31,14 +31,13 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     ) tmp
                 );
             ");
-        }
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropColumn(
-                name: "IsRootAdmin",
-                table: "Users");
-        }
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropColumn(
+            name: "IsRootAdmin",
+            table: "Users");
     }
 }

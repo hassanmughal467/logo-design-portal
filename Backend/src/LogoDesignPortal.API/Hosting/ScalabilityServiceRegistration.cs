@@ -54,11 +54,12 @@ public static class ScalabilityServiceRegistration
 
         try
         {
-            var opts = ConfigurationOptions.Parse(redis);
-            opts.AbortOnConnectFail = false;
+            var opts = BuildRedisConfigurationOptions(redis, configuration);
             var mux = ConnectionMultiplexer.Connect(opts);
             services.AddSingleton<IConnectionMultiplexer>(mux);
-            services.AddStackExchangeRedisCache(o => { o.Configuration = redis; });
+            services.AddStackExchangeRedisCache(o =>
+                o.ConfigurationOptions = BuildRedisConfigurationOptions(redis, configuration));
+            services.AddSingleton<MemoryDistributedRateLimiter>();
             services.AddSingleton<IReadModelCacheVersions, RedisReadModelCacheVersions>();
             services.AddSingleton<IDistributedRateLimiter, RedisDistributedRateLimiter>();
             logger.LogInformation("Redis: IDistributedCache, read-model epochs, and rate limiting enabled.");
@@ -138,10 +139,30 @@ public static class ScalabilityServiceRegistration
         }
     }
 
+    public static ConfigurationOptions BuildRedisConfigurationOptions(string redis, IConfiguration configuration)
+    {
+        var scalability = configuration.GetSection(ScalabilityOptions.SectionName);
+        var connectRetry = scalability.GetValue(nameof(ScalabilityOptions.RedisRetryCount),
+            configuration.GetValue("Redis:ConnectRetry", 3));
+        var connectTimeout = scalability.GetValue(nameof(ScalabilityOptions.RedisConnectTimeout),
+            configuration.GetValue("Redis:ConnectTimeout", 5000));
+        var retryBaseDelayMs = scalability.GetValue(nameof(ScalabilityOptions.RedisRetryBaseDelayMs),
+            configuration.GetValue("Redis:RetryBaseDelayMs", 500));
+
+        var opts = ConfigurationOptions.Parse(redis);
+        opts.AbortOnConnectFail = false;
+        opts.ConnectRetry = connectRetry;
+        opts.ConnectTimeout = connectTimeout;
+        opts.ReconnectRetryPolicy = new ExponentialRetry(retryBaseDelayMs);
+        return opts;
+    }
+
     public static void AddRecurringJobsIfEnabled(IHostEnvironment environment)
     {
         if (environment.IsEnvironment("Testing"))
+        {
             return;
+        }
 
         RecurringJob.AddOrUpdate<MaintenanceHangfireJobs>(
             "orphan-preview-files",

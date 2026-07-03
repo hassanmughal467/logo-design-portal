@@ -5,6 +5,8 @@ using LogoDesignPortal.Infrastructure.Authentication;
 using LogoDesignPortal.Infrastructure.Email;
 using LogoDesignPortal.Infrastructure.Persistence;
 using LogoDesignPortal.Infrastructure.Persistence.Repositories;
+using LogoDesignPortal.Infrastructure.Currency;
+using LogoDesignPortal.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,8 +65,8 @@ public static class DependencyInjection
         // Email
         services.AddScoped<IEmailService, EmailService>();
 
-        // File storage (local disk default; swap for S3/R2/Azure in multi-instance production)
-        services.AddSingleton<LogoDesignPortal.Application.Interfaces.Storage.IFileStorageProvider, Storage.LocalFileStorageProvider>();
+        services.AddFileStorage(configuration);
+        services.AddCurrencyService(configuration);
 
         return services;
     }

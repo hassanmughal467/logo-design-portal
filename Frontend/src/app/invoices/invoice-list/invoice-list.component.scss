@@ -279,13 +279,18 @@
 
     .edit-item-row {
       display: grid;
-      grid-template-columns: 2fr 1fr;
+      grid-template-columns: 2fr 1fr auto;
       gap: 1rem;
       padding: 1rem;
       background: var(--surface-ground);
       border-radius: 8px;
       border: 1px solid var(--surface-border);
 
+      &.edit-item-row--with-order {
+        grid-template-columns: 1.25fr 2fr 1fr auto;
+      }
+
+      .edit-item-order,
       .edit-item-desc,
       .edit-item-amount {
         label {
@@ -296,6 +301,18 @@
           margin-bottom: 0.35rem;
           text-transform: uppercase;
         }
+
+        .field-hint {
+          display: block;
+          margin-top: 0.25rem;
+          font-size: 0.7rem;
+          color: var(--text-color-secondary);
+        }
+      }
+
+      .edit-item-actions {
+        display: flex;
+        align-items: flex-end;
       }
     }
   }

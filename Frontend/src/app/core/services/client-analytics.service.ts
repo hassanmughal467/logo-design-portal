@@ -7,6 +7,8 @@ export interface ClientAnalyticsOverview {
   activeClients: number;
   inactiveClients: number;
   topClientRevenue: number;
+  /** ISO 4217 code of the top client whose revenue is reported in topClientRevenue. */
+  topClientCurrencyCode?: string;
 }
 
 export interface TopClientItem {
@@ -14,6 +16,8 @@ export interface TopClientItem {
   clientName: string;
   totalOrders: number;
   totalRevenue: number;
+  /** ISO 4217 code for this client's revenue. */
+  currencyCode?: string;
 }
 
 export interface ClientRevenueTrendItem {
@@ -21,6 +25,14 @@ export interface ClientRevenueTrendItem {
   month: string;
   revenue: number;
   orderCount: number;
+}
+
+export interface ClientRevenueTrend {
+  items: ClientRevenueTrendItem[];
+  /** Single ISO code when all completed orders in the window share one currency; USD otherwise. */
+  currencyCode?: string;
+  /** True when the trend window contains completed orders in more than one currency. */
+  currencyMixed?: boolean;
 }
 
 export interface ClientMonthlyRevenueItem {
@@ -33,6 +45,8 @@ export interface ClientMonthlyRevenue {
   clientId: string;
   clientName: string;
   items: ClientMonthlyRevenueItem[];
+  /** ISO 4217 code for this client (drives chart axis formatting). */
+  currencyCode?: string;
 }
 
 export interface InactiveClientItem {
@@ -47,6 +61,7 @@ export interface ClientLifetimeValueItem {
   clientName: string;
   lifetimeRevenue: number;
   totalOrders: number;
+  currencyCode?: string;
 }
 
 export interface ClientGrowthItem {
@@ -56,6 +71,7 @@ export interface ClientGrowthItem {
   previousMonthRevenue: number;
   revenueChangePercent: number;
   growthStatus: string;
+  currencyCode?: string;
 }
 
 export interface ClientActivityItem {
@@ -72,6 +88,7 @@ export interface ClientAlertItem {
   clientId?: string;
   clientName?: string;
   occurredAt: string;
+  currencyCode?: string;
 }
 
 export interface ClientDropdownItem {
@@ -95,8 +112,8 @@ export class ClientAnalyticsService {
     return this.apiService.get<{ items: TopClientItem[] }>(`${this.basePath}/top-clients?limit=${limit}`);
   }
 
-  getRevenueTrend(months = 6): Observable<{ items: ClientRevenueTrendItem[] }> {
-    return this.apiService.get<{ items: ClientRevenueTrendItem[] }>(`${this.basePath}/revenue-trend?months=${months}`);
+  getRevenueTrend(months = 6): Observable<ClientRevenueTrend> {
+    return this.apiService.get<ClientRevenueTrend>(`${this.basePath}/revenue-trend?months=${months}`);
   }
 
   getMonthlyRevenue(clientId: string, months = 12): Observable<ClientMonthlyRevenue> {

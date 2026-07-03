@@ -12,7 +12,8 @@ import { InputTextModule } from 'primeng/inputtext';
 import { InputTextareaModule } from 'primeng/inputtextarea';
 import { DropdownModule } from 'primeng/dropdown';
 import { TagModule } from 'primeng/tag';
-import { FileUploadModule } from 'primeng/fileupload';
+import { ProgressSpinnerModule } from 'primeng/progressspinner';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { MessageService } from 'primeng/api';
 
 @NgModule({
@@ -30,7 +31,8 @@ import { MessageService } from 'primeng/api';
     InputTextareaModule,
     DropdownModule,
     TagModule,
-    FileUploadModule
+    ProgressSpinnerModule,
+    InputNumberModule
   ],
   providers: [MessageService]
 })

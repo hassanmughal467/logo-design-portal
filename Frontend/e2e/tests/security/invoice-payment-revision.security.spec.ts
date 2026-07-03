@@ -1,7 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { apiUrl, loginApi } from '../../utils/api-client';
+import { apiUrl, loginApiBearerOnly } from '../../utils/api-client';
+import { getAdminToken, provisionDesignerUser, teardownUsers } from '../../utils/api-helpers';
 
 test.describe('Security — invoice payment revision API', () => {
+  const cleanup: string[] = [];
+
+  test.afterAll(async ({ request }) => {
+    await teardownUsers(request, cleanup);
+  });
+
   test('unauthenticated invoice list returns 401', async ({ request }) => {
     const response = await request.get(apiUrl('/invoices'));
     expect(response.status()).toBe(401);
@@ -14,8 +21,12 @@ test.describe('Security — invoice payment revision API', () => {
     expect(response.status()).toBe(401);
   });
 
-  test('designer cannot request client revision', async ({ request }) => {
-    const designerAuth = await loginApi(request, 'designer@test.com', 'Test@123');
+  test('designer cannot request client revision', async ({ request }, testInfo) => {
+    const adminToken = await getAdminToken(request);
+    const designer = await provisionDesignerUser(request, adminToken, testInfo);
+    cleanup.push(designer.userId);
+
+    const designerAuth = await loginApiBearerOnly(request, designer.email, designer.password);
     const orderId = '00000000-0000-0000-0000-000000000099';
     const response = await request.post(apiUrl(`/revisions/orders/${orderId}/request`), {
       headers: { Authorization: `Bearer ${designerAuth.token}` },

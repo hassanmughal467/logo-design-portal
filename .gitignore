@@ -22,3 +22,7 @@ Backend/src/LogoDesignPortal.API/Files_Dev/
 Backend/src/LogoDesignPortal.API/Files_Test/
 Backend/src/LogoDesignPortal.API/Files_Staging/
 Backend/src/LogoDesignPortal.API/logs/
+
+# Local database dumps must never be committed
+LogoDesignPortalDb_backup.sql
+*.sql.gz

@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { MessageService } from 'primeng/api';
+import { formatCurrencyAmount } from '@core/utils/currency-format';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
@@ -89,14 +90,12 @@ export class DesignerListComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Designer hourly rate is stored in PKR. */
   formatCurrency(amount: number | null | undefined): string {
     if (amount == null || amount === undefined) {
       return 'N/A';
     }
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+    return formatCurrencyAmount(amount, 'PKR');
   }
 
   viewDesigner(designer: DesignerProfile): void {

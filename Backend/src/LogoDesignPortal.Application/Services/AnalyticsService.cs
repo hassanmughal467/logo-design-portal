@@ -1,4 +1,5 @@
 using LogoDesignPortal.Application.Caching;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
@@ -34,7 +35,9 @@ public class AnalyticsService : IAnalyticsService
         var cacheKey = $"ldp:cache:analytics:overview:e{_cacheVersions.AnalyticsEpoch}";
         var cached = await DistributedJsonCache.GetSafeAsync<AnalyticsOverviewDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var dto = await BuildOverviewUncachedAsync();
         await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
@@ -67,6 +70,7 @@ public class AnalyticsService : IAnalyticsService
             InProgress = g.Count(o => o.Status == OrderStatus.InProgress || o.Status == OrderStatus.RevisionRequested),
             AwaitingAdminReview = g.Count(o => o.Status == OrderStatus.WaitingForAdminApproval || o.Status == OrderStatus.PriceApprovalPending),
             AwaitingClientApproval = g.Count(o => o.Status == OrderStatus.PreviewDelivered),
+            AwaitingDesignerAssignment = g.Count(o => o.Status == OrderStatus.ApprovedUnassigned),
             OverdueOrders = g.Count(o =>
                 o.Deadline.HasValue && o.Deadline.Value < now && o.Status != OrderStatus.Completed && o.Status != OrderStatus.Cancelled)
         }).FirstOrDefaultAsync().ConfigureAwait(false);
@@ -89,7 +93,9 @@ public class AnalyticsService : IAnalyticsService
                 .ToListAsync()
                 .ConfigureAwait(false);
             if (deliveryRows.Count > 0)
+            {
                 averageDeliveryTime = deliveryRows.Average(x => (x.End - x.CreatedAt).TotalDays);
+            }
         }
 
         var ordersWithRevisions = await _context.OrderRevisions
@@ -101,19 +107,45 @@ public class AnalyticsService : IAnalyticsService
         var revisionRate = totalOrders > 0 ? (decimal)ordersWithRevisions / totalOrders * 100 : 0;
         var approvalRate = totalOrders > 0 ? (decimal)completedCount / totalOrders * 100 : 0;
 
-        var completedCurrencyCodes = await q
-            .Where(o => o.Status == OrderStatus.Completed && o.CurrencyCode != null && o.CurrencyCode != "")
-            .Select(o => o.CurrencyCode!.Trim().ToUpper())
-            .Distinct()
+        // Per-currency rollup over completed orders. Treat null/empty CurrencyCode as USD
+        // (matches the LogoOrder default) so legacy rows are not silently dropped.
+        var perCurrencyRaw = await q
+            .Where(o => o.Status == OrderStatus.Completed)
+            .GroupBy(o => o.CurrencyCode == null || o.CurrencyCode == "" ? "USD" : o.CurrencyCode)
+            .Select(g => new
+            {
+                CurrencyCode = g.Key,
+                TotalRevenue = g.Sum(o => o.Price),
+                MonthlyRevenue = g
+                    .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfMonth)
+                    .Sum(o => o.Price),
+                CompletedCount = g.Count()
+            })
             .ToListAsync()
             .ConfigureAwait(false);
 
+        var revenueByCurrency = perCurrencyRaw
+            .Select(g => new RevenueByCurrencyItemDto
+            {
+                CurrencyCode = (g.CurrencyCode ?? "USD").Trim().ToUpper(),
+                TotalRevenue = g.TotalRevenue,
+                MonthlyRevenue = g.MonthlyRevenue,
+                CompletedCount = g.CompletedCount,
+                AverageOrderValue = g.CompletedCount > 0 ? g.TotalRevenue / g.CompletedCount : 0
+            })
+            .OrderByDescending(x => x.TotalRevenue)
+            .ToList();
+
         var revenueCurrencyCode = "USD";
         var revenueCurrencyMixed = false;
-        if (completedCurrencyCodes.Count == 1)
-            revenueCurrencyCode = completedCurrencyCodes[0];
-        else if (completedCurrencyCodes.Count > 1)
+        if (revenueByCurrency.Count == 1)
+        {
+            revenueCurrencyCode = revenueByCurrency[0].CurrencyCode;
+        }
+        else if (revenueByCurrency.Count > 1)
+        {
             revenueCurrencyMixed = true;
+        }
 
         var totalClients = await _context.ClientProfiles.AsNoTracking().CountAsync(c => !c.IsDeleted);
         var activeDesigners = await _context.LogoOrders
@@ -132,6 +164,7 @@ public class AnalyticsService : IAnalyticsService
             TotalRevenue = totalRevenue,
             RevenueCurrencyCode = revenueCurrencyCode,
             RevenueCurrencyMixed = revenueCurrencyMixed,
+            RevenueByCurrency = revenueByCurrency,
             MonthlyRevenue = monthlyRevenue,
             AverageOrderValue = completedCount > 0 ? totalRevenue / completedCount : 0,
             TotalClients = totalClients,
@@ -140,6 +173,7 @@ public class AnalyticsService : IAnalyticsService
             OrdersInProgress = overviewAgg?.InProgress ?? 0,
             OrdersAwaitingAdminReview = overviewAgg?.AwaitingAdminReview ?? 0,
             OrdersAwaitingClientApproval = overviewAgg?.AwaitingClientApproval ?? 0,
+            OrdersAwaitingDesignerAssignment = overviewAgg?.AwaitingDesignerAssignment ?? 0,
             RevisionRate = Math.Round(revisionRate, 0),
             ApprovalRate = Math.Round(approvalRate, 0),
             AverageDeliveryTimeDays = Math.Round(averageDeliveryTime, 1),
@@ -152,7 +186,9 @@ public class AnalyticsService : IAnalyticsService
         var cacheKey = $"ldp:cache:analytics:orders:e{_cacheVersions.AnalyticsEpoch}";
         var cached = await DistributedJsonCache.GetSafeAsync<OrderAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var q = _context.LogoOrders.AsNoTracking().Where(o => !o.IsDeleted);
 
@@ -208,7 +244,9 @@ public class AnalyticsService : IAnalyticsService
             .OrderBy(x => x.DayIndex)
             .ToListAsync();
         foreach (var x in byDayOfWeek)
+        {
             x.DayOfWeek = Enum.GetName(typeof(DayOfWeek), x.DayIndex) ?? "";
+        }
 
         var byHour = await q
             .GroupBy(o => o.CreatedAt.Hour)
@@ -345,7 +383,9 @@ public class AnalyticsService : IAnalyticsService
         var cacheKey = $"ldp:cache:analytics:revenue:e{_cacheVersions.AnalyticsEpoch}";
         var cached = await DistributedJsonCache.GetSafeAsync<RevenueAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var now = DateTime.UtcNow;
         var sixMonthsAgo = now.AddMonths(-6);
@@ -407,21 +447,32 @@ public class AnalyticsService : IAnalyticsService
         var topClientIds = topClientRows.Select(x => x.ClientId).ToList();
         var topClientNames = await _context.ClientProfiles.AsNoTracking()
             .Where(c => topClientIds.Contains(c.Id))
-            .Select(c => new { c.Id, c.CompanyName, c.User!.FirstName, c.User.LastName })
+            .Select(c => new { c.Id, c.CompanyName, c.CurrencyCode, c.User!.FirstName, c.User.LastName })
             .ToListAsync()
             .ConfigureAwait(false);
-        var topNameLookup = topClientNames.ToDictionary(
-            x => x.Id,
-            x => string.IsNullOrWhiteSpace($"{x.FirstName} {x.LastName}".Trim())
-                ? (x.CompanyName ?? "Unknown")
-                : $"{x.FirstName} {x.LastName} ({x.CompanyName})");
-        var topClients = topClientRows.Select(x => new TopClientByRevenueDto
+        var topProfileLookup = topClientNames.ToDictionary(x => x.Id);
+        var topClients = topClientRows.Select(x =>
         {
-            ClientId = x.ClientId,
-            ClientName = topNameLookup.TryGetValue(x.ClientId, out var nm) ? nm : "Unknown",
-            Revenue = x.Revenue,
-            OrderCount = x.OrderCount
+            topProfileLookup.TryGetValue(x.ClientId, out var p);
+            var nm = p == null ? "Unknown"
+                : string.IsNullOrWhiteSpace($"{p.FirstName} {p.LastName}".Trim())
+                    ? (p.CompanyName ?? "Unknown")
+                    : $"{p.FirstName} {p.LastName} ({p.CompanyName})";
+            return new TopClientByRevenueDto
+            {
+                ClientId = x.ClientId,
+                ClientName = nm,
+                Revenue = x.Revenue,
+                OrderCount = x.OrderCount,
+                CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(p?.CurrencyCode)
+            };
         }).ToList();
+
+        var orderCurrencies = await q
+            .Select(o => o.CurrencyCode)
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var (revenueCurrencyCode, revenueCurrencyMixed) = ClientCurrencyHelper.ResolveAggregateCurrency(orderCurrencies);
 
         var dailyRaw = await q
             .Where(o => (o.UpdatedAt ?? o.CreatedAt) >= last30Days)
@@ -456,7 +507,9 @@ public class AnalyticsService : IAnalyticsService
             RevenueByPackage = revenueByPackage,
             AverageOrderValueTrend = aovTrend,
             TopClientsByRevenue = topClients,
-            RevenueGrowthRate = Math.Round(revenueGrowthRate, 1)
+            RevenueGrowthRate = Math.Round(revenueGrowthRate, 1),
+            RevenueCurrencyCode = revenueCurrencyCode,
+            RevenueCurrencyMixed = revenueCurrencyMixed
         };
         await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
         return dto;
@@ -467,7 +520,9 @@ public class AnalyticsService : IAnalyticsService
         var cacheKey = $"ldp:cache:analytics:designers:e{_cacheVersions.AnalyticsEpoch}";
         var cached = await DistributedJsonCache.GetSafeAsync<DesignerAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var designers = await _context.DesignerProfiles.AsNoTracking()
             .Select(d => new { d.Id, FirstName = d.User != null ? d.User.FirstName : "", LastName = d.User != null ? d.User.LastName : "" })
@@ -584,7 +639,9 @@ public class AnalyticsService : IAnalyticsService
         var cacheKey = $"ldp:cache:analytics:clients:e{_cacheVersions.AnalyticsEpoch}";
         var cached = await DistributedJsonCache.GetSafeAsync<ClientAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -665,20 +722,25 @@ public class AnalyticsService : IAnalyticsService
         var ltvIds = ltvAgg.Select(x => x.ClientId).ToList();
         var ltvClientsInfo = await _context.ClientProfiles.AsNoTracking()
             .Where(c => ltvIds.Contains(c.Id))
-            .Select(c => new { c.Id, c.CompanyName, c.User!.FirstName, c.User.LastName })
+            .Select(c => new { c.Id, c.CompanyName, c.CurrencyCode, c.User!.FirstName, c.User.LastName })
             .ToListAsync()
             .ConfigureAwait(false);
-        var ltvLookup = ltvClientsInfo.ToDictionary(
-            d => d.Id,
-            d => string.IsNullOrWhiteSpace($"{d.FirstName} {d.LastName}".Trim())
-                ? (d.CompanyName ?? "Unknown")
-                : $"{d.FirstName} {d.LastName} ({d.CompanyName})");
-        var clientLifetimeValue = ltvAgg.Select(x => new ClientLifetimeValueItemDto
+        var ltvProfileLookup = ltvClientsInfo.ToDictionary(d => d.Id);
+        var clientLifetimeValue = ltvAgg.Select(x =>
         {
-            ClientId = x.ClientId,
-            ClientName = ltvLookup.TryGetValue(x.ClientId, out var nm) ? nm : "Unknown",
-            Revenue = x.Revenue,
-            OrderCount = x.OrderCount
+            ltvProfileLookup.TryGetValue(x.ClientId, out var p);
+            var nm = p == null ? "Unknown"
+                : string.IsNullOrWhiteSpace($"{p.FirstName} {p.LastName}".Trim())
+                    ? (p.CompanyName ?? "Unknown")
+                    : $"{p.FirstName} {p.LastName} ({p.CompanyName})";
+            return new ClientLifetimeValueItemDto
+            {
+                ClientId = x.ClientId,
+                ClientName = nm,
+                Revenue = x.Revenue,
+                OrderCount = x.OrderCount,
+                CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(p?.CurrencyCode)
+            };
         }).ToList();
 
         var dto = new ClientAnalyticsDto
@@ -699,7 +761,9 @@ public class AnalyticsService : IAnalyticsService
         var cacheKey = $"ldp:cache:analytics:workflow:e{_cacheVersions.AnalyticsEpoch}";
         var cached = await DistributedJsonCache.GetSafeAsync<WorkflowAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var q = _context.LogoOrders.AsNoTracking().Where(o => !o.IsDeleted);
 
@@ -730,7 +794,9 @@ public class AnalyticsService : IAnalyticsService
                 .Where(x => x.End >= x.CreatedAt)
                 .ToListAsync();
             if (deliveryRows.Count > 0)
+            {
                 avgCompletion = deliveryRows.Average(x => (x.End - x.CreatedAt).TotalDays);
+            }
         }
 
         var revisionCounts = await _context.OrderRevisions
@@ -876,7 +942,9 @@ public class AnalyticsService : IAnalyticsService
         var cacheKey = $"ldp:cache:analytics:forecast:e{_cacheVersions.AnalyticsEpoch}";
         var cached = await DistributedJsonCache.GetSafeAsync<ForecastAnalyticsDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -973,10 +1041,18 @@ public class AnalyticsService : IAnalyticsService
             });
         }
 
+        var forecastCurrencies = await qCompleted
+            .Select(o => o.CurrencyCode)
+            .ToListAsync()
+            .ConfigureAwait(false);
+        var (forecastRevenueCode, forecastRevenueMixed) = ClientCurrencyHelper.ResolveAggregateCurrency(forecastCurrencies);
+
         var dto = new ForecastAnalyticsDto
         {
             OrderGrowthPrediction = orderPrediction,
-            RevenueForecast = revenuePrediction
+            RevenueForecast = revenuePrediction,
+            RevenueCurrencyCode = forecastRevenueCode,
+            RevenueCurrencyMixed = forecastRevenueMixed
         };
         await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(15), _logger).ConfigureAwait(false);
         return dto;
@@ -987,7 +1063,9 @@ public class AnalyticsService : IAnalyticsService
         var cacheKey = $"ldp:cache:analytics:insights:e{_cacheVersions.AnalyticsEpoch}";
         var cached = await DistributedJsonCache.GetAsync<InsightsAnalyticsDto>(_distributedCache, cacheKey).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var dto = await BuildInsightsUncachedAsync().ConfigureAwait(false);
         await DistributedJsonCache.SetAsync(_distributedCache, cacheKey, dto, TimeSpan.FromSeconds(45)).ConfigureAwait(false);
@@ -1082,7 +1160,9 @@ public class AnalyticsService : IAnalyticsService
         {
             var premiumPct = revenueThisMonth / totalRevenue * 100;
             if (premiumPct > 50)
+            {
                 insights.Add("Premium/Standard package revenue represents the majority of monthly revenue.");
+            }
         }
 
         return new InsightsAnalyticsDto { Insights = insights };

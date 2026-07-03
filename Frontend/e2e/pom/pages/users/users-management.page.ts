@@ -27,7 +27,9 @@ export class UsersManagementPage extends BasePage {
 
   async openCreateUserDialog(): Promise<void> {
     await this.page.getByTestId(UsersSelectors.openCreate).click();
-    await expect(this.page.getByTestId(UsersSelectors.dialog)).toBeVisible();
+    // PrimeNG p-dialog renders the visible overlay as a child `.p-dialog` element;
+    // the host element with the data-testid stays hidden, so assert on the overlay.
+    await expect(this.page.locator('.p-dialog.create-user-dialog')).toBeVisible();
   }
 
   async expectUserInTable(email: string): Promise<void> {

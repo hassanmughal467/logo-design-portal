@@ -6,7 +6,7 @@ import {
   createOrderApi,
   getOrderApi,
   requestRevisionApi,
-  updateOrderStatusApi,
+  updateOrderStatusAsAdminApi,
 } from './api-client';
 import { createTestOrder } from '../factories/test-data.factory';
 
@@ -42,17 +42,20 @@ export async function runCoreBusinessLifecycle(
   });
 
   await assertOrderStatusContains(request, actors.clientToken, order.id, String(order.status));
+  // Approve-only parks the order at ApprovedUnassigned; assigning the designer moves it to InProgress.
   await approveOrderApi(request, actors.adminToken, order.id);
+  await assignDesignerApi(request, actors.adminToken, order.id, actors.designerUserId);
   await assertOrderStatusContains(request, actors.clientToken, order.id, 'progress');
 
-  await assignDesignerApi(request, actors.adminToken, order.id, actors.designerUserId);
-  await updateOrderStatusApi(request, actors.designerToken, order.id, 'PreviewDelivered', 'Initial draft shared.');
+  // Designers no longer set PreviewDelivered via the status endpoint — an admin forwards files
+  // to the client (SendFilesToClient). The admin status transition models that forwarding step.
+  await updateOrderStatusAsAdminApi(request, actors.adminToken, order.id, 'PreviewDelivered', 'Preview forwarded to client.');
   await assertOrderStatusContains(request, actors.clientToken, order.id, 'preview');
 
   await requestRevisionApi(request, actors.clientToken, order.id, 'Please tighten spacing and improve icon balance.');
-  await updateOrderStatusApi(request, actors.designerToken, order.id, 'PreviewDelivered', 'Revision completed.');
+  await updateOrderStatusAsAdminApi(request, actors.adminToken, order.id, 'PreviewDelivered', 'Revision forwarded to client.');
   await approveLogoApi(request, actors.clientToken, order.id, 'Looks good after revision.');
-  await updateOrderStatusApi(request, actors.adminToken, order.id, 'Completed', 'Closed by automation suite.');
+  await updateOrderStatusAsAdminApi(request, actors.adminToken, order.id, 'Completed', 'Closed by automation suite.');
   await assertOrderStatusContains(request, actors.clientToken, order.id, 'completed');
 
   return { orderId: order.id };

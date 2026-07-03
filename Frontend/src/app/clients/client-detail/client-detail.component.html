@@ -118,7 +118,7 @@
                       [rounded]="true">
                     </p-tag>
                   </td>
-                  <td>{{ formatCurrency(getOrderPrice(order)) }}</td>
+                  <td>{{ formatCurrency(getOrderPrice(order), order.currencyCode) }}</td>
                   <td>{{ formatDate(order.createdAt) }}</td>
                   <td>{{ formatDate(order.dueDate) }}</td>
                   <td>
@@ -176,7 +176,7 @@
               <ng-template pTemplate="body" let-invoice>
                 <tr>
                   <td>{{ invoice.invoiceNumber || invoice.id }}</td>
-                  <td>{{ formatCurrency(invoice.amount) }}</td>
+                  <td>{{ formatCurrency(invoice.amount, invoice.currencyCode) }}</td>
                   <td>
                     <p-tag 
                       [value]="invoice.status" 

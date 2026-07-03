@@ -61,25 +61,31 @@ public class OrderResponseDto
     /// <summary>True when client has used all revisions and cannot request more (unless admin approves extra).</summary>
     public bool RevisionLimitExceeded { get; set; }
     public int CommentCount { get; set; }
-    
+
     // Cancellation fields
     public string? CancellationReason { get; set; }
     public DateTime? CancelledAt { get; set; }
     public bool IsCancelledByUser { get; set; }
-    
+
     // Archive fields
     public bool IsArchived { get; set; }
     public DateTime? ArchivedAt { get; set; }
-    
+
     // Refund fields
     public bool IsRefunded { get; set; }
     public DateTime? RefundedAt { get; set; }
     public decimal? RefundAmount { get; set; }
     public string? RefundReason { get; set; }
-    
+
     // Upload control fields
     public bool AllowUploads { get; set; } = true;
-    
+
     // Invoice fields
     public bool HasInvoice { get; set; }
+
+    // Unassigned Orders Alert System: timestamps capture when an order entered the
+    // approval / assignment lifecycle. Frontend uses ApprovedAt to drive "X hours unassigned" badges
+    // and the SuperAdmin dashboard alert widget.
+    public DateTime? ApprovedAt { get; set; }
+    public DateTime? AssignedAt { get; set; }
 }

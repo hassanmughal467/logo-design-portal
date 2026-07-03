@@ -111,7 +111,7 @@ export default defineConfig({
     {
       name: 'chromium',
       dependencies: [],
-      testIgnore: [/auth\.setup\.ts/, /roles\/admin\/.*\.spec\.ts/, /smoke\/.*\.spec\.ts/],
+      testIgnore: [/auth\.setup\.ts/, /roles\/admin\/.*\.spec\.ts/, /smoke\/.*\.spec\.ts/, /elite\/.*\.spec\.ts/],
       fullyParallel: true,
       use: {
         ...devices['Desktop Chrome'],
@@ -123,6 +123,17 @@ export default defineConfig({
       testMatch: /smoke\/.*\.spec\.ts/,
       use: {
         ...devices['Pixel 5'],
+      },
+    },
+    {
+      name: 'elite-serial',
+      dependencies: [],
+      testMatch: /elite\/.*\.spec\.ts/,
+      fullyParallel: false,
+      workers: 1,
+      retries: 1,
+      use: {
+        ...devices['Desktop Chrome'],
       },
     },
   ],

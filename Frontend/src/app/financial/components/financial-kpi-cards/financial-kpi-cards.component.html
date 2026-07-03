@@ -1,16 +1,36 @@
 <div class="kpi-cards" *ngIf="data">
-  <div class="kpi-card kpi-revenue">
-    <div class="kpi-icon"><i class="pi pi-wallet"></i></div>
+  <div class="kpi-card kpi-revenue" [class.kpi-card-multicurrency]="revenueCurrencyMixed">
+    <div class="kpi-icon"><i [class]="revenueIconClassForCard()"></i></div>
     <div class="kpi-content">
-      <span class="kpi-value">{{ formatCurrency(data.totalRevenue) }}</span>
-      <span class="kpi-label">Total Revenue</span>
+      <ng-container *ngIf="!revenueCurrencyMixed; else totalRevMixed">
+        <span class="kpi-value">{{ formatCurrency(data.totalRevenue) }}</span>
+        <span class="kpi-label">Total Revenue</span>
+      </ng-container>
+      <ng-template #totalRevMixed>
+        <span class="kpi-label kpi-label--top">Total Revenue</span>
+        <ul class="kpi-currency-list">
+          <li *ngFor="let row of revenueByCurrency">
+            <span class="kpi-currency-amount">{{ formatCurrencyLine(row, 'total') }}</span>
+          </li>
+        </ul>
+      </ng-template>
     </div>
   </div>
-  <div class="kpi-card kpi-month">
+  <div class="kpi-card kpi-month" [class.kpi-card-multicurrency]="revenueCurrencyMixed">
     <div class="kpi-icon"><i class="pi pi-calendar"></i></div>
     <div class="kpi-content">
-      <span class="kpi-value">{{ formatCurrency(data.revenueThisMonth) }}</span>
-      <span class="kpi-label">Revenue This Month</span>
+      <ng-container *ngIf="!revenueCurrencyMixed; else monthRevMixed">
+        <span class="kpi-value">{{ formatCurrency(data.revenueThisMonth) }}</span>
+        <span class="kpi-label">Revenue This Month</span>
+      </ng-container>
+      <ng-template #monthRevMixed>
+        <span class="kpi-label kpi-label--top">Revenue This Month</span>
+        <ul class="kpi-currency-list">
+          <li *ngFor="let row of revenueByCurrency">
+            <span class="kpi-currency-amount">{{ formatCurrencyLine(row, 'monthly') }}</span>
+          </li>
+        </ul>
+      </ng-template>
     </div>
   </div>
   <div class="kpi-card kpi-week">
@@ -20,11 +40,21 @@
       <span class="kpi-label">Revenue This Week</span>
     </div>
   </div>
-  <div class="kpi-card kpi-aov">
+  <div class="kpi-card kpi-aov" [class.kpi-card-multicurrency]="revenueCurrencyMixed">
     <div class="kpi-icon"><i class="pi pi-percentage"></i></div>
     <div class="kpi-content">
-      <span class="kpi-value">{{ formatCurrency(data.averageOrderValue) }}</span>
-      <span class="kpi-label">Average Order Value</span>
+      <ng-container *ngIf="!revenueCurrencyMixed; else aovMixed">
+        <span class="kpi-value">{{ formatCurrency(data.averageOrderValue) }}</span>
+        <span class="kpi-label">Average Order Value</span>
+      </ng-container>
+      <ng-template #aovMixed>
+        <span class="kpi-label kpi-label--top">Average Order Value</span>
+        <ul class="kpi-currency-list">
+          <li *ngFor="let row of revenueByCurrency">
+            <span class="kpi-currency-amount">{{ formatCurrencyLine(row, 'aov') }}</span>
+          </li>
+        </ul>
+      </ng-template>
     </div>
   </div>
   <div class="kpi-card kpi-orders">
@@ -63,7 +93,7 @@
     </div>
   </div>
   <div class="kpi-card kpi-outstanding">
-    <div class="kpi-icon"><i class="pi pi-dollar"></i></div>
+    <div class="kpi-icon"><i [class]="revenueIconClassForCard()"></i></div>
     <div class="kpi-content">
       <span class="kpi-value">{{ formatCurrency(data.outstandingBalance) }}</span>
       <span class="kpi-label">Outstanding Balance</span>

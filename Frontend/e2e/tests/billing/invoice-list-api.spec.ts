@@ -11,6 +11,8 @@ test('admin can GET /api/invoices', async ({ request }) => {
     headers: { Authorization: `Bearer ${token}` },
   });
   expect(res.ok()).toBeTruthy();
-  const body = await res.json();
-  expect(Array.isArray(body)).toBeTruthy();
+  // GET /api/invoices returns a paged result: { items, total, page, pageSize, ... }
+  const body = (await res.json()) as { items: unknown[]; total: number };
+  expect(Array.isArray(body.items)).toBeTruthy();
+  expect(typeof body.total).toBe('number');
 });

@@ -9,6 +9,6 @@ public class RequestRevisionDto
     [MinLength(10)]
     [MaxLength(5000)]
     public string Instructions { get; set; } = string.Empty;
-    
+
     public IFormFile[]? Files { get; set; }
 }

@@ -6,6 +6,8 @@ public class ClientProfile : BaseEntity
 {
     public Guid UserId { get; set; }
     public BillingType BillingType { get; set; } = BillingType.PerLogo;
+    /// <summary>Default billing currency for this client (quotes, orders, display).</summary>
+    public string CurrencyCode { get; set; } = "USD";
     public string CompanyName { get; set; } = string.Empty;
     public string? ContactName { get; set; }
     public string? PhoneNumber { get; set; }

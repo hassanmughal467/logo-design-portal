@@ -2,9 +2,9 @@
 
 .skeleton-card {
   padding: 1.15rem;
-  border: 1px solid var(--surface-border, var(--p-border-color, #dee2e6));
+  border: 1px solid var(--surface-border);
   border-radius: 10px;
-  background: var(--surface-card, var(--p-surface-0, #fff));
+  background: var(--surface-card);
   min-height: 120px;
 
   &--compact {

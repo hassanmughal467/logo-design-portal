@@ -149,8 +149,8 @@ public class PermissionService : IPermissionService
         }
 
         return user.Role.RolePermissions
-            .Any(rp => !rp.IsDeleted && 
-                       !rp.Permission.IsDeleted && 
+            .Any(rp => !rp.IsDeleted &&
+                       !rp.Permission.IsDeleted &&
                        rp.Permission.Name == permissionName);
     }
 

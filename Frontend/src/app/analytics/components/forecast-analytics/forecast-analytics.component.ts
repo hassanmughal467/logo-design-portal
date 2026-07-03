@@ -4,6 +4,11 @@ import {
   OrderForecastItem,
   RevenueForecastItem
 } from '@core/services/admin-analytics.service';
+import {
+  compactCurrencyLabel,
+  currencyIconClass,
+  formatCurrencyAmount
+} from '@core/utils/currency-format';
 
 @Component({
   selector: 'app-forecast-analytics',
@@ -15,6 +20,18 @@ export class ForecastAnalyticsComponent implements OnChanges {
 
   orderForecastChart: any;
   revenueForecastChart: any;
+
+  get revenueCurrencyCode(): string {
+    return this.data?.revenueCurrencyCode ?? 'USD';
+  }
+
+  get revenueCurrencyMixed(): boolean {
+    return !!this.data?.revenueCurrencyMixed;
+  }
+
+  get revenueIconClass(): string {
+    return currencyIconClass(this.revenueCurrencyCode);
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['data'] && this.data) {
@@ -47,6 +64,10 @@ export class ForecastAnalyticsComponent implements OnChanges {
     }
 
     const revenueData = this.data.revenueForecast || [];
+    const code = this.revenueCurrencyMixed ? undefined : this.revenueCurrencyCode;
+    const axis = (v: number) => compactCurrencyLabel(v, code, this.revenueCurrencyMixed);
+    const fmt = (v: number) => (v != null ? formatCurrencyAmount(v, code) : '-');
+
     if (revenueData.length > 0) {
       const actuals = revenueData.map((i: RevenueForecastItem) => i.actual);
       const predicted = revenueData.map((i: RevenueForecastItem) => i.predicted ?? null);
@@ -60,9 +81,13 @@ export class ForecastAnalyticsComponent implements OnChanges {
         fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.1 } },
         colors: ['#10b981', '#0d47a1'],
         xaxis: { categories: revenueData.map((i: RevenueForecastItem) => i.period) },
-        yaxis: { min: 0, labels: { formatter: (v: number) => '$' + v } },
+        yaxis: { min: 0, labels: { formatter: axis } },
         legend: { position: 'top' },
-        dataLabels: { enabled: false }
+        dataLabels: { enabled: false },
+        tooltip: {
+          shared: true,
+          y: [{ formatter: fmt }, { formatter: fmt }]
+        }
       };
     } else {
       this.revenueForecastChart = null;

@@ -13,6 +13,7 @@ export interface Quote {
   logoName: string;
   description: string;
   attachments: string[];
+  currencyCode?: string;
   requestedBudget?: number;
   adminQuotedPrice?: number;
   adminNotes?: string;

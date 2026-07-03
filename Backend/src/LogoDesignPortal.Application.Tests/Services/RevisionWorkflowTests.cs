@@ -10,6 +10,7 @@ using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
+using LogoDesignPortal.Application.Tests.Storage;
 using LogoDesignPortal.Infrastructure.Persistence;
 
 namespace LogoDesignPortal.Application.Tests.Services;
@@ -83,7 +84,9 @@ public class RevisionWorkflowTests : IDisposable
             logger.Object,
             _notificationService.Object,
             entityUpdateSender.Object,
-            Mock.Of<IInvoiceService>());
+            Mock.Of<IInvoiceService>(),
+            TestFileStorageFactory.CreateLocal(_tempStoragePath),
+            TestFileStorageFactory.CreateLocalOptions(_tempStoragePath));
     }
 
     private void SeedDatabase()
@@ -349,9 +352,12 @@ public class RevisionWorkflowTests : IDisposable
         try
         {
             if (Directory.Exists(_tempStoragePath))
+            {
                 Directory.Delete(_tempStoragePath, true);
+            }
         }
-        catch { /* ignore */
+        catch
+        { /* ignore */
         }
         _context.Dispose();
     }

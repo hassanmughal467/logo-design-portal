@@ -603,6 +603,36 @@
         <p-button label="View All Notifications" icon="pi pi-arrow-right" iconPos="right" styleClass="p-button-text p-button-sm" (onClick)="navigateToRoute('/notifications')"></p-button>
       </p-panel>
 
+      <!--
+        ═══ UNASSIGNED ORDERS ALERT ═══
+        Surfaces approved orders that still need a designer so they don't get lost in the
+        admin's queue. Clicking the card navigates to /orders with the "unassigned" filter
+        applied. Only renders for Admin/SuperAdmin and only when at least one such order exists.
+      -->
+      <div *ngIf="(user?.role === 'SuperAdmin' || user?.role === 'Admin') && unassignedApprovedCount > 0"
+           class="unassigned-alert-card"
+           role="button"
+           tabindex="0"
+           data-testid="dashboard-unassigned-alert"
+           (click)="navigateToUnassignedOrders()"
+           (keydown.enter)="navigateToUnassignedOrders()"
+           (keydown.space)="navigateToUnassignedOrders(); $event.preventDefault()">
+        <div class="unassigned-alert-icon">
+          <i class="pi pi-exclamation-triangle"></i>
+        </div>
+        <div class="unassigned-alert-body">
+          <div class="unassigned-alert-title">Unassigned Orders</div>
+          <div class="unassigned-alert-message">
+            <strong>{{ unassignedApprovedCount }}</strong>
+            {{ unassignedApprovedCount === 1 ? 'order needs' : 'orders need' }} a designer assigned
+          </div>
+        </div>
+        <div class="unassigned-alert-action">
+          <span class="unassigned-alert-action-label">Review now</span>
+          <i class="pi pi-arrow-right"></i>
+        </div>
+      </div>
+
       <!-- Stats Cards -->
       <div class="admin-stats-grid">
         <div class="stat-card" *ngFor="let stat of stats" [class]="'stat-' + stat.color">
@@ -814,22 +844,37 @@
       </div>
 
       <div class="field">
-        <label>Budget (optional)</label>
-        <input pInputText type="number" formControlName="requestedBudget" />
+        <label>Budget (optional, {{ quoteCurrencyCode }})</label>
+        <p-inputNumber
+          formControlName="requestedBudget"
+          mode="currency"
+          [currency]="quoteCurrencyCode"
+          [locale]="quoteCurrencyLocale"
+          [min]="0"
+          [maxFractionDigits]="2"
+          styleClass="w-full">
+        </p-inputNumber>
       </div>
 
       <div class="field">
         <label>Attachments</label>
-        <p-fileUpload
-          #getQuoteFileUpload
-          mode="basic"
-          [multiple]="true"
-          [auto]="false"
-          [maxFileSize]="maxUploadFileSize"
-          (onSelect)="onGetQuoteFileSelect($event)"
-          [showUploadButton]="false"
-          [showCancelButton]="false">
-        </p-fileUpload>
+        <input
+          #getQuoteFileInput
+          type="file"
+          multiple
+          accept="image/*,.pdf,.ai,.eps,.psd,.svg"
+          (change)="onGetQuoteFilesSelected($event)"
+          hidden />
+        <p-button type="button" icon="pi pi-plus" label="Add files" (onClick)="getQuoteFileInput.click()"></p-button>
+        <div class="quote-selected-files" *ngIf="quoteFiles.length > 0">
+          <div class="file-item" *ngFor="let file of quoteFiles; let i = index">
+            <span>{{ file.name }}</span>
+            <span class="file-size">{{ formatQuoteFileSize(file.size) }}</span>
+            <button type="button" class="link-btn" (click)="removeGetQuoteFile(i)" aria-label="Remove file">
+              <i class="pi pi-times"></i>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="dialog-actions">

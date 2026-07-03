@@ -1,6 +1,7 @@
 using AutoMapper;
 using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.Configuration;
+using LogoDesignPortal.Application.DTOs.Currency;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Mappings;
@@ -108,6 +109,104 @@ public class InvoiceServiceTests
     }
 
     [Fact]
+    public async Task CreateInvoiceAsync_ManualItemWithOrderId_MarksOrderInvoiced()
+    {
+        var (context, client, orders) = await CreateContextWithEligibleOrdersAsync();
+        var service = CreateInvoiceService(context);
+        var order = orders[2];
+
+        var result = await service.CreateInvoiceAsync(new CreateInvoiceRequestDto
+        {
+            ManualItems = new List<CreateInvoiceItemDto>
+            {
+                new()
+                {
+                    OrderId = order.Id,
+                    Description = $"Manual line — Order #{order.Id.ToString()[..8]}",
+                    Amount = 199m
+                }
+            },
+            BillingType = BillingType.Monthly,
+            BillingPeriod = "March 2026"
+        }, Guid.NewGuid());
+
+        Assert.NotNull(result);
+        Assert.Single(result.Items);
+        Assert.Equal(order.Id, result.Items[0].OrderId);
+
+        var updatedOrder = await context.LogoOrders.FirstAsync(o => o.Id == order.Id);
+        Assert.True(updatedOrder.IsInvoiced);
+        Assert.Equal(result.Id, updatedOrder.InvoiceId);
+    }
+
+    [Fact]
+    public async Task EditInvoiceItemsAsync_AddOrderIds_AttachesLogosToUnpaidInvoice()
+    {
+        var (context, client, orders) = await CreateContextWithEligibleOrdersAsync();
+        var service = CreateInvoiceService(context);
+
+        var createResult = await service.GenerateFlexibleInvoiceAsync(new GenerateFlexibleInvoiceRequestDto
+        {
+            ClientId = client.Id,
+            SelectedOrderIds = new List<Guid> { orders[0].Id },
+            IncludeUninvoicedOnly = true
+        }, Guid.NewGuid());
+
+        var updated = await service.EditInvoiceItemsAsync(createResult.Id, new EditInvoiceItemsRequestDto
+        {
+            AddOrderIds = new List<Guid> { orders[1].Id }
+        }, Guid.NewGuid());
+
+        Assert.Equal(2, updated.Items.Count);
+        Assert.Contains(orders[1].Id, updated.OrderIds);
+
+        var addedOrder = await context.LogoOrders.FirstAsync(o => o.Id == orders[1].Id);
+        Assert.True(addedOrder.IsInvoiced);
+        Assert.Equal(createResult.Id, addedOrder.InvoiceId);
+    }
+
+    [Fact]
+    public async Task GenerateFlexibleInvoiceAsync_PkrOrders_StoresExchangeRateSnapshot()
+    {
+        var (context, client, orders) = await CreateContextWithEligibleOrdersAsync();
+        foreach (var order in orders)
+        {
+            order.CurrencyCode = "PKR";
+        }
+
+        await context.SaveChangesAsync();
+
+        var fetchedAt = new DateTime(2026, 6, 10, 9, 0, 0, DateTimeKind.Utc);
+        var currency = new Mock<ICurrencyService>();
+        currency.Setup(s => s.GetRateInfoAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExchangeRateInfo
+            {
+                Rate = 292.75m,
+                Source = "exchangerate-api",
+                FetchedAt = fetchedAt,
+                IsStale = false
+            });
+
+        var service = CreateInvoiceService(context, currency.Object);
+
+        var result = await service.GenerateFlexibleInvoiceAsync(new GenerateFlexibleInvoiceRequestDto
+        {
+            ClientId = client.Id,
+            SelectedOrderIds = new List<Guid> { orders[0].Id },
+            IncludeUninvoicedOnly = true
+        }, Guid.NewGuid());
+
+        Assert.Equal(292.75m, result.ExchangeRate);
+        Assert.Equal(fetchedAt, result.ExchangeRateFetchedAt);
+        Assert.False(result.ExchangeRateIsStale);
+
+        var stored = await context.Invoices.FirstAsync(i => i.Id == result.Id);
+        Assert.Equal(292.75m, stored.ExchangeRate);
+        Assert.Equal(fetchedAt, stored.ExchangeRateFetchedAt);
+        Assert.False(stored.ExchangeRateIsStale);
+    }
+
+    [Fact]
     public async Task GenerateFlexibleInvoiceAsync_WithoutDateRangeAndSelectedOrders_ThrowsInvalidOperationException()
     {
         var (context, client, _) = await CreateContextWithEligibleOrdersAsync();
@@ -125,7 +224,7 @@ public class InvoiceServiceTests
         Assert.Equal("Either fromDate/toDate or selectedOrderIds must be provided.", ex.Message);
     }
 
-    private static InvoiceService CreateInvoiceService(ApplicationDbContext context)
+    private static InvoiceService CreateInvoiceService(ApplicationDbContext context, ICurrencyService? currencyService = null)
     {
         return new InvoiceService(
             context,
@@ -134,6 +233,7 @@ public class InvoiceServiceTests
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Microsoft.Extensions.Options.Options.Create(new ProductionSafetyOptions()),
             Mock.Of<IReadModelCacheVersions>(),
+            currencyService ?? Mock.Of<ICurrencyService>(),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<InvoiceService>>());
     }
 

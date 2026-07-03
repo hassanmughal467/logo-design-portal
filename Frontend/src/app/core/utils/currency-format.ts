@@ -67,3 +67,42 @@ export function formatCurrencyAmount(amount: number, currencyCode?: string | nul
     }).format(amount);
   }
 }
+
+/**
+ * PrimeIcons class for a given ISO currency. Falls back to a generic dollar
+ * icon for unknown codes. Used by stat cards / KPIs that previously hard-coded
+ * `pi pi-dollar` regardless of the underlying currency.
+ */
+/** Compact axis/tooltip label for charts (e.g. £13k). When mixed, omits symbol. */
+export function compactCurrencyLabel(
+  value: number,
+  currencyCode?: string | null,
+  mixed = false
+): string {
+  if (mixed) {
+    return Math.abs(value) >= 1000 ? (value / 1000).toFixed(value >= 10000 ? 0 : 1) + 'k' : value.toString();
+  }
+  const code = currencyCode ?? DEFAULT_INVOICE_CURRENCY;
+  if (Math.abs(value) >= 1000) {
+    const sym = formatCurrencyAmount(0, code).replace(/[\d.,\s\u00a0]/g, '');
+    return sym + (value / 1000).toFixed(value >= 10000 ? 0 : 1) + 'k';
+  }
+  return formatCurrencyAmount(value, code);
+}
+
+export function currencyIconClass(currencyCode?: string | null): string {
+  const c = (currencyCode || DEFAULT_INVOICE_CURRENCY).trim().toUpperCase();
+  switch (c) {
+    case 'EUR':
+      return 'pi pi-euro';
+    case 'GBP':
+      return 'pi pi-pound';
+    case 'JPY':
+      return 'pi pi-yen';
+    case 'INR':
+    case 'PKR':
+      return 'pi pi-money-bill';
+    default:
+      return 'pi pi-dollar';
+  }
+}

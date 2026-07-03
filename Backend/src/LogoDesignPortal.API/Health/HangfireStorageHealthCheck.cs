@@ -12,7 +12,9 @@ public sealed class HangfireStorageHealthCheck : IHealthCheck
         {
             var storage = JobStorage.Current;
             if (storage == null)
+            {
                 return Task.FromResult(HealthCheckResult.Degraded("Hangfire JobStorage is not initialized yet."));
+            }
 
             var api = storage.GetMonitoringApi();
             _ = api.Servers();

@@ -16,7 +16,10 @@ public static class NotificationRedirectHelper
         Guid? orderId)
     {
         var refId = referenceId ?? orderId;
-        if (!refId.HasValue) return null;
+        if (!refId.HasValue)
+        {
+            return null;
+        }
 
         return referenceType switch
         {

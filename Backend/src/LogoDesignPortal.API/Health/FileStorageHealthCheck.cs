@@ -1,33 +1,42 @@
+using LogoDesignPortal.Application.Configuration;
+using LogoDesignPortal.Application.Interfaces.Storage;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 namespace LogoDesignPortal.API.Health;
 
 public sealed class FileStorageHealthCheck : IHealthCheck
 {
-    private readonly IConfiguration _configuration;
+    private readonly IFileStorageService _fileStorage;
+    private readonly StorageOptions _storageOptions;
     private readonly ILogger<FileStorageHealthCheck> _logger;
 
-    public FileStorageHealthCheck(IConfiguration configuration, ILogger<FileStorageHealthCheck> logger)
+    public FileStorageHealthCheck(
+        IFileStorageService fileStorage,
+        IOptions<StorageOptions> storageOptions,
+        ILogger<FileStorageHealthCheck> logger)
     {
-        _configuration = configuration;
+        _fileStorage = fileStorage;
+        _storageOptions = storageOptions.Value;
         _logger = logger;
     }
 
-    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
-        var root = _configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
         try
         {
-            Directory.CreateDirectory(root);
-            var probe = Path.Combine(root, $".health-{Guid.NewGuid():N}");
-            File.WriteAllText(probe, "ok");
-            File.Delete(probe);
-            return Task.FromResult(HealthCheckResult.Healthy("File storage path is writable."));
+            var probeKey = $".health/{Guid.NewGuid():N}";
+            await using var payload = new MemoryStream("ok"u8.ToArray());
+            await _fileStorage.UploadAsync(payload, probeKey, "text/plain", cancellationToken).ConfigureAwait(false);
+            await _fileStorage.DeleteAsync(probeKey, cancellationToken).ConfigureAwait(false);
+
+            var provider = _storageOptions.IsR2 ? "R2" : "Local";
+            return HealthCheckResult.Healthy($"File storage ({provider}) is writable.");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "File storage health check failed for {Path}", root);
-            return Task.FromResult(HealthCheckResult.Unhealthy("File storage path is not writable.", ex));
+            _logger.LogWarning(ex, "File storage health check failed.");
+            return HealthCheckResult.Unhealthy("File storage is not writable.", ex);
         }
     }
 }

@@ -74,10 +74,17 @@ public class BillingService : IBillingService
             {
                 var client = clients[c.ClientId];
                 var clientName = $"{client.User?.FirstName} {client.User?.LastName}".Trim();
-                if (string.IsNullOrEmpty(clientName)) clientName = client.CompanyName ?? "Unknown";
+                if (string.IsNullOrEmpty(clientName))
+                {
+                    clientName = client.CompanyName ?? "Unknown";
+                }
+
                 string? singleCurrency = null;
                 if (currencyByClient.TryGetValue(c.ClientId, out var codes) && codes.Count == 1)
+                {
                     singleCurrency = codes[0];
+                }
+
                 return new BillingQueueOverviewDto
                 {
                     ClientId = c.ClientId,
@@ -170,7 +177,10 @@ public class BillingService : IBillingService
         var clientProfile = await _context.ClientProfiles
             .FirstOrDefaultAsync(c => c.Id == clientId || c.UserId == clientId);
         if (clientProfile == null)
+        {
             return new List<BillingEligibleOrderDto>();
+        }
+
         var resolvedClientId = clientProfile.Id;
 
         var orders = await _context.LogoOrders
@@ -196,12 +206,17 @@ public class BillingService : IBillingService
     public async Task<InvoiceResponseDto> CreateInvoiceFromOrdersAsync(Guid clientId, List<CreateInvoiceOrderItemDto>? orders, List<Guid>? orderIds, string? billingPeriod, Guid createdBy)
     {
         if (_safetyOptions.DisableBillingGeneration)
+        {
             throw new InvalidOperationException("Billing temporarily disabled by administrator.");
+        }
 
         // API expects ClientProfile.Id; if User.Id is accidentally supplied, resolve to ClientProfile.Id
         var clientProfile = await _context.ClientProfiles.FirstOrDefaultAsync(c => c.Id == clientId || c.UserId == clientId);
         if (clientProfile == null)
+        {
             throw new InvalidOperationException("Client not found.");
+        }
+
         var resolvedClientId = clientProfile.Id;
 
         CreateInvoiceRequestDto request;
@@ -296,7 +311,9 @@ public class BillingService : IBillingService
                         // Billing queue safety: validate each order before invoicing
                         var validOrderIds = await ValidateBillingEligibleOrdersAsync(orderIds);
                         if (validOrderIds.Any())
+                        {
                             await CreateInvoiceFromOrdersAsync(clientId, null, validOrderIds, billingPeriod, createdBy);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -338,7 +355,9 @@ public class BillingService : IBillingService
                     {
                         var validOrderIds = await ValidateBillingEligibleOrdersAsync(orderIds);
                         if (validOrderIds.Any())
+                        {
                             await CreateInvoiceFromOrdersAsync(clientId, null, validOrderIds, billingPeriod, createdBy);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -374,7 +393,10 @@ public class BillingService : IBillingService
                 continue;
             }
             if (order.Status != OrderStatus.Completed || order.IsInvoiced)
+            {
                 continue;
+            }
+
             valid.Add(order.Id);
         }
         return valid;

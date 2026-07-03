@@ -28,6 +28,8 @@ export interface LoginResponse {
   refreshToken?: string;
   user: User;
   expiresAt: string;      // Backend returns 'expiresAt' (DateTime) not 'expiresIn' (number)
+  /** Set when cookie auth is enabled (API host cookies + SPA sessionStorage). */
+  csrfToken?: string;
 }
 
 export interface RegisterRequest {

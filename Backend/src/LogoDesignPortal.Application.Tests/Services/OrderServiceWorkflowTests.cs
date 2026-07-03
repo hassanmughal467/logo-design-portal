@@ -178,19 +178,77 @@ public class OrderServiceWorkflowTests
     }
 
     [Fact]
-    public async Task ApproveOrderAsync_ValidInput_SetsStatusInProgress()
+    public async Task ApproveOrderAsync_ApproveOnly_SetsStatusApprovedUnassigned()
     {
         var (context, orderId, adminUserId) = await SeedOrderAsync(OrderStatus.WaitingForAdminApproval, useAdmin: true);
         var orderService = CreateOrderService(context);
 
-        var result = await orderService.ApproveOrderAsync(orderId, adminUserId);
+        var result = await orderService.ApproveOrderAsync(orderId, new ApproveOrderRequestDto(), adminUserId);
 
         Assert.NotNull(result);
-        Assert.Equal(OrderStatus.InProgress.ToString(), result.Status);
+        Assert.Equal(OrderStatus.ApprovedUnassigned.ToString(), result.Status);
 
         var savedOrder = await context.LogoOrders.FindAsync(orderId);
         Assert.NotNull(savedOrder);
-        Assert.Equal(OrderStatus.InProgress, savedOrder!.Status);
+        Assert.Equal(OrderStatus.ApprovedUnassigned, savedOrder!.Status);
+        Assert.NotNull(savedOrder.ApprovedAt);
+        Assert.Null(savedOrder.DesignerId);
+        Assert.Null(savedOrder.AssignedAt);
+    }
+
+    [Fact]
+    public async Task ApproveOrderAsync_WithDesigner_TransitionsToInProgressAndAssignsDesigner()
+    {
+        var (context, orderId, adminUserId) = await SeedOrderAsync(OrderStatus.WaitingForAdminApproval, useAdmin: true);
+        var designerUserId = await SeedDesignerAsync(context);
+        var orderService = CreateOrderService(context);
+
+        var result = await orderService.ApproveOrderAsync(orderId, new ApproveOrderRequestDto { DesignerId = designerUserId }, adminUserId);
+
+        Assert.Equal(OrderStatus.InProgress.ToString(), result.Status);
+        var saved = await context.LogoOrders.FindAsync(orderId);
+        Assert.NotNull(saved);
+        Assert.Equal(OrderStatus.InProgress, saved!.Status);
+        Assert.NotNull(saved.DesignerId);
+        Assert.NotNull(saved.ApprovedAt);
+        Assert.NotNull(saved.AssignedAt);
+    }
+
+    [Fact]
+    public async Task AssignDesigner_FromApprovedUnassigned_TransitionsToInProgress()
+    {
+        var (context, orderId, adminUserId) = await SeedOrderAsync(OrderStatus.WaitingForAdminApproval, useAdmin: true);
+        var designerUserId = await SeedDesignerAsync(context);
+        var orderService = CreateOrderService(context);
+
+        await orderService.ApproveOrderAsync(orderId, new ApproveOrderRequestDto(), adminUserId);
+
+        var before = await context.LogoOrders.FindAsync(orderId);
+        Assert.NotNull(before);
+        Assert.Equal(OrderStatus.ApprovedUnassigned, before!.Status);
+
+        var assigned = await orderService.AssignOrderToDesignerAsync(orderId, designerUserId, adminUserId);
+
+        Assert.Equal(OrderStatus.InProgress.ToString(), assigned.Status);
+        var saved = await context.LogoOrders.FindAsync(orderId);
+        Assert.NotNull(saved);
+        Assert.Equal(OrderStatus.InProgress, saved!.Status);
+        Assert.NotNull(saved.AssignedAt);
+    }
+
+    [Fact]
+    public async Task GetUnassignedApprovedCountAsync_CountsOnlyApprovedUnassigned()
+    {
+        var (context, orderId, adminUserId) = await SeedOrderAsync(OrderStatus.WaitingForAdminApproval, useAdmin: true);
+        var orderService = CreateOrderService(context);
+
+        var initial = await orderService.GetUnassignedApprovedCountAsync();
+        Assert.Equal(0, initial);
+
+        await orderService.ApproveOrderAsync(orderId, new ApproveOrderRequestDto(), adminUserId);
+
+        var after = await orderService.GetUnassignedApprovedCountAsync();
+        Assert.Equal(1, after);
     }
 
     [Fact]
@@ -200,7 +258,7 @@ public class OrderServiceWorkflowTests
         var orderService = CreateOrderService(context);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => orderService.ApproveOrderAsync(orderId, adminUserId));
+            () => orderService.ApproveOrderAsync(orderId, new ApproveOrderRequestDto(), adminUserId));
     }
 
     [Fact]
@@ -226,7 +284,7 @@ public class OrderServiceWorkflowTests
             .ReturnsAsync(new NotificationResponseDto());
 
         var orderService = CreateOrderService(context, notificationMock.Object);
-        await orderService.ApproveOrderAsync(orderId, adminUserId);
+        await orderService.ApproveOrderAsync(orderId, new ApproveOrderRequestDto(), adminUserId);
 
         notificationMock.Verify(
             n => n.CreateNotificationAsync(
@@ -239,6 +297,40 @@ public class OrderServiceWorkflowTests
                 orderId,
                 It.IsAny<Guid?>()),
             Times.Once);
+    }
+
+    /// <summary>
+    /// Seeds a Designer User + DesignerProfile in an existing in-memory context.
+    /// Reuses any pre-existing "Designer" role and is idempotent for repeated seeding inside one test.
+    /// </summary>
+    private static async Task<Guid> SeedDesignerAsync(ApplicationDbContext context)
+    {
+        var designerRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "Designer");
+        if (designerRole == null)
+        {
+            designerRole = new Role { Id = Guid.NewGuid(), Name = "Designer" };
+            context.Roles.Add(designerRole);
+        }
+        var userId = Guid.NewGuid();
+        context.Users.Add(new User
+        {
+            Id = userId,
+            Email = $"designer-{userId:N}@test.local",
+            FirstName = "Test",
+            LastName = "Designer",
+            RoleId = designerRole.Id,
+            PasswordHash = "hash",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
+        context.DesignerProfiles.Add(new DesignerProfile
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+        return userId;
     }
 
     private static async Task<(ApplicationDbContext context, Guid clientUserId)> SeedClientAsync()
@@ -352,17 +444,6 @@ public class OrderServiceWorkflowTests
         var mapperConfig = new MapperConfiguration(cfg => cfg.AddProfile<LogoDesignPortal.Application.Mappings.MappingProfile>());
         var mapper = mapperConfig.CreateMapper();
 
-        return new OrderService(
-            context,
-            mapper,
-            notificationService ?? Mock.Of<INotificationService>(),
-            Mock.Of<IRealtimeEntityUpdateSender>(),
-            Mock.Of<IFileService>(),
-            Mock.Of<IClientLogoPricingService>(),
-            Mock.Of<ICommentService>(),
-            Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>(),
-            Mock.Of<IDistributedCache>(),
-            Mock.Of<IReadModelCacheVersions>(),
-            new ClientProfileEnsureService(context, Mock.Of<IReadModelCacheVersions>(), Mock.Of<Microsoft.Extensions.Logging.ILogger<ClientProfileEnsureService>>()));
+        return TestOrderServiceFactory.Create(context, notificationService);
     }
 }

@@ -35,21 +35,30 @@ public class CommentService : ICommentService
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
+        {
             throw new InvalidOperationException("Order not found.");
+        }
 
         if (userRole == "Client")
         {
             if (order.Client?.UserId != userId)
+            {
                 throw new ForbiddenAccessException("You don't have access to this order.");
+            }
         }
         else if (userRole == "Designer")
         {
             if (order.DesignerId == null)
+            {
                 throw new ForbiddenAccessException("You don't have access to this order.");
+            }
+
             var designer = await _context.DesignerProfiles
                 .FirstOrDefaultAsync(d => d.UserId == userId && !d.IsDeleted);
             if (designer == null || order.DesignerId != designer.Id)
+            {
                 throw new ForbiddenAccessException("You don't have access to this order.");
+            }
         }
         else if (userRole != "Admin" && userRole != "SuperAdmin")
         {
@@ -64,25 +73,33 @@ public class CommentService : ICommentService
         var order = await EnsureOrderAccessAsync(orderId, createdBy, userRole);
 
         if (OrderLockingHelper.IsOrderLocked(order.Status))
+        {
             throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
+        }
 
         var user = await _context.Users
             .Include(u => u.Role)
             .FirstOrDefaultAsync(u => u.Id == createdBy && !u.IsDeleted);
 
         if (user == null)
+        {
             throw new InvalidOperationException("User not found.");
+        }
 
         var creatorRole = user.Role?.Name ?? string.Empty;
 
         // Clients cannot create internal comments
         var isInternal = creatorRole == "Client" ? false : request.IsInternal;
 
-        // Designer comments default to not visible to client until Admin approves
+        // Designer comments default to not visible to client until Admin approves.
+        // Admin/SuperAdmin non-internal posts are client-only relays (designers must not see them).
         var visibleToClient = creatorRole == "Designer" ? false : !isInternal;
-        var commentType = creatorRole == "Designer" ? CommentType.DesignerFeedback
-            : isInternal ? CommentType.Internal
-            : CommentType.General;
+        var commentType = creatorRole switch
+        {
+            "Designer" => CommentType.DesignerFeedback,
+            "Admin" or "SuperAdmin" => isInternal ? CommentType.Internal : CommentType.AdminRelay,
+            _ => CommentType.General
+        };
 
         var commentLegacy = new OrderComment
         {
@@ -105,7 +122,11 @@ public class CommentService : ICommentService
             try
             {
                 var creatorName = $"{user.FirstName} {user.LastName}".Trim();
-                if (string.IsNullOrEmpty(creatorName)) creatorName = creatorRole == "Designer" ? "Designer" : "Client";
+                if (string.IsNullOrEmpty(creatorName))
+                {
+                    creatorName = creatorRole == "Designer" ? "Designer" : "Client";
+                }
+
                 var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
                 var title = creatorRole == "Designer" ? "New Comment from Designer" : "New Comment from Client";
                 var message = $"{creatorName} added a comment on order (#{orderNumber})";
@@ -124,7 +145,11 @@ public class CommentService : ICommentService
             try
             {
                 var staffName = $"{user.FirstName} {user.LastName}".Trim();
-                if (string.IsNullOrEmpty(staffName)) staffName = "Support";
+                if (string.IsNullOrEmpty(staffName))
+                {
+                    staffName = "Support";
+                }
+
                 var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
                 var title = "New message on your order";
                 var message = $"{staffName} left a comment on order (#{orderNumber}).";
@@ -166,13 +191,19 @@ public class CommentService : ICommentService
             var dto = _mapper.Map<CommentResponseDto>(c);
             var creatorRole = c.CreatedByUser.Role?.Name ?? string.Empty;
             dto.CreatedByName = $"{c.CreatedByUser.FirstName} {c.CreatedByUser.LastName}".Trim();
-            if (string.IsNullOrEmpty(dto.CreatedByName)) dto.CreatedByName = creatorRole;
+            if (string.IsNullOrEmpty(dto.CreatedByName))
+            {
+                dto.CreatedByName = creatorRole;
+            }
+
             dto.CreatedByRole = creatorRole;
             dto.CommentType = c.CommentType.ToString();
 
             // Mask designer identity when viewer is Client
             if (userRole == "Client" && creatorRole == "Designer")
+            {
                 dto.CreatedByName = "Design Team";
+            }
 
             dtos.Add(dto);
         }
@@ -187,15 +218,21 @@ public class CommentService : ICommentService
             .FirstOrDefaultAsync(c => c.Id == commentId && !c.IsDeleted);
 
         if (comment == null)
+        {
             return false;
+        }
 
         await EnsureOrderAccessAsync(comment.OrderId, userId, userRole);
 
         if (comment.Order != null && OrderLockingHelper.IsOrderLocked(comment.Order.Status))
+        {
             throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
+        }
 
         if (comment.CreatedBy != userId && userRole != "Admin" && userRole != "SuperAdmin")
+        {
             throw new UnauthorizedAccessException("You don't have permission to delete this comment.");
+        }
 
         comment.IsDeleted = true;
         comment.DeletedAt = DateTime.UtcNow;
@@ -208,7 +245,9 @@ public class CommentService : ICommentService
     public async Task<CommentResponseDto?> SetCommentVisibilityAsync(Guid commentId, SetCommentVisibilityRequestDto request, Guid userId, string userRole)
     {
         if (userRole != "Admin" && userRole != "SuperAdmin")
+        {
             throw new UnauthorizedAccessException("Only Admin can approve comment visibility.");
+        }
 
         var comment = await _context.OrderComments
             .Include(c => c.CreatedByUser)
@@ -218,13 +257,17 @@ public class CommentService : ICommentService
             .FirstOrDefaultAsync(c => c.Id == commentId && !c.IsDeleted);
 
         if (comment == null)
+        {
             return null;
+        }
 
         await EnsureOrderAccessAsync(comment.OrderId, userId, userRole);
 
         if (comment.CommentType == CommentType.PriceNegotiationClient ||
             comment.CommentType == CommentType.PriceNegotiationDesigner)
+        {
             throw new InvalidOperationException("Price negotiation notes use fixed visibility and cannot be changed here.");
+        }
 
         var wasVisibleToClient = comment.VisibleToClient;
         comment.VisibleToClient = request.VisibleToClient;
@@ -270,11 +313,17 @@ public class CommentService : ICommentService
         foreach (var c in comments)
         {
             if (userRole == "Client" && !c.IsReadByClient)
+            {
                 c.IsReadByClient = true;
+            }
             else if (userRole == "Designer" && !c.IsReadByDesigner)
+            {
                 c.IsReadByDesigner = true;
+            }
             else if ((userRole == "Admin" || userRole == "SuperAdmin") && !c.IsReadByAdmin)
+            {
                 c.IsReadByAdmin = true;
+            }
         }
 
         await _context.SaveChangesAsync();
@@ -319,24 +368,34 @@ public class CommentService : ICommentService
     public async Task AppendPriceNegotiationNoteAsync(Guid orderId, Guid createdBy, CommentType channel, string content)
     {
         if (channel != CommentType.PriceNegotiationClient && channel != CommentType.PriceNegotiationDesigner)
+        {
             throw new ArgumentException("Channel must be a price negotiation comment type.", nameof(channel));
+        }
 
         if (string.IsNullOrWhiteSpace(content))
+        {
             return;
+        }
 
         var trimmed = content.Trim();
         if (trimmed.Length > 2000)
+        {
             trimmed = trimmed[..2000];
+        }
 
         var order = await _context.LogoOrders.FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
         if (order == null)
+        {
             throw new InvalidOperationException("Order not found.");
+        }
 
         var user = await _context.Users
             .Include(u => u.Role)
             .FirstOrDefaultAsync(u => u.Id == createdBy && !u.IsDeleted);
         if (user == null)
+        {
             throw new InvalidOperationException("User not found.");
+        }
 
         var comment = new OrderComment
         {
@@ -356,11 +415,17 @@ public class CommentService : ICommentService
 
     private static IQueryable<OrderComment> ApplyOrderCommentVisibilityFilter(IQueryable<OrderComment> query, string? userRole)
     {
-        // Designers do not see client-authored thread comments; Admin/SuperAdmin mediate and relay.
+        // Designers do not see client-authored thread comments or staff client-only relays.
         if (userRole == "Designer")
         {
             query = query.Where(c => c.CommentType != CommentType.PriceNegotiationClient);
+            query = query.Where(c => c.CommentType != CommentType.AdminRelay);
             query = query.Where(c => c.CreatedByUser.Role == null || c.CreatedByUser.Role.Name != "Client");
+            // Legacy: staff General comments marked visible-to-client were client-facing, not designer-facing.
+            query = query.Where(c => c.IsInternal
+                || c.CommentType == CommentType.Internal
+                || c.CommentType == CommentType.DesignerFeedback
+                || (c.CreatedByUser.Role != null && c.CreatedByUser.Role.Name == "Designer"));
         }
 
         if (userRole == "Client")
@@ -377,10 +442,15 @@ public class CommentService : ICommentService
     {
         var creatorRole = createdByUser.Role?.Name ?? string.Empty;
         var createdByName = $"{createdByUser.FirstName} {createdByUser.LastName}".Trim();
-        if (string.IsNullOrEmpty(createdByName)) createdByName = creatorRole;
+        if (string.IsNullOrEmpty(createdByName))
+        {
+            createdByName = creatorRole;
+        }
 
         if (viewerRole == "Client" && creatorRole == "Designer")
+        {
             createdByName = "Design Team";
+        }
 
         return new CommentResponseDto
         {

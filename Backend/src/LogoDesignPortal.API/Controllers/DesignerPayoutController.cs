@@ -39,7 +39,9 @@ public class DesignerPayoutController : ControllerBase
             var userId = User.GetUserIdOrThrow();
             var designer = await GetDesignerProfileByUserId(userId);
             if (designer != null)
+            {
                 designerId = designer.Id;
+            }
         }
         var result = await _designerPayoutService.GetDesignPricingInfoAsync(designerId);
         return Ok(result);
@@ -142,7 +144,9 @@ public class DesignerPayoutController : ControllerBase
         var userId = User.GetUserIdOrThrow();
         var designer = await GetDesignerProfileByUserId(userId);
         if (designer == null)
+        {
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "Designer profile not found." });
+        }
 
         var result = await _designerPayoutService.GetDesignerOrdersPendingApprovalAsync(designer.Id);
         return Ok(result);
@@ -159,7 +163,9 @@ public class DesignerPayoutController : ControllerBase
         var userId = User.GetUserIdOrThrow();
         var designer = await GetDesignerProfileByUserId(userId);
         if (designer == null)
+        {
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "Designer profile not found." });
+        }
 
         var result = await _designerPayoutService.GetDesignerPayoutEligibleOrdersAsync(designer.Id);
         return Ok(result);
@@ -201,7 +207,10 @@ public class DesignerPayoutController : ControllerBase
     {
         var result = await _designerPayoutService.GetOrderPreviewAsync(orderId);
         if (result == null)
+        {
             return NotFound(new { error = "Order not found." });
+        }
+
         return Ok(result);
     }
 
@@ -238,7 +247,9 @@ public class DesignerPayoutController : ControllerBase
         var userId = User.GetUserIdOrThrow();
         var designer = await GetDesignerProfileByUserId(userId);
         if (designer == null)
+        {
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "Designer profile not found." });
+        }
 
         var result = await _designerPayoutService.GetDesignerInvoicesAsync(designer.Id);
         return Ok(result);
@@ -256,11 +267,16 @@ public class DesignerPayoutController : ControllerBase
         var userId = User.GetUserIdOrThrow();
         var designer = await GetDesignerProfileByUserId(userId);
         if (designer == null)
+        {
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "Designer profile not found." });
+        }
 
         var result = await _designerPayoutService.GetDesignerInvoiceByIdAsync(invoiceId);
         if (result == null || result.DesignerId != designer.Id)
+        {
             return NotFound(new { error = "Invoice not found." });
+        }
+
         return Ok(result);
     }
 

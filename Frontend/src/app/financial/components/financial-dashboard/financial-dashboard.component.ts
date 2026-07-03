@@ -24,6 +24,14 @@ export class FinancialDashboardComponent implements OnInit, OnDestroy {
   activityItems: any[] = [];
   forecastItems: any[] = [];
 
+  get revenueCurrencyCode(): string {
+    return this.overview?.revenueCurrencyCode ?? 'USD';
+  }
+
+  get revenueCurrencyMixed(): boolean {
+    return !!this.overview?.revenueCurrencyMixed;
+  }
+
   private destroy$ = new Subject<void>();
 
   constructor(

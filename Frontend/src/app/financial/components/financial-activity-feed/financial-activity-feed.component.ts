@@ -1,5 +1,6 @@
 import { Component, Input } from '@angular/core';
 import { FinancialActivityItem } from '@core/services/financial-analytics.service';
+import { formatCurrencyAmount } from '@core/utils/currency-format';
 
 @Component({
   selector: 'app-financial-activity-feed',
@@ -9,42 +10,48 @@ import { FinancialActivityItem } from '@core/services/financial-analytics.servic
 export class FinancialActivityFeedComponent {
   @Input() items: FinancialActivityItem[] = [];
 
-  getIcon(type: string): string {
-    switch (type) {
-      case 'InvoicePaid': return 'pi pi-check-circle';
-      case 'NewOrder': return 'pi pi-shopping-cart';
-      case 'OrderCompleted': return 'pi pi-check';
-      case 'RefundIssued': return 'pi pi-undo';
-      case 'LargeTransaction': return 'pi pi-bolt';
-      default: return 'pi pi-circle';
-    }
+  formatCurrency(v: number, currencyCode?: string): string {
+    return formatCurrencyAmount(v, currencyCode);
+  }
+
+  formatDate(value: string): string {
+    return new Date(value).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
   getSeverity(type: string): string {
     switch (type) {
+      case 'RefundIssued':
+        return 'warn';
+      case 'LargeTransaction':
+        return 'info';
       case 'InvoicePaid':
-      case 'OrderCompleted': return 'success';
-      case 'NewOrder': return 'info';
-      case 'RefundIssued': return 'warn';
-      case 'LargeTransaction': return 'primary';
-      default: return 'secondary';
+      case 'OrderCompleted':
+        return 'success';
+      default:
+        return 'neutral';
     }
   }
 
-  formatCurrency(v: number): string {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(v);
-  }
-
-  formatDate(d: string): string {
-    const date = new Date(d);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    if (diffMins < 60) return diffMins + 'm ago';
-    if (diffHours < 24) return diffHours + 'h ago';
-    if (diffDays < 7) return diffDays + 'd ago';
-    return date.toLocaleDateString();
+  getIcon(type: string): string {
+    switch (type) {
+      case 'InvoicePaid':
+        return 'pi pi-check-circle';
+      case 'NewOrder':
+        return 'pi pi-shopping-cart';
+      case 'OrderCompleted':
+        return 'pi pi-flag';
+      case 'RefundIssued':
+        return 'pi pi-replay';
+      case 'LargeTransaction':
+        return 'pi pi-star';
+      default:
+        return 'pi pi-info-circle';
+    }
   }
 }

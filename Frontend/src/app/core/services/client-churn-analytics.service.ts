@@ -12,6 +12,7 @@ export interface ClientRiskScoreItem {
   totalRevenue: number;
   revenueContributionPercent: number;
   lastOrderDate?: string;
+  currencyCode?: string;
 }
 
 export interface ClientChurnAlertItem {
@@ -22,6 +23,7 @@ export interface ClientChurnAlertItem {
   totalRevenue: number;
   orderCount: number;
   alertMessage: string;
+  currencyCode?: string;
 }
 
 export interface ClientRetentionTrendItem {

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { OrdersListPage } from '../../pom';
+import { LoginPage, OrdersListPage } from '../../pom';
 import { apiUrl, approveOrderApi, getOrderApi, loginApi } from '../../utils/api-client';
 import { getAdminToken, provisionClientUser, teardownUsers } from '../../utils/api-helpers';
 import { uniqueSuffix } from '../../utils/test-data';
@@ -21,10 +21,11 @@ test.describe('Elite - data persistence', () => {
 
     const title = `Persistence ${uniqueSuffix(testInfo)}`;
     const orders = new OrdersListPage(page);
-    await page.goto('/auth/login');
-    await page.getByTestId('login-email').fill(client.email);
-    await page.getByTestId('login-password').locator('input').fill(client.password);
-    await page.getByTestId('login-submit').click();
+    const login = new LoginPage(page);
+    await login.goto();
+    await login.login(client.email, client.password);
+    // Wait for the authenticated redirect before navigating, or the auth guard bounces us back to login.
+    await login.expectRedirectToDashboard();
     await orders.goto();
     await orders.openCreateOrderModal();
     await orders.createOrder.fillAndSubmit(title, 'Persistence scenario for reload verification of order state.');

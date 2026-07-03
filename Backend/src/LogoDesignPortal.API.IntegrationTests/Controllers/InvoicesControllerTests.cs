@@ -133,6 +133,71 @@ public class InvoicesControllerTests
     }
 
     [Fact]
+    public async Task CreateInvoice_ManualLineWithOrderId_MarksOrderInvoiced()
+    {
+        var orderId = await IntegrationDatabaseHelper.InsertCompletedBillableOrderAsync(
+            _factory, _factory.ClientProfileId, 175m);
+
+        var client = _factory.CreateClient();
+        var token = await AuthHelper.GetSuperAdminTokenAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.PostAsJsonAsync("/api/invoices", new
+        {
+            manualItems = new[]
+            {
+                new { orderId, description = "Manual linked line", amount = 175m }
+            },
+            billingType = BillingType.Monthly,
+            billingPeriod = "Test period"
+        }, JsonOptions);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var queue = await client.GetAsync(
+            $"/api/billing/queue?clientId={_factory.ClientProfileId}&onlyUninvoiced=true");
+        queue.EnsureSuccessStatusCode();
+        var queueBody = await queue.Content.ReadAsStringAsync();
+        Assert.DoesNotContain(orderId.ToString(), queueBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task EditInvoiceItems_ManualLineWithOrderId_MarksOrderInvoiced()
+    {
+        var invoicedOrderId = await IntegrationDatabaseHelper.InsertCompletedBillableOrderAsync(
+            _factory, _factory.ClientProfileId, 100m);
+        var extraOrderId = await IntegrationDatabaseHelper.InsertCompletedBillableOrderAsync(
+            _factory, _factory.ClientProfileId, 120m);
+
+        var client = _factory.CreateClient();
+        var token = await AuthHelper.GetSuperAdminTokenAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var createResponse = await client.PostAsJsonAsync("/api/invoices", new
+        {
+            orders = new[] { new { orderId = invoicedOrderId, price = 100m } },
+            billingType = BillingType.Monthly,
+            taxAmount = 0m
+        }, JsonOptions);
+        createResponse.EnsureSuccessStatusCode();
+        var created = await createResponse.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
+        var invoiceId = created.GetProperty("id").GetGuid();
+
+        var editResponse = await client.PutAsJsonAsync($"/api/invoices/{invoiceId}/items", new
+        {
+            addManualItems = new[]
+            {
+                new { orderId = extraOrderId, description = "Late logo", amount = 120m }
+            }
+        }, JsonOptions);
+        Assert.Equal(HttpStatusCode.OK, editResponse.StatusCode);
+
+        var eligible = await client.GetAsync($"/api/billing/clients/{_factory.ClientProfileId}/eligible-orders");
+        eligible.EnsureSuccessStatusCode();
+        var eligibleBody = await eligible.Content.ReadAsStringAsync();
+        Assert.DoesNotContain(extraOrderId.ToString(), eligibleBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task MarkPaid_AsClient_Returns403()
     {
         var orderId = await IntegrationDatabaseHelper.InsertCompletedBillableOrderAsync(

@@ -9,6 +9,7 @@ public class Quote : BaseEntity
     public string Description { get; set; } = string.Empty;
     public string? AttachmentsJson { get; set; }
     public decimal? RequestedBudget { get; set; }
+    public string CurrencyCode { get; set; } = "USD";
     public decimal? AdminQuotedPrice { get; set; }
     public string? AdminNotes { get; set; }
     public QuoteStatus Status { get; set; } = QuoteStatus.Pending;

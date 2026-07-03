@@ -95,7 +95,10 @@ public class DesignerInvoiceController : ControllerBase
     {
         var result = await _designerPayoutService.GetDesignerInvoiceByIdAsync(invoiceId);
         if (result == null)
+        {
             return NotFound(new { error = "Designer invoice not found." });
+        }
+
         return Ok(result);
     }
 

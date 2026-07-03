@@ -8,11 +8,15 @@ public static partial class TextInputSanitizer
     public static string? SanitizePlainText(string? input, int maxLength = 8000)
     {
         if (string.IsNullOrWhiteSpace(input))
+        {
             return input;
+        }
 
         var trimmed = input.Trim();
         if (trimmed.Length > maxLength)
+        {
             trimmed = trimmed[..maxLength];
+        }
 
         trimmed = ScriptTagPattern().Replace(trimmed, string.Empty);
         trimmed = EventHandlerPattern().Replace(trimmed, string.Empty);

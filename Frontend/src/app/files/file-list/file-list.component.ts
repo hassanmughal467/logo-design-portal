@@ -7,6 +7,7 @@ import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { LogoGroup, ClientGroup, GroupedFilesResponse, FileCategory, FileStatus, LogoFile } from '@shared/models/file.model';
+import { TagSeverity } from '@shared/types/primeng.types';
 
 @Component({
   selector: 'app-file-list',
@@ -927,7 +928,7 @@ export class FileListComponent implements OnInit, OnDestroy {
     return Math;
   }
 
-  getFileStatusSeverity(fileStatus?: string): string {
+  getFileStatusSeverity(fileStatus?: string): TagSeverity {
     if (!fileStatus) return 'warning';
     if (fileStatus === 'Approved') return 'success';
     if (fileStatus === 'Final') return 'info';
@@ -938,7 +939,7 @@ export class FileListComponent implements OnInit, OnDestroy {
     return fileStatus || 'Draft';
   }
 
-  getUserRoleSeverity(role?: string): string {
+  getUserRoleSeverity(role?: string): TagSeverity {
     if (!role) return 'secondary';
     const roleLower = role.toLowerCase();
     if (roleLower === 'superadmin' || roleLower === 'admin') return 'danger';

@@ -7,6 +7,7 @@ public class ClientProfileDto
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public BillingType BillingType { get; set; } = BillingType.PerLogo;
+    public string CurrencyCode { get; set; } = "USD";
     public string CompanyName { get; set; } = string.Empty;
     public string? ContactName { get; set; }
     public string? PhoneNumber { get; set; }

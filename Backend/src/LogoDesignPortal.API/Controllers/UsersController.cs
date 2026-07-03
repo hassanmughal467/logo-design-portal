@@ -85,7 +85,7 @@ public class UsersController : ControllerBase
         // Check if user can view this profile (own profile or admin)
         var currentUserId = User.GetUserIdOrThrow();
         var isAdmin = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
-        
+
         // Users can only view their own profile, admins can view any
         if (id != currentUserId && !isAdmin)
         {
@@ -206,7 +206,7 @@ public class UsersController : ControllerBase
         // Check if user can update (own profile or admin)
         var currentUserId = User.GetUserIdOrThrow();
         var isAdmin = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
-        
+
         // Users can only update their own profile, admins can update any
         if (id != currentUserId && !isAdmin)
         {

@@ -9,7 +9,9 @@ public static class HttpContextRateLimitExtensions
         {
             var first = fwd.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
             if (!string.IsNullOrEmpty(first))
+            {
                 return first;
+            }
         }
 
         return http.Connection.RemoteIpAddress != null

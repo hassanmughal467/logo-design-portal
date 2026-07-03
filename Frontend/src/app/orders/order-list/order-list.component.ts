@@ -14,8 +14,10 @@ import { isOrderLocked as checkOrderLocked } from '@shared/utils/order-locking';
 import {
   getOrderStatusLabel,
   getOrderStatusSeverity,
+  OrderStatusSeverity,
   ORDER_STATUS_DISPLAY_ORDER
 } from '@shared/utils/order-status-display';
+import { TagSeverity } from '@shared/types/primeng.types';
 import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
 
 interface SummaryCard {
@@ -162,6 +164,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
 
     this.loadOrders();
     this.handleQuotePrefillFromQuery();
+    this.handleStatusFilterFromQuery();
 
     // Real-time order updates: refresh grid when order events arrive
     this.realtimeNotification.orderUpdates$
@@ -325,11 +328,12 @@ export class OrderListComponent implements OnInit, OnDestroy {
         { label: 'Completed', value: counts.completed, icon: 'pi pi-check-circle', color: 'success', filterStatus: OrderStatus.Completed }
       ];
     } else {
-      // Admin / SuperAdmin
+      // Admin / SuperAdmin: surface the "Unassigned" KPI in the summary cards
+      // so approved-without-designer orders cannot get lost between approval and assignment.
       this.summaryCards = [
         { label: 'New Orders', value: counts.newOrders, icon: 'pi pi-inbox', color: 'primary', filterStatus: OrderStatus.WaitingForAdminApproval },
+        { label: 'Unassigned', value: counts.unassignedApproved, icon: 'pi pi-exclamation-circle', color: 'danger', filterStatus: OrderStatus.ApprovedUnassigned },
         { label: 'In QA', value: counts.inQA, icon: 'pi pi-search', color: 'info', filterStatus: OrderStatus.PreviewDelivered },
-        { label: 'Pending Approval', value: counts.pendingClientApproval, icon: 'pi pi-clock', color: 'warning', filterStatus: OrderStatus.PriceApprovalPending },
         { label: 'Overdue', value: counts.overdue, icon: 'pi pi-exclamation-triangle', color: 'danger', filterStatus: null }
       ];
     }
@@ -340,7 +344,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
-    const activeStatuses = [OrderStatus.InProgress, OrderStatus.RevisionRequested, OrderStatus.PreviewDelivered, OrderStatus.PriceApprovalPending, OrderStatus.WaitingForAdminApproval];
+    const activeStatuses = [OrderStatus.InProgress, OrderStatus.RevisionRequested, OrderStatus.PreviewDelivered, OrderStatus.PriceApprovalPending, OrderStatus.WaitingForAdminApproval, OrderStatus.ApprovedUnassigned];
 
     return {
       active: this.orders.filter(o => activeStatuses.includes(o.status)).length,
@@ -359,8 +363,14 @@ export class OrderListComponent implements OnInit, OnDestroy {
       overdue: this.orders.filter(o => this.isOverdue(o.dueDate) && !this.isTerminalStatus(o.status)).length,
       newOrders: this.orders.filter(o => o.status === OrderStatus.WaitingForAdminApproval).length,
       inQA: this.orders.filter(o => o.status === OrderStatus.PreviewDelivered).length,
-      pendingClientApproval: this.orders.filter(o => o.status === OrderStatus.PriceApprovalPending).length
+      pendingClientApproval: this.orders.filter(o => o.status === OrderStatus.PriceApprovalPending).length,
+      unassignedApproved: this.orders.filter(o => o.status === OrderStatus.ApprovedUnassigned).length
     };
+  }
+
+  /** True when this order was approved by Admin but is still awaiting a designer (drives row highlight + UNASSIGNED badge). */
+  isUnassignedApproved(order: Order): boolean {
+    return order.status === OrderStatus.ApprovedUnassigned;
   }
 
   isTerminalStatus(status: OrderStatus): boolean {
@@ -383,6 +393,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
     const chipConfigs: { status: OrderStatus | null; label: string; icon: string; roles: string[] }[] = [
       { status: null, label: 'All', icon: 'pi pi-list', roles: ['Client', 'Designer', 'Admin', 'SuperAdmin'] },
       { status: OrderStatus.WaitingForAdminApproval, label: 'Awaiting Admin', icon: 'pi pi-inbox', roles: ['Admin', 'SuperAdmin'] },
+      // Unassigned filter mirrors the Unassigned Orders Alert widget: Admin/SuperAdmin only.
+      { status: OrderStatus.ApprovedUnassigned, label: 'Unassigned', icon: 'pi pi-exclamation-circle', roles: ['Admin', 'SuperAdmin'] },
       { status: OrderStatus.PriceApprovalPending, label: 'Price Pending', icon: 'pi pi-dollar', roles: ['Client', 'Admin', 'SuperAdmin'] },
       { status: OrderStatus.InProgress, label: 'In Progress', icon: 'pi pi-spin pi-spinner', roles: ['Client', 'Designer', 'Admin', 'SuperAdmin'] },
       { status: OrderStatus.PreviewDelivered, label: 'Preview Ready', icon: 'pi pi-eye', roles: ['Client', 'Admin', 'SuperAdmin'] },
@@ -532,6 +544,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
     switch (statusStr) {
       case 'WaitingForAdminApproval': case '1': return OrderStatus.WaitingForAdminApproval;
       case 'PriceApprovalPending': case '2': return OrderStatus.PriceApprovalPending;
+      case 'ApprovedUnassigned': case 'Approved Unassigned': case 'approved_unassigned': case '16': return OrderStatus.ApprovedUnassigned;
       case 'InProgress': case 'In Progress': case '3': return OrderStatus.InProgress;
       case 'PreviewDelivered': case '4': return OrderStatus.PreviewDelivered;
       case 'RevisionRequested': case '5': return OrderStatus.RevisionRequested;
@@ -546,7 +559,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
   }
 
   // ═══ STATUS & FORMATTING ═══
-  getStatusSeverity(status: OrderStatus): string {
+  getStatusSeverity(status: OrderStatus): OrderStatusSeverity {
     return getOrderStatusSeverity(status);
   }
 
@@ -554,8 +567,8 @@ export class OrderListComponent implements OnInit, OnDestroy {
     return getOrderStatusLabel(status);
   }
 
-  getPrioritySeverity(priority: OrderPriority): string {
-    const severityMap: { [key: string]: string } = {
+  getPrioritySeverity(priority: OrderPriority): TagSeverity {
+    const severityMap: Record<string, TagSeverity> = {
       'Low': 'success', 'Medium': 'warning', 'High': 'warning', 'Urgent': 'danger'
     };
     return severityMap[priority] || 'secondary';
@@ -655,6 +668,29 @@ export class OrderListComponent implements OnInit, OnDestroy {
   openQuoteCreateDialog(): void {
     // Reuse the Quotes page "Get a Quote" flow by opening the client dialog via query param.
     this.router.navigate(['/quotes'], { queryParams: { openCreate: 'true' } });
+  }
+
+  /**
+   * Accept `?status=ApprovedUnassigned` (or shorthand `?filter=unassigned`) so dashboard widgets
+   * can deep-link into the orders grid with the matching filter pre-applied.
+   * Robust to status casing/spacing/legacy snake_case from external links.
+   */
+  private handleStatusFilterFromQuery(): void {
+    this.route.queryParamMap
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(params => {
+        const raw = (params.get('status') ?? params.get('filter') ?? '').trim();
+        if (!raw) return;
+        const normalized = raw.replace(/[\s_-]/g, '').toLowerCase();
+        const match = Object.values(OrderStatus).find(s => s.toLowerCase() === normalized);
+        const status = match
+          ?? (normalized === 'unassigned' ? OrderStatus.ApprovedUnassigned : null);
+        if (!status) return;
+        this.selectedStatus = status as OrderStatus;
+        this.activeQuickFilter = status as OrderStatus;
+        this.applyFilters();
+        this.first = 0;
+      });
   }
 
   private handleQuotePrefillFromQuery(): void {

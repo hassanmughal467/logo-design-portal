@@ -1,5 +1,4 @@
 import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
-import { FileUpload } from 'primeng/fileupload';
 import { Router } from '@angular/router';
 import { AuthService } from '@core/services/auth.service';
 import { ApiService } from '@core/services/api.service';
@@ -19,11 +18,15 @@ import {
   buildOrderStatusFilterOptions,
   getOrderStatusChartColor,
   getOrderStatusLabel,
-  getOrderStatusSeverity
+  getOrderStatusSeverity,
+  OrderStatusSeverity
 } from '@shared/utils/order-status-display';
+import { DEFAULT_CLIENT_CURRENCY } from '@core/constants/currency-options';
 import {
   DEFAULT_INVOICE_CURRENCY,
-  formatCurrencyAmount
+  currencyIconClass,
+  formatCurrencyAmount,
+  localeForCurrency
 } from '@core/utils/currency-format';
 
 export interface ActionRequiredItem {
@@ -54,9 +57,6 @@ export interface OrderTimelineEvent {
   styleUrls: ['./dashboard.component.scss']
 })
 export class DashboardComponent implements OnInit, OnDestroy {
-  @ViewChild('getQuoteFileUpload') private getQuoteFileUpload?: FileUpload;
-
-  readonly maxUploadFileSize = MAX_UPLOAD_BYTES;
   user: User | null = null;
     dashboardData: DashboardData = {
     stats: {
@@ -101,6 +101,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** Currency for admin/client revenue KPIs and charts (from order/invoice data). */
   revenueCurrencyCode = DEFAULT_INVOICE_CURRENCY;
   revenueCurrencyMixed = false;
+
+  /**
+   * Approved orders that are still missing a designer assignment.
+   * Drives the "Unassigned Orders" alert banner for Admin / SuperAdmin so they
+   * never lose track of orders they approved without immediately routing to a designer.
+   * Sourced from the analytics overview endpoint (`ordersAwaitingDesignerAssignment`).
+   */
+  unassignedApprovedCount = 0;
 
   // Client analytics card groups
   clientOrderAnalytics: any[] = [];
@@ -343,6 +351,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 totalRevenue: overview.totalRevenue,
                 averageDeliveryTime: overview.averageDeliveryTimeDays
               };
+              // Track approved-but-unassigned orders for the Unassigned Orders alert widget.
+              // Fall back to 0 if the backend is older than the analytics-overview change.
+              this.unassignedApprovedCount = (overview as any).ordersAwaitingDesignerAssignment ?? 0;
               if (overview.revenueCurrencyCode) {
                 this.dashboardData.revenueCurrencyCode = overview.revenueCurrencyCode;
                 this.dashboardData.revenueCurrencyMixed = !!overview.revenueCurrencyMixed;
@@ -835,7 +846,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return statuses.map((s) => getOrderStatusChartColor(s));
   }
 
-  getStatusSeverity(status: OrderStatus): string {
+  getStatusSeverity(status: OrderStatus): OrderStatusSeverity {
     return getOrderStatusSeverity(status);
   }
 
@@ -926,6 +937,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   quoteForm!: FormGroup;
   quoteSubmitting = false;
   quoteFiles: File[] = [];
+  quoteCurrencyCode = DEFAULT_CLIENT_CURRENCY;
+  quoteCurrencyLocale = localeForCurrency(DEFAULT_CLIENT_CURRENCY);
 
   navigateToOrders(): void {
     this.router.navigate(['/orders']);
@@ -939,12 +952,54 @@ export class DashboardComponent implements OnInit, OnDestroy {
       description: '',
       requestedBudget: null
     });
+    this.loadQuoteCurrencyForClient();
     this.showGetQuoteDialog = true;
   }
 
-  onGetQuoteFileSelect(event: any): void {
-    const files: File[] = event.files ? Array.from(event.files) : [];
-    const deduped = files.filter(file => !this.quoteFiles.some(f => f.name === file.name && f.size === file.size));
+  private loadQuoteCurrencyForClient(): void {
+    const userId = this.user?.id;
+    if (!userId || this.user?.role !== 'Client') {
+      this.quoteCurrencyCode = DEFAULT_CLIENT_CURRENCY;
+      this.quoteCurrencyLocale = localeForCurrency(DEFAULT_CLIENT_CURRENCY);
+      return;
+    }
+
+    this.apiService.get<{ clientProfile?: { currencyCode?: string } }>(`users/${userId}`).subscribe({
+      next: (profileUser) => {
+        const code = profileUser?.clientProfile?.currencyCode || DEFAULT_CLIENT_CURRENCY;
+        this.quoteCurrencyCode = code;
+        this.quoteCurrencyLocale = localeForCurrency(code);
+      },
+      error: () => {
+        this.quoteCurrencyCode = DEFAULT_CLIENT_CURRENCY;
+        this.quoteCurrencyLocale = localeForCurrency(DEFAULT_CLIENT_CURRENCY);
+      }
+    });
+  }
+
+  onGetQuoteFilesSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length > 0) {
+      this.addGetQuoteFiles(files);
+    }
+    input.value = '';
+  }
+
+  addGetQuoteFiles(files: File[]): void {
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.svg', '.ai', '.eps', '.psd'];
+    const valid = files.filter(f => {
+      const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+      return allowed.includes(ext) || f.type.startsWith('image/');
+    });
+    if (valid.length < files.length) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Invalid file type',
+        detail: 'Allowed: JPG, PNG, GIF, WEBP, SVG, PDF, AI, EPS, PSD'
+      });
+    }
+    const deduped = valid.filter(file => !this.quoteFiles.some(f => f.name === file.name && f.size === file.size));
     const tooBig = deduped.filter(f => f.size > MAX_UPLOAD_BYTES);
     if (tooBig.length > 0) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Each file must be 500MB or smaller.' });
@@ -953,11 +1008,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const merged = [...this.quoteFiles, ...ok];
     if (combinedFileBytes(merged) > MAX_UPLOAD_BYTES) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Combined file size cannot exceed 500MB.' });
-      this.getQuoteFileUpload?.clear();
       return;
     }
     this.quoteFiles = merged;
-    this.getQuoteFileUpload?.clear();
+  }
+
+  removeGetQuoteFile(index: number): void {
+    this.quoteFiles.splice(index, 1);
+  }
+
+  formatQuoteFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   }
 
   submitGetQuote(): void {
@@ -966,7 +1031,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const payload = this.quoteForm.value;
     const formData = new FormData();
     formData.append('quote', JSON.stringify(payload));
-    this.quoteFiles.forEach(f => formData.append('files', f));
+    this.quoteFiles.forEach(f => formData.append('files', f, f.name));
 
     this.quoteSubmitting = true;
     this.apiService.post<any>('quotes', formData)
@@ -1348,14 +1413,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Stat card icon for revenue KPIs (avoid hard-coded dollar when totals are GBP, etc.). */
   private revenueStatIcon(): string {
-    const code = (this.revenueCurrencyCode || DEFAULT_INVOICE_CURRENCY).toUpperCase();
-    if (code === 'EUR') {
-      return 'pi pi-euro';
-    }
-    if (code === 'GBP') {
-      return 'pi pi-money-bill';
-    }
-    return 'pi pi-dollar';
+    return currencyIconClass(this.revenueCurrencyCode);
   }
 
   formatCurrency(amount: number, currencyCode?: string | null): string {
@@ -1396,7 +1454,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         icon: 'pi pi-dollar',
         severity: 'warning',
         title: `Price approval for "${order.title}"`,
-        subtitle: `Proposed price: $${(order as any).proposedPrice || order.price || 0}`,
+        subtitle: `Proposed price: ${this.formatCurrency((order as any).proposedPrice || order.price || 0, order.currencyCode)}`,
         actionLabel: 'Review Price',
         actionIcon: 'pi pi-eye',
         data: order
@@ -1751,6 +1809,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get isClient(): boolean {
     return this.isClientRole(this.user);
+  }
+
+  /**
+   * Navigate to the orders page with the Unassigned (ApprovedUnassigned) filter pre-applied.
+   * Triggered from the Unassigned Orders alert widget on the admin dashboard.
+   * The orders list reads the `?filter=unassigned` query param and seeds its status filter.
+   */
+  navigateToUnassignedOrders(): void {
+    this.router.navigate(['/orders'], { queryParams: { filter: 'unassigned' } });
   }
 
 

@@ -41,7 +41,10 @@ public class ClientLogoPricingController : ControllerBase
     {
         var result = await _clientLogoPricingService.GetByIdAsync(id);
         if (result == null)
+        {
             return NotFound();
+        }
+
         return Ok(result);
     }
 
@@ -54,7 +57,9 @@ public class ClientLogoPricingController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateClientLogoPricingRequestDto request)
     {
         if (User.GetUserId() is not { } userId)
+        {
             return Unauthorized();
+        }
 
         var result = await _clientLogoPricingService.CreateAsync(request, userId);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
@@ -70,7 +75,9 @@ public class ClientLogoPricingController : ControllerBase
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateClientLogoPricingRequestDto request)
     {
         if (User.GetUserId() is not { } userId)
+        {
             return Unauthorized();
+        }
 
         try
         {
@@ -92,11 +99,16 @@ public class ClientLogoPricingController : ControllerBase
     public async Task<IActionResult> Delete(Guid id)
     {
         if (User.GetUserId() is not { } userId)
+        {
             return Unauthorized();
+        }
 
         var deleted = await _clientLogoPricingService.DeleteAsync(id, userId);
         if (!deleted)
+        {
             return NotFound();
+        }
+
         return NoContent();
     }
 }

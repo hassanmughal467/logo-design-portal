@@ -16,5 +16,6 @@ test('Elite - slow network keeps UI responsive with loading indicator', async ({
   await page.goto('/orders');
   await expect(page.getByTestId('scoped-page-skeleton')).toBeVisible();
   await expect(page.getByRole('heading', { name: /Orders/i })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('orders-open-create')).toBeVisible();
+  // Admins see "Add Completed Order" — Create Order is Client-only.
+  await expect(page.getByTestId('orders-open-quick-completed')).toBeVisible();
 });

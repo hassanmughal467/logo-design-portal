@@ -2,7 +2,7 @@ name: PR Validation
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, staging-environment]
 
 concurrency:
   group: pr-${{ github.workflow }}-${{ github.ref }}

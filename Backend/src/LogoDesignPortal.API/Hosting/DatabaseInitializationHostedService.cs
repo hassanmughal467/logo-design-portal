@@ -28,7 +28,9 @@ public sealed class DatabaseInitializationHostedService : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         if (_environment.IsEnvironment("Testing"))
+        {
             return Task.CompletedTask;
+        }
 
         if (!_options.RunAfterStartup)
         {
@@ -154,7 +156,9 @@ public sealed class DatabaseInitializationHostedService : IHostedService
     {
         var superAdminRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin", ct).ConfigureAwait(false);
         if (superAdminRole == null)
+        {
             return;
+        }
 
         var superAdmin = await context.Users.FirstOrDefaultAsync(u => u.Email == "superadmin@logodesign.com", ct).ConfigureAwait(false);
         if (superAdmin == null)

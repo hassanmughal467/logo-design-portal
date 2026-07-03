@@ -25,6 +25,11 @@ public class QuoteConfiguration : IEntityTypeConfiguration<Quote>
         builder.Property(q => q.RequestedBudget)
             .HasPrecision(18, 2);
 
+        builder.Property(q => q.CurrencyCode)
+            .IsRequired()
+            .HasMaxLength(3)
+            .HasDefaultValue("USD");
+
         builder.Property(q => q.AdminQuotedPrice)
             .HasPrecision(18, 2);
 

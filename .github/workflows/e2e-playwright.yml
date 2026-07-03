@@ -10,7 +10,7 @@ name: E2E (Playwright)
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, staging-environment]
     paths:
       - 'Frontend/e2e/**'
       - 'Frontend/src/**'
@@ -19,7 +19,7 @@ on:
       - 'Backend/src/LogoDesignPortal.Infrastructure/**'
       - 'Backend/src/LogoDesignPortal.Domain/**'
   push:
-    branches: [main, develop]
+    branches: [main, develop, staging-environment]
     paths:
       - 'Frontend/e2e/**'
       - 'Frontend/src/**'

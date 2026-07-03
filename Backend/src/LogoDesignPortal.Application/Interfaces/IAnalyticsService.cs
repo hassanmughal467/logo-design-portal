@@ -23,22 +23,48 @@ public class AnalyticsOverviewDto
     public int OrdersToday { get; set; }
     public int OrdersThisMonth { get; set; }
     public int OrdersThisYear { get; set; }
+    /// <summary>
+    /// Cross-currency raw sum across all completed orders (NOT FX-converted).
+    /// Only meaningful when <see cref="RevenueCurrencyMixed"/> is false. When mixed,
+    /// the UI must use <see cref="RevenueByCurrency"/> for accurate per-currency totals.
+    /// </summary>
     public decimal TotalRevenue { get; set; }
     /// <summary>ISO 4217 code when all completed orders share one currency; otherwise USD with <see cref="RevenueCurrencyMixed"/>.</summary>
     public string RevenueCurrencyCode { get; set; } = "USD";
     public bool RevenueCurrencyMixed { get; set; }
     public decimal MonthlyRevenue { get; set; }
     public decimal AverageOrderValue { get; set; }
+    /// <summary>
+    /// Per-currency revenue rollup over completed orders. Always populated (single
+    /// entry when there is only one currency; multiple when mixed). Authoritative
+    /// for UIs that want accountant-grade numbers without FX assumptions.
+    /// </summary>
+    public List<RevenueByCurrencyItemDto> RevenueByCurrency { get; set; } = new();
     public int TotalClients { get; set; }
     public int ActiveDesigners { get; set; }
     public int PendingOrders { get; set; }
     public int OrdersInProgress { get; set; }
     public int OrdersAwaitingAdminReview { get; set; }
     public int OrdersAwaitingClientApproval { get; set; }
+    /// <summary>
+    /// Approved orders that still have no designer assigned. Drives the SuperAdmin
+    /// "Unassigned Orders Alert" widget and the orders grid filter.
+    /// </summary>
+    public int OrdersAwaitingDesignerAssignment { get; set; }
     public decimal RevisionRate { get; set; }
     public decimal ApprovalRate { get; set; }
     public double AverageDeliveryTimeDays { get; set; }
     public int OverdueOrders { get; set; }
+}
+
+/// <summary>Revenue rollup for a single ISO 4217 currency across completed orders.</summary>
+public class RevenueByCurrencyItemDto
+{
+    public string CurrencyCode { get; set; } = "USD";
+    public decimal TotalRevenue { get; set; }
+    public decimal MonthlyRevenue { get; set; }
+    public int CompletedCount { get; set; }
+    public decimal AverageOrderValue { get; set; }
 }
 
 public class OrderAnalyticsDto
@@ -126,6 +152,8 @@ public class RevenueAnalyticsDto
     public List<AverageOrderValueTrendItemDto> AverageOrderValueTrend { get; set; } = new();
     public List<TopClientByRevenueDto> TopClientsByRevenue { get; set; } = new();
     public decimal RevenueGrowthRate { get; set; }
+    public string RevenueCurrencyCode { get; set; } = "USD";
+    public bool RevenueCurrencyMixed { get; set; }
 }
 
 public class RevenueTrendDailyItemDto
@@ -161,6 +189,7 @@ public class TopClientByRevenueDto
     public string ClientName { get; set; } = string.Empty;
     public decimal Revenue { get; set; }
     public int OrderCount { get; set; }
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class DesignerAnalyticsDto
@@ -213,6 +242,7 @@ public class ClientLifetimeValueItemDto
     public string ClientName { get; set; } = string.Empty;
     public decimal Revenue { get; set; }
     public int OrderCount { get; set; }
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class OrdersPerClientItemDto
@@ -305,6 +335,8 @@ public class ForecastAnalyticsDto
 {
     public List<OrderForecastItemDto> OrderGrowthPrediction { get; set; } = new();
     public List<RevenueForecastItemDto> RevenueForecast { get; set; } = new();
+    public string RevenueCurrencyCode { get; set; } = "USD";
+    public bool RevenueCurrencyMixed { get; set; }
 }
 
 public class OrderForecastItemDto

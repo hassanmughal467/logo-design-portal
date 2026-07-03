@@ -8,6 +8,7 @@ public class QuoteResponseDto
     public string Description { get; set; } = string.Empty;
     public List<string> Attachments { get; set; } = new();
     public decimal? RequestedBudget { get; set; }
+    public string CurrencyCode { get; set; } = "USD";
     public decimal? AdminQuotedPrice { get; set; }
     public string? AdminNotes { get; set; }
     public string Status { get; set; } = "Pending";

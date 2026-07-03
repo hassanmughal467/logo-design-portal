@@ -22,6 +22,10 @@ public interface IFinancialAnalyticsService
 public class FinancialOverviewDto
 {
     public decimal TotalRevenue { get; set; }
+    /// <summary>ISO 4217 when all completed orders share one currency; USD when mixed.</summary>
+    public string RevenueCurrencyCode { get; set; } = "USD";
+    public bool RevenueCurrencyMixed { get; set; }
+    public List<RevenueByCurrencyItemDto> RevenueByCurrency { get; set; } = new();
     public decimal RevenueThisMonth { get; set; }
     public decimal RevenueThisWeek { get; set; }
     public decimal AverageOrderValue { get; set; }
@@ -95,6 +99,7 @@ public class ClientRevenueItemDto
     public string ClientName { get; set; } = string.Empty;
     public int OrdersCount { get; set; }
     public decimal TotalRevenue { get; set; }
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class InvoiceStatusDto
@@ -143,6 +148,7 @@ public class FinancialActivityItemDto
     public string Description { get; set; } = string.Empty;
     public decimal? Amount { get; set; }
     public DateTime OccurredAt { get; set; }
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class RevenueForecastDto

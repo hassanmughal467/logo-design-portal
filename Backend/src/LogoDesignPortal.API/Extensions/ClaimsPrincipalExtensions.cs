@@ -19,7 +19,9 @@ public static class ClaimsPrincipalExtensions
     public static string? GetUserRole(this ClaimsPrincipal user)
     {
         if (user?.Identity?.IsAuthenticated != true)
+        {
             return null;
+        }
 
         var values = user.Claims
             .Where(c =>
@@ -31,13 +33,17 @@ public static class ClaimsPrincipalExtensions
             .ToList();
 
         if (values.Count == 0)
+        {
             return null;
+        }
 
         // Prefer canonical names when the token carries multiple role-like claims
         foreach (var preferred in new[] { "SuperAdmin", "Admin", "Designer", "Client" })
         {
             if (values.Any(v => string.Equals(v, preferred, StringComparison.OrdinalIgnoreCase)))
+            {
                 return preferred;
+            }
         }
 
         return values[0];
@@ -51,7 +57,10 @@ public static class ClaimsPrincipalExtensions
     {
         var id = user.GetUserId();
         if (id == null)
+        {
             throw new UnauthorizedAccessException("User identity could not be determined.");
+        }
+
         return id.Value;
     }
 }

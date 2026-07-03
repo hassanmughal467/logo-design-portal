@@ -6,6 +6,7 @@ using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.DTOs.Files;
 using LogoDesignPortal.Application.DTOs.AuditLogs;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Enums;
@@ -97,6 +98,7 @@ public class UserService : IUserService
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
                 BillingType = request.BillingType ?? Domain.Enums.BillingType.PerLogo,
+                CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(request.CurrencyCode),
                 CompanyName = request.CompanyName,
                 ContactName = request.ContactName,
                 PhoneNumber = request.PhoneNumber,
@@ -146,6 +148,7 @@ public class UserService : IUserService
                     Id = clientProfile.Id,
                     UserId = clientProfile.UserId,
                     BillingType = clientProfile.BillingType,
+                    CurrencyCode = clientProfile.CurrencyCode,
                     CompanyName = clientProfile.CompanyName,
                     ContactName = clientProfile.ContactName,
                     PhoneNumber = clientProfile.PhoneNumber,
@@ -175,10 +178,10 @@ public class UserService : IUserService
                     UserId = designerProfile.UserId,
                     Specialization = designerProfile.Specialization,
                     Bio = designerProfile.Bio,
-                HourlyRate = designerProfile.HourlyRate,
-                IsAvailable = designerProfile.IsAvailable,
-                Notes = designerProfile.Notes
-            };
+                    HourlyRate = designerProfile.HourlyRate,
+                    IsAvailable = designerProfile.IsAvailable,
+                    Notes = designerProfile.Notes
+                };
             }
         }
 
@@ -221,6 +224,7 @@ public class UserService : IUserService
                 Id = user.ClientProfile.Id,
                 UserId = user.ClientProfile.UserId,
                 BillingType = user.ClientProfile.BillingType,
+                CurrencyCode = user.ClientProfile.CurrencyCode,
                 CompanyName = user.ClientProfile.CompanyName,
                 ContactName = user.ClientProfile.ContactName,
                 PhoneNumber = user.ClientProfile.PhoneNumber,
@@ -289,6 +293,7 @@ public class UserService : IUserService
                     Id = user.ClientProfile.Id,
                     UserId = user.ClientProfile.UserId,
                     BillingType = user.ClientProfile.BillingType,
+                    CurrencyCode = user.ClientProfile.CurrencyCode,
                     CompanyName = user.ClientProfile.CompanyName ?? string.Empty,
                     ContactName = user.ClientProfile.ContactName,
                     PhoneNumber = user.ClientProfile.PhoneNumber,
@@ -345,7 +350,9 @@ public class UserService : IUserService
         var cacheKey = $"ldp:cache:users:paged:e{_readModelCache.UsersEpoch}:{page}:{pageSize}";
         var cachedUsers = await DistributedJsonCache.GetAsync<PagedResultDto<UserResponseDto>>(_distributedCache, cacheKey).ConfigureAwait(false);
         if (cachedUsers != null)
+        {
             return cachedUsers;
+        }
 
         var query = _context.Users
             .Include(u => u.Role)
@@ -372,6 +379,7 @@ public class UserService : IUserService
                     Id = user.ClientProfile.Id,
                     UserId = user.ClientProfile.UserId,
                     BillingType = user.ClientProfile.BillingType,
+                    CurrencyCode = user.ClientProfile.CurrencyCode,
                     CompanyName = user.ClientProfile.CompanyName ?? string.Empty,
                     ContactName = user.ClientProfile.ContactName,
                     PhoneNumber = user.ClientProfile.PhoneNumber,
@@ -440,7 +448,10 @@ public class UserService : IUserService
             .Include(u => u.ClientProfile)
             .Where(u => !u.IsDeleted);
         if (!string.IsNullOrWhiteSpace(roleName))
+        {
             q = q.Where(u => u.Role != null && u.Role.Name == roleName);
+        }
+
         var term = query?.Trim() ?? string.Empty;
         if (term.Length > 0)
         {
@@ -556,6 +567,7 @@ public class UserService : IUserService
                     Id = Guid.NewGuid(),
                     UserId = user.Id,
                     BillingType = request.BillingType ?? Domain.Enums.BillingType.PerLogo,
+                    CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(request.CurrencyCode),
                     CompanyName = request.CompanyName!,
                     ContactName = request.ContactName,
                     PhoneNumber = request.PhoneNumber,
@@ -595,6 +607,10 @@ public class UserService : IUserService
                 if (request.CustomerType.HasValue)
                 {
                     clientProfile.CustomerType = request.CustomerType.Value;
+                }
+                if (!string.IsNullOrWhiteSpace(request.CurrencyCode))
+                {
+                    clientProfile.CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(request.CurrencyCode);
                 }
                 clientProfile.UpdatedAt = DateTime.UtcNow;
             }
@@ -651,6 +667,7 @@ public class UserService : IUserService
                     Id = clientProfile.Id,
                     UserId = clientProfile.UserId,
                     BillingType = clientProfile.BillingType,
+                    CurrencyCode = clientProfile.CurrencyCode,
                     CompanyName = clientProfile.CompanyName,
                     ContactName = clientProfile.ContactName,
                     PhoneNumber = clientProfile.PhoneNumber,
@@ -680,10 +697,10 @@ public class UserService : IUserService
                     UserId = designerProfile.UserId,
                     Specialization = designerProfile.Specialization,
                     Bio = designerProfile.Bio,
-                HourlyRate = designerProfile.HourlyRate,
-                IsAvailable = designerProfile.IsAvailable,
-                Notes = designerProfile.Notes
-            };
+                    HourlyRate = designerProfile.HourlyRate,
+                    IsAvailable = designerProfile.IsAvailable,
+                    Notes = designerProfile.Notes
+                };
             }
         }
 
@@ -741,6 +758,7 @@ public class UserService : IUserService
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
                 BillingType = request.BillingType ?? Domain.Enums.BillingType.PerLogo,
+                CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(request.CurrencyCode),
                 CompanyName = request.CompanyName ?? string.Empty,
                 ContactName = request.ContactName,
                 PhoneNumber = request.PhoneNumber,
@@ -817,6 +835,10 @@ public class UserService : IUserService
             {
                 clientProfile.CustomerType = request.CustomerType.Value;
             }
+            if (!string.IsNullOrWhiteSpace(request.CurrencyCode))
+            {
+                clientProfile.CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(request.CurrencyCode);
+            }
             clientProfile.UpdatedAt = DateTime.UtcNow;
         }
 
@@ -835,6 +857,7 @@ public class UserService : IUserService
                 Id = updatedClientProfile.Id,
                 UserId = updatedClientProfile.UserId,
                 BillingType = updatedClientProfile.BillingType,
+                CurrencyCode = updatedClientProfile.CurrencyCode,
                 CompanyName = updatedClientProfile.CompanyName,
                 ContactName = updatedClientProfile.ContactName,
                 PhoneNumber = updatedClientProfile.PhoneNumber,
@@ -1139,7 +1162,7 @@ public class UserService : IUserService
         // Get activity timeline from audit logs - batch load to avoid N+1
         var clientProfile = await _context.ClientProfiles
             .FirstOrDefaultAsync(c => c.UserId == clientId && !c.IsDeleted);
-        
+
         var activityTimeline = new List<AuditLogResponseDto>();
         if (clientProfile != null)
         {
@@ -1148,7 +1171,7 @@ public class UserService : IUserService
             var orderLogs = orderIds.Count > 0
                 ? await _auditLogService.GetEntityAuditLogsForEntitiesAsync("Order", orderIds)
                 : new List<AuditLogResponseDto>();
-            
+
             activityTimeline.AddRange(profileLogs);
             activityTimeline.AddRange(userLogs);
             activityTimeline.AddRange(orderLogs);
@@ -1200,12 +1223,12 @@ public class UserService : IUserService
             var completedOrderEntities = await _context.LogoOrders
                 .Where(o => completedOrderIds.Contains(o.Id) && o.Status == Domain.Enums.OrderStatus.Completed)
                 .ToListAsync();
-            
+
             var deliveryTimes = completedOrderEntities
                 .Where(o => o.UpdatedAt.HasValue)
                 .Select(o => (o.UpdatedAt!.Value - o.CreatedAt).TotalDays)
                 .ToList();
-            
+
             if (deliveryTimes.Any())
             {
                 averageDeliveryTimeDays = deliveryTimes.Average();

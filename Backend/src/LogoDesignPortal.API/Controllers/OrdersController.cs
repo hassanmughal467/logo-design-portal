@@ -35,7 +35,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.CreateOrderAsync(request, userId);
             return CreatedAtAction(nameof(GetOrderById), new { id = order.Id }, order);
         }
@@ -55,16 +58,25 @@ public class OrdersController : ControllerBase
         try
         {
             if (string.IsNullOrWhiteSpace(order))
+            {
                 return BadRequest(new { error = "Order data is required." });
+            }
+
             if (files == null || files.Count == 0)
+            {
                 return BadRequest(new { error = "At least one reference file is required." });
+            }
 
             var request = System.Text.Json.JsonSerializer.Deserialize<CreateOrderRequestDto>(order, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (request == null)
+            {
                 return BadRequest(new { error = "Invalid order data." });
+            }
 
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
 
             var fileArray = files.ToArray();
             var result = await _orderService.CreateOrderWithFilesAsync(request, fileArray, userId, description);
@@ -90,19 +102,28 @@ public class OrdersController : ControllerBase
         try
         {
             if (string.IsNullOrWhiteSpace(order))
+            {
                 return BadRequest(new { error = "Order data is required." });
+            }
+
             if (files == null || files.Count == 0)
+            {
                 return BadRequest(new { error = "At least one final file is required." });
+            }
 
             var request = System.Text.Json.JsonSerializer.Deserialize<CreateManualCompletedOrderRequestDto>(
                 order,
                 new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             if (request == null)
+            {
                 return BadRequest(new { error = "Invalid order data." });
+            }
 
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
 
             var created = await _orderService.CreateManualCompletedOrderAsync(request, files.ToArray(), userId);
             return CreatedAtAction(nameof(GetOrderById), new { id = created.Id }, created);
@@ -126,10 +147,13 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(this.StandardError("User identity could not be determined."));
+            }
+
             var userRole = User.GetUserRole();
             var order = await _orderService.GetOrderByIdAsync(id, userId, userRole);
-            
+
             if (order == null)
             {
                 return NotFound(this.StandardError("Order not found."));
@@ -155,7 +179,10 @@ public class OrdersController : ControllerBase
     public async Task<IActionResult> GetMyOrders()
     {
         if (User.GetUserId() is not { } userId)
+        {
             return Unauthorized(new { error = "User identity could not be determined." });
+        }
+
         var orders = await _orderService.GetOrdersByClientAsync(userId);
         return Ok(orders);
     }
@@ -166,7 +193,10 @@ public class OrdersController : ControllerBase
     public async Task<IActionResult> GetAssignedOrders()
     {
         if (User.GetUserId() is not { } userId)
+        {
             return Unauthorized(new { error = "User identity could not be determined." });
+        }
+
         var orders = await _orderService.GetOrdersByDesignerAsync(userId);
         return Ok(orders);
     }
@@ -215,7 +245,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } assignedBy)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.AssignOrderToDesignerAsync(id, request.DesignerId, assignedBy);
             return Ok(order);
         }
@@ -235,7 +268,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var order = await _orderService.UpdateOrderStatusAsync(id, request, userId, userRole);
             return Ok(order);
@@ -255,7 +291,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } requestedBy)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.RequestPriceApprovalAsync(id, request, requestedBy);
             return Ok(order);
         }
@@ -274,7 +313,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } approvedBy)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.ApprovePriceAsync(id, request, approvedBy);
             return Ok(order);
         }
@@ -293,7 +335,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.RespondToPriceApprovalAsync(id, request, userId);
             return Ok(order);
         }
@@ -303,23 +348,47 @@ public class OrdersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Approve a pending order.
+    /// - With no body / no <c>designerId</c>: order moves to <c>ApprovedUnassigned</c>
+    ///   and shows up in the SuperAdmin Unassigned Orders alert widget.
+    /// - With <c>designerId</c>: order is approved and assigned in one step, moving to <c>InProgress</c>.
+    /// Accepts both an empty body (Approve Only) and a JSON body with <c>designerId</c>/<c>notes</c>.
+    /// </summary>
     [HttpPost("{id}/approve")]
     [Authorize(Roles = "SuperAdmin,Admin")]
     [ProducesResponseType(typeof(OrderResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> ApproveOrder(Guid id)
+    public async Task<IActionResult> ApproveOrder(Guid id, [FromBody] ApproveOrderRequestDto? request = null)
     {
         try
         {
             if (User.GetUserId() is not { } approvedBy)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
-            var order = await _orderService.ApproveOrderAsync(id, approvedBy);
+            }
+
+            var order = await _orderService.ApproveOrderAsync(id, request ?? new ApproveOrderRequestDto(), approvedBy);
             return Ok(order);
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Returns the count of orders currently parked in <c>ApprovedUnassigned</c>.
+    /// Powers the SuperAdmin dashboard "Unassigned Orders" alert widget.
+    /// </summary>
+    [HttpGet("unassigned-count")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetUnassignedApprovedCount()
+    {
+        var count = await _orderService.GetUnassignedApprovedCountAsync();
+        return Ok(new { count, status = "ApprovedUnassigned" });
     }
 
     [HttpPost("{id}/send-files-to-client")]
@@ -332,7 +401,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } sentBy)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.SendFilesToClientAsync(id, fileIds, sentBy);
             return Ok(order);
         }
@@ -352,9 +424,15 @@ public class OrdersController : ControllerBase
         try
         {
             if (request == null)
+            {
                 return BadRequest(new { error = "PreviewBatchId is required." });
+            }
+
             if (User.GetUserId() is not { } sentBy)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.SendPreviewBatchToClientAsync(id, request.PreviewBatchId, sentBy);
             return Ok(order);
         }
@@ -374,7 +452,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.UpdateOrderAsync(id, request, userId);
             return Ok(order);
         }
@@ -398,7 +479,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var order = await _orderService.CancelOrderAsync(id, request, userId, userRole!);
             return Ok(order);
@@ -422,7 +506,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.ArchiveOrderAsync(id, request, userId);
             return Ok(order);
         }
@@ -441,7 +528,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.UnarchiveOrderAsync(id, userId);
             return Ok(order);
         }
@@ -460,7 +550,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.RefundOrderAsync(id, request, userId);
             return Ok(order);
         }
@@ -479,7 +572,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var userRole = User.FindFirstValue(System.Security.Claims.ClaimTypes.Role);
             var order = await _orderService.UpdateClientChargePriceAsync(id, request, userId, userRole);
             return Ok(order);
@@ -499,7 +595,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var order = await _orderService.SetAllowUploadsAsync(id, request.AllowUploads, userId);
             return Ok(order);
         }
@@ -519,7 +618,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var logs = await _orderService.GetOrderLogsWithAccessAsync(id, userId, userRole);
             return Ok(logs);
@@ -546,7 +648,10 @@ public class OrdersController : ControllerBase
         try
         {
             if (User.GetUserId() is not { } userId)
+            {
                 return Unauthorized(new { error = "User identity could not be determined." });
+            }
+
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var cancelRequest = new CancelOrderRequestDto
             {

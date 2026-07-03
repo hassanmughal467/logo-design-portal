@@ -9,6 +9,7 @@ public class UpdateClientProfileDto
     public string? InvoiceEmail { get; set; }
 
     public BillingType? BillingType { get; set; }
+    public string? CurrencyCode { get; set; }
     public string? CompanyName { get; set; }
     public string? ContactName { get; set; }
     public string? PhoneNumber { get; set; }

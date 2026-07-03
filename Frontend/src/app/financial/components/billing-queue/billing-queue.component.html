@@ -28,7 +28,7 @@
           <td>{{ item.clientName }}</td>
           <td>{{ item.companyName }}</td>
           <td style="text-align: right">{{ item.uninvoicedOrderCount }}</td>
-          <td style="text-align: right">{{ formatCurrency(item.totalPendingAmount) }}</td>
+          <td style="text-align: right">{{ formatCurrency(item.totalPendingAmount, item.currencyCode) }}</td>
           <td>
             <button pButton type="button" icon="pi pi-file-edit" class="p-button-rounded p-button-text p-button-sm" (click)="onClientClick(item); $event.stopPropagation()" pTooltip="Create Invoice"></button>
           </td>
@@ -84,7 +84,7 @@
                     <span class="order-title">{{ order.title }}</span>
                   </div>
                 </td>
-                <td>{{ formatCurrency(order.price) }}</td>
+                <td>{{ formatCurrency(order.price, order.currencyCode ?? selectedClient.currencyCode) }}</td>
                 <td>
                   <p-inputNumber 
                     *ngIf="isSelected(order.orderId)"
@@ -103,7 +103,7 @@
         </div>
 
         <div *ngIf="!ordersLoading && eligibleOrders.length > 0" class="selected-total">
-          <strong>Selected Total: {{ formatCurrency(selectedTotal) }}</strong>
+          <strong>Selected Total: {{ formatCurrency(selectedTotal, selectedClient.currencyCode) }}</strong>
         </div>
       </div>
     </div>

@@ -144,11 +144,15 @@ public class ProductionConfigurationValidationTests
         {
             var candidate = Path.Combine(dir, "LogoDesignPortal.API", "appsettings.Production.json");
             if (File.Exists(candidate))
+            {
                 return Path.Combine(dir, "LogoDesignPortal.API");
+            }
 
             var srcCandidate = Path.Combine(dir, "src", "LogoDesignPortal.API", "appsettings.Production.json");
             if (File.Exists(srcCandidate))
+            {
                 return Path.Combine(dir, "src", "LogoDesignPortal.API");
+            }
 
             dir = Directory.GetParent(dir)?.FullName;
         }

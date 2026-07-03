@@ -44,7 +44,9 @@ public static class CorsAllowedOrigins
         }
 
         if (fromConfig.Length == 0)
+        {
             return DevelopmentBuiltInOrigins;
+        }
 
         return MergeOrigins(DevelopmentBuiltInOrigins, fromConfig);
     }
@@ -55,13 +57,17 @@ public static class CorsAllowedOrigins
         foreach (var o in builtIn)
         {
             if (!string.IsNullOrWhiteSpace(o))
+            {
                 set.Add(o.Trim());
+            }
         }
 
         foreach (var o in fromConfig)
         {
             if (!string.IsNullOrWhiteSpace(o))
+            {
                 set.Add(o.Trim());
+            }
         }
 
         return set.Count > 0 ? set.ToArray() : builtIn;
@@ -70,12 +76,16 @@ public static class CorsAllowedOrigins
     public static bool IsAllowed(string? origin, IConfiguration configuration, IHostEnvironment? environment = null)
     {
         if (string.IsNullOrEmpty(origin))
+        {
             return false;
+        }
 
         foreach (var o in Resolve(configuration, environment))
         {
             if (string.Equals(o, origin, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
         }
 
         return false;
@@ -86,7 +96,9 @@ public static class CorsAllowedOrigins
         var origin = context.Request.Headers.Origin.FirstOrDefault();
         var environment = context.RequestServices.GetService<IHostEnvironment>();
         if (string.IsNullOrEmpty(origin) || !IsAllowed(origin, configuration, environment) || context.Response.HasStarted)
+        {
             return;
+        }
 
         context.Response.Headers.Append("Access-Control-Allow-Origin", origin);
         context.Response.Headers.Append("Access-Control-Allow-Credentials", "true");

@@ -304,6 +304,8 @@
       gap: 0.5rem;
 
       .global-search {
+        display: inline-block;
+
         .search-input {
           width: 250px;
           padding-left: 2.5rem;
@@ -529,10 +531,34 @@
     }
   }
 
-  .navbar-right .user-menu-btn {
-    display: flex;
+  .navbar-right .user-profile-trigger {
+    display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    padding: 0.35rem 0.65rem;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.2s ease;
+
+    &:hover {
+      background: var(--surface-ground);
+    }
+
+    .user-profile-icon {
+      font-size: 1.1rem;
+      color: var(--primary-color);
+      flex-shrink: 0;
+    }
+
+    .user-profile-name {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--primary-color);
+      white-space: nowrap;
+    }
 
     .user-role-badge {
       font-size: 0.65rem;
@@ -541,6 +567,7 @@
       letter-spacing: 0.5px;
       padding: 0.2rem 0.5rem;
       border-radius: 4px;
+      flex-shrink: 0;
 
       &.role-superadmin {
         background: rgba(239, 68, 68, 0.1);

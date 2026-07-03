@@ -1,3 +1,4 @@
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
@@ -22,21 +23,44 @@ public class ClientChurnAnalyticsService : IClientChurnAnalyticsService
 
     private static string GetClientDisplayName(ClientProfile? client)
     {
-        if (client == null) return "Unknown";
+        if (client == null)
+        {
+            return "Unknown";
+        }
+
         var name = client.User != null
             ? $"{client.User.FirstName} {client.User.LastName}".Trim()
             : string.Empty;
-        if (string.IsNullOrWhiteSpace(name)) name = client.CompanyName ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = client.CompanyName ?? string.Empty;
+        }
+
         if (!string.IsNullOrWhiteSpace(client.CompanyName) && name != client.CompanyName)
+        {
             return $"{name} ({client.CompanyName})";
+        }
+
         return name;
     }
 
     private static string GetRiskLevel(int score)
     {
-        if (score <= HealthyMaxScore) return "Healthy";
-        if (score <= WarningMaxScore) return "Warning";
-        if (score <= HighRiskMaxScore) return "HighRisk";
+        if (score <= HealthyMaxScore)
+        {
+            return "Healthy";
+        }
+
+        if (score <= WarningMaxScore)
+        {
+            return "Warning";
+        }
+
+        if (score <= HighRiskMaxScore)
+        {
+            return "HighRisk";
+        }
+
         return "ChurnLikely";
     }
 
@@ -53,26 +77,44 @@ public class ClientChurnAnalyticsService : IClientChurnAnalyticsService
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
             .SumAsync(o => o.Price);
 
-        if (totalRevenue <= 0) totalRevenue = 1;
+        if (totalRevenue <= 0)
+        {
+            totalRevenue = 1;
+        }
 
-        var clientData = await _context.LogoOrders
+        var clientDataRaw = await _context.LogoOrders
+            .AsNoTracking()
             .Where(o => !o.IsDeleted)
-            .Include(o => o.Client)
-            .ThenInclude(c => c!.User)
             .GroupBy(o => o.ClientId)
             .Select(g => new
             {
                 ClientId = g.Key,
-                Client = g.First().Client,
                 LastOrder = g.Max(o => o.UpdatedAt ?? o.CreatedAt),
                 OrderCount = g.Count(),
                 TotalRevenue = g.Where(o => o.Status == OrderStatus.Completed).Sum(o => o.Price)
             })
             .ToListAsync();
 
+        var clientIds = clientDataRaw.Select(x => x.ClientId).ToList();
+        var clients = await _context.ClientProfiles
+            .AsNoTracking()
+            .Include(c => c.User)
+            .Where(c => clientIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id);
+        var orderCurrenciesByClient = await LoadOrderCurrencyCodesByClientAsync(clientIds);
+
         var items = new List<ClientRiskScoreItemDto>();
-        foreach (var c in clientData)
+        foreach (var raw in clientDataRaw)
         {
+            var c = new
+            {
+                raw.ClientId,
+                Client = clients.GetValueOrDefault(raw.ClientId),
+                raw.LastOrder,
+                raw.OrderCount,
+                raw.TotalRevenue
+            };
+            orderCurrenciesByClient.TryGetValue(c.ClientId, out var orderCodes);
             var daysSince = (int)(now - c.LastOrder).TotalDays;
             var revenuePercent = totalRevenue > 0 ? (c.TotalRevenue / totalRevenue) * 100 : 0;
 
@@ -94,7 +136,8 @@ public class ClientChurnAnalyticsService : IClientChurnAnalyticsService
                 OrderCount = c.OrderCount,
                 TotalRevenue = c.TotalRevenue,
                 RevenueContributionPercent = Math.Round(revenuePercent, 2),
-                LastOrderDate = c.LastOrder
+                LastOrderDate = c.LastOrder,
+                CurrencyCode = ClientCurrencyHelper.ResolveClientRevenueCurrency(c.Client?.CurrencyCode, orderCodes)
             });
         }
 
@@ -124,6 +167,7 @@ public class ClientChurnAnalyticsService : IClientChurnAnalyticsService
             .Include(c => c.User)
             .Where(c => clientIds.Contains(c.Id) && !c.IsDeleted)
             .ToDictionaryAsync(c => c.Id);
+        var orderCurrenciesByClient = await LoadOrderCurrencyCodesByClientAsync(clientIds);
 
         var now = DateTime.UtcNow;
         var items = lastOrderByClient
@@ -131,15 +175,19 @@ public class ClientChurnAnalyticsService : IClientChurnAnalyticsService
             .Select(x =>
             {
                 var daysSince = (int)(now - x.LastOrder).TotalDays;
+                var client = clients.GetValueOrDefault(x.ClientId);
+                orderCurrenciesByClient.TryGetValue(x.ClientId, out var orderCodes);
+                var currency = ClientCurrencyHelper.ResolveClientRevenueCurrency(client?.CurrencyCode, orderCodes);
                 return new ClientChurnAlertItemDto
                 {
                     ClientId = x.ClientId,
-                    ClientName = GetClientDisplayName(clients.GetValueOrDefault(x.ClientId)),
+                    ClientName = GetClientDisplayName(client),
                     DaysSinceLastOrder = daysSince,
                     LastOrderDate = x.LastOrder,
                     TotalRevenue = x.TotalRevenue,
                     OrderCount = x.OrderCount,
-                    AlertMessage = $"Client has been inactive for {daysSince} days. Last order: {x.LastOrder:MMM d, yyyy}. Total revenue: ${x.TotalRevenue:N0}."
+                    AlertMessage = $"Client has been inactive for {daysSince} days. Last order: {x.LastOrder:MMM d, yyyy}. Total revenue: {currency} {x.TotalRevenue:N0}.",
+                    CurrencyCode = currency
                 };
             })
             .ToList();
@@ -169,7 +217,9 @@ public class ClientChurnAnalyticsService : IClientChurnAnalyticsService
 
         var monthsList = new List<DateTime>();
         for (var d = startOfPeriod; d <= now; d = d.AddMonths(1))
+        {
             monthsList.Add(d);
+        }
 
         var retentionTrend = new List<ChurnRetentionTrendItemDto>();
         var inactiveCutoff = 30;
@@ -217,5 +267,23 @@ public class ClientChurnAnalyticsService : IClientChurnAnalyticsService
             ChurnLikelyCount = churnLikely,
             RetentionTrend = retentionTrend
         };
+    }
+
+    private async Task<Dictionary<Guid, List<string?>>> LoadOrderCurrencyCodesByClientAsync(IEnumerable<Guid> clientIds)
+    {
+        var ids = clientIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, List<string?>>();
+        }
+
+        var rows = await _context.LogoOrders.AsNoTracking()
+            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed && ids.Contains(o.ClientId))
+            .Select(o => new { o.ClientId, o.CurrencyCode })
+            .ToListAsync();
+
+        return rows
+            .GroupBy(r => r.ClientId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.CurrencyCode).ToList());
     }
 }

@@ -2,6 +2,14 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 
+export interface RevenueByCurrencyItem {
+  currencyCode: string;
+  totalRevenue: number;
+  monthlyRevenue: number;
+  completedCount: number;
+  averageOrderValue: number;
+}
+
 export interface AnalyticsOverview {
   totalOrders: number;
   ordersToday: number;
@@ -10,6 +18,8 @@ export interface AnalyticsOverview {
   totalRevenue: number;
   revenueCurrencyCode?: string;
   revenueCurrencyMixed?: boolean;
+  /** Per-currency revenue rollup. Always populated by the backend (one entry per currency present in completed orders). */
+  revenueByCurrency?: RevenueByCurrencyItem[];
   monthlyRevenue: number;
   averageOrderValue: number;
   totalClients: number;
@@ -18,6 +28,12 @@ export interface AnalyticsOverview {
   ordersInProgress: number;
   ordersAwaitingAdminReview: number;
   ordersAwaitingClientApproval: number;
+  /**
+   * Approved orders waiting for a designer to be assigned (status = ApprovedUnassigned).
+   * Drives the "Unassigned Orders" dashboard alert so admins never lose track of
+   * orders they approved but did not immediately route to a designer.
+   */
+  ordersAwaitingDesignerAssignment: number;
   revisionRate: number;
   approvalRate: number;
   averageDeliveryTimeDays: number;
@@ -113,6 +129,7 @@ export interface TopClientByRevenue {
   clientName: string;
   revenue: number;
   orderCount: number;
+  currencyCode?: string;
 }
 
 export interface RevenueTrendDailyItem {
@@ -128,6 +145,8 @@ export interface RevenueAnalytics {
   averageOrderValueTrend: AverageOrderValueTrendItem[];
   topClientsByRevenue: TopClientByRevenue[];
   revenueGrowthRate: number;
+  revenueCurrencyCode?: string;
+  revenueCurrencyMixed?: boolean;
 }
 
 export interface DesignerPerformanceItem {
@@ -177,6 +196,7 @@ export interface ClientLifetimeValueItem {
   clientName: string;
   revenue: number;
   orderCount: number;
+  currencyCode?: string;
 }
 
 export interface ClientAnalytics {
@@ -312,6 +332,8 @@ export interface RevenueForecastItem {
 export interface ForecastAnalytics {
   orderGrowthPrediction: OrderForecastItem[];
   revenueForecast: RevenueForecastItem[];
+  revenueCurrencyCode?: string;
+  revenueCurrencyMixed?: boolean;
 }
 
 export interface InsightsAnalytics {

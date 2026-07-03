@@ -8,7 +8,10 @@ public class OrderStatusStateMachineTests
 {
     [Theory]
     [InlineData(OrderStatus.WaitingForAdminApproval, OrderStatus.InProgress)]
+    [InlineData(OrderStatus.WaitingForAdminApproval, OrderStatus.ApprovedUnassigned)]
     [InlineData(OrderStatus.WaitingForAdminApproval, OrderStatus.PriceApprovalPending)]
+    [InlineData(OrderStatus.ApprovedUnassigned, OrderStatus.InProgress)]
+    [InlineData(OrderStatus.ApprovedUnassigned, OrderStatus.CancelledByAdmin)]
     [InlineData(OrderStatus.InProgress, OrderStatus.PreviewDelivered)]
     [InlineData(OrderStatus.InProgress, OrderStatus.PriceApprovalPending)]
     [InlineData(OrderStatus.RevisionRequested, OrderStatus.PriceApprovalPending)]
@@ -33,6 +36,8 @@ public class OrderStatusStateMachineTests
     [InlineData(OrderStatus.Completed, OrderStatus.InProgress)]
     [InlineData(OrderStatus.Cancelled, OrderStatus.InProgress)]
     [InlineData(OrderStatus.WaitingForAdminApproval, OrderStatus.Completed)]
+    [InlineData(OrderStatus.ApprovedUnassigned, OrderStatus.Completed)]
+    [InlineData(OrderStatus.ApprovedUnassigned, OrderStatus.PreviewDelivered)]
     public void ValidateTransition_Disallowed_ThrowsInvalidOperation(OrderStatus from, OrderStatus to)
     {
         Assert.Throws<InvalidOperationException>(() =>

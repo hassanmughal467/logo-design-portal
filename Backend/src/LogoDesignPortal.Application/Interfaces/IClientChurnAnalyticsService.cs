@@ -29,6 +29,8 @@ public class ClientRiskScoreItemDto
     public decimal TotalRevenue { get; set; }
     public decimal RevenueContributionPercent { get; set; }
     public DateTime? LastOrderDate { get; set; }
+    /// <summary>ISO 4217 code for this client's revenue. Sourced from ClientProfile.CurrencyCode.</summary>
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class ClientChurnAlertsDto
@@ -45,6 +47,7 @@ public class ClientChurnAlertItemDto
     public decimal TotalRevenue { get; set; }
     public int OrderCount { get; set; }
     public string AlertMessage { get; set; } = string.Empty;
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class ClientRetentionStatsDto

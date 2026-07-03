@@ -20,7 +20,9 @@ public static class OrderStatusTransitionHelper
     public static void ApplyAdminCancellation(LogoOrder order)
     {
         if (order.Status is OrderStatus.Cancelled or OrderStatus.CancelledByUser or OrderStatus.CancelledByAdmin or OrderStatus.Refunded)
+        {
             throw new InvalidOperationException($"Order is already in terminal status {order.Status}.");
+        }
 
         order.Status = OrderStatus.CancelledByAdmin;
     }
@@ -37,7 +39,9 @@ public static class OrderStatusTransitionHelper
     {
         if (order.Status is OrderStatus.Completed or OrderStatus.Refunded or OrderStatus.Cancelled
             or OrderStatus.CancelledByUser or OrderStatus.CancelledByAdmin)
+        {
             throw new InvalidOperationException($"Cannot mark order as completed from {order.Status}.");
+        }
 
         order.Status = OrderStatus.Completed;
     }

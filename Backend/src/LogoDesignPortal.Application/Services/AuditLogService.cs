@@ -132,7 +132,9 @@ public class AuditLogService : IAuditLogService
     public async Task<List<AuditLogResponseDto>> GetEntityAuditLogsForEntitiesAsync(string entityType, List<Guid> entityIds)
     {
         if (entityIds == null || entityIds.Count == 0)
+        {
             return new List<AuditLogResponseDto>();
+        }
 
         var logs = await _context.AuditLogs
             .Where(a => !a.IsDeleted && a.EntityType == entityType && entityIds.Contains(a.EntityId))
@@ -160,7 +162,10 @@ public class AuditLogService : IAuditLogService
                 Notes = log.Notes
             };
             if (log.PerformedByUserId.HasValue && users.TryGetValue(log.PerformedByUserId.Value, out var name))
+            {
                 dto.PerformedByName = name;
+            }
+
             return dto;
         }).ToList();
     }

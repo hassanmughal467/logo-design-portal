@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
   apiUrl,
+  approveLogoApi,
   approveOrderApi,
   assignDesignerApi,
   createInvoiceApi,
@@ -8,7 +9,7 @@ import {
   getInvoiceApi,
   loginApi,
   markInvoicePaidApi,
-  updateOrderStatusApi,
+  updateOrderStatusAsAdminApi,
 } from '../../utils/api-client';
 import { getAdminToken, provisionClientUser, provisionDesignerUser, teardownUsers } from '../../utils/api-helpers';
 import { uniqueSuffix } from '../../utils/test-data';
@@ -29,7 +30,6 @@ test.describe('Invoices — lifecycle', () => {
     cleanup.push(client.userId, designer.userId);
 
     const clientAuth = await loginApi(request, client.email, client.password);
-    const designerAuth = await loginApi(request, designer.email, designer.password);
     const suffix = uniqueSuffix(testInfo);
 
     const order = await createOrderApi(request, clientAuth.token, {
@@ -39,8 +39,10 @@ test.describe('Invoices — lifecycle', () => {
     });
     await approveOrderApi(request, adminToken, order.id);
     await assignDesignerApi(request, adminToken, order.id, designer.userId);
-    await updateOrderStatusApi(request, designerAuth.token, order.id, 'PreviewDelivered');
-    await updateOrderStatusApi(request, adminToken, order.id, 'Completed');
+    // PreviewDelivered is admin-forwarded; client approval is required before Completed.
+    await updateOrderStatusAsAdminApi(request, adminToken, order.id, 'PreviewDelivered');
+    await approveLogoApi(request, clientAuth.token, order.id);
+    await updateOrderStatusAsAdminApi(request, adminToken, order.id, 'Completed');
 
     const invoice = await createInvoiceApi(request, adminToken, {
       orders: [{ orderId: order.id, price: 100 }],

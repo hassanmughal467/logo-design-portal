@@ -60,10 +60,12 @@ public class RevisionsController : ControllerBase
             var userId = User.GetUserIdOrThrow();
             var userRole = User.FindFirstValue(ClaimTypes.Role);
             var result = await _revisionService.GetLatestRevisionAsync(orderId, userId, userRole);
-            
+
             if (result == null)
+            {
                 return NotFound(new { error = "No revision found for this order." });
-            
+            }
+
             return Ok(result);
         }
         catch (ForbiddenAccessException ex)

@@ -9,7 +9,7 @@ import { Subject, Subscription } from 'rxjs';
 import { takeUntil, finalize, timeout } from 'rxjs/operators';
 import { Order, OrderStatus } from '@shared/models/order.model';
 import { isOrderLocked } from '@shared/utils/order-locking';
-import { getOrderStatusLabel, getOrderStatusSeverity } from '@shared/utils/order-status-display';
+import { getOrderStatusLabel, getOrderStatusSeverity, OrderStatusSeverity } from '@shared/utils/order-status-display';
 import { LogoFile, FileType } from '@shared/models/file.model';
 import { OrderRevision, RevisionAttachment } from '@shared/models/revision.model';
 import { OrderComment, OrderCommentUnreadCounts } from '@shared/models/comment.model';
@@ -86,6 +86,15 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
   // Form data
   proposedPrice = 0;
   priceApprovalNotes = '';
+
+  // Approve Order dialog (Unassigned Orders Alert System)
+  // The approval flow lets Admin/SuperAdmin choose between:
+  //   - "approveOnly"      → backend transitions to ApprovedUnassigned (status surfaced in the dashboard alert).
+  //   - "approveAndAssign" → backend approves and assigns a designer in one call; status becomes InProgress.
+  approveDialogChoice: 'approveOnly' | 'approveAndAssign' = 'approveOnly';
+  approveDialogDesignerId: string | null = null;
+  approveDialogNotes = '';
+  isSubmittingApproval = false;
   clientPriceApprovalAction: 'Approve' | 'Modify' | 'Reject' = 'Approve';
   clientCounterPrice = 0;
   clientApprovedPrice = 0;
@@ -591,24 +600,80 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     });
   }
 
-  // Order Approval
-  approveOrder(): void {
-    if (!this.order) return;
+  // ── Order Approval (Admin/SuperAdmin) ────────────────────────────────
+  // Two-step approval modal (Unassigned Orders Alert System):
+  //   1. openApproveDialog() resets state and loads the designer list so the user
+  //      can choose between "Approve Only" and "Approve & Assign Designer".
+  //   2. submitApproveOrder() posts to /orders/{id}/approve with an optional
+  //      designerId. The backend transitions the order to:
+  //        - ApprovedUnassigned  → when no designer is provided (drives the dashboard alert)
+  //        - InProgress          → when a designer is provided (Approve & Assign)
 
-    this.apiService.post(`orders/${this.order.id}/approve`, {})
+  /** Opens the approval modal; preloads the designer list so the selector is ready. */
+  openApproveDialog(): void {
+    if (!this.order) return;
+    this.approveDialogChoice = 'approveOnly';
+    this.approveDialogDesignerId = null;
+    this.approveDialogNotes = '';
+    this.isSubmittingApproval = false;
+    this.loadDesigners();
+    this.showApproveDialog = true;
+  }
+
+  /**
+   * Direct entry point retained for backward compatibility (e.g. legacy callers/tests).
+   * In the new UX, the header button opens the modal via openApproveDialog().
+   */
+  approveOrder(): void {
+    this.openApproveDialog();
+  }
+
+  /** Submits the approval choice. The backend determines the final status from the payload. */
+  submitApproveOrder(): void {
+    if (!this.order || this.isSubmittingApproval) return;
+
+    // For "Approve & Assign", we resolve the designer's UserId (the /approve endpoint
+    // expects the User identifier, not the DesignerProfile.Id used in the dropdown).
+    let designerUserId: string | null = null;
+    if (this.approveDialogChoice === 'approveAndAssign') {
+      if (!this.approveDialogDesignerId) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Pick a designer',
+          detail: 'Select a designer or switch to "Approve Only".'
+        });
+        return;
+      }
+      const selected = this.availableDesigners.find(d => d.value === this.approveDialogDesignerId);
+      designerUserId = selected?.userId ?? null;
+      if (!designerUserId) {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Selected designer is invalid.' });
+        return;
+      }
+    }
+
+    const payload: { designerId?: string; notes?: string } = {};
+    if (designerUserId) payload.designerId = designerUserId;
+    const trimmedNotes = this.approveDialogNotes?.trim();
+    if (trimmedNotes) payload.notes = trimmedNotes;
+
+    this.isSubmittingApproval = true;
+    this.apiService.post(`orders/${this.order.id}/approve`, payload)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Order approved successfully'
-          });
+          const successDetail = designerUserId
+            ? 'Order approved and designer assigned.'
+            : 'Order approved. It is now flagged as Unassigned until a designer is assigned.';
+          this.messageService.add({ severity: 'success', summary: 'Success', detail: successDetail });
+          this.isSubmittingApproval = false;
+          this.showApproveDialog = false;
           this.loadOrder(this.order!.id);
           this.orderUpdated.emit();
           this.closeModal();
         },
         error: (error) => {
+          this.isSubmittingApproval = false;
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
@@ -1214,7 +1279,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy, OnChanges {
     return getOrderStatusLabel(status);
   }
 
-  getStatusSeverity(status: string): string {
+  getStatusSeverity(status: string): OrderStatusSeverity {
     return getOrderStatusSeverity(status);
   }
 

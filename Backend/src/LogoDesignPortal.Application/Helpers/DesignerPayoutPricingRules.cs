@@ -16,10 +16,14 @@ public static class DesignerPayoutPricingRules
     {
         var approvedAmount = order.DesignerApprovedPrice ?? order.ApprovedPrice;
         if (!approvedAmount.HasValue || approvedAmount.Value <= 0)
+        {
             return false;
+        }
 
         if (order.PriceApprovalStatus is PriceApprovalStatus.Approved or PriceApprovalStatus.AutoApproved)
+        {
             return true;
+        }
 
         // Legacy rows: PriceApproved was set when admin approved designer payout
         return order.PriceApproved

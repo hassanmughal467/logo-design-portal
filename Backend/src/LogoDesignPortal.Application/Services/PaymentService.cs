@@ -56,10 +56,14 @@ public class PaymentService : IPaymentService
             .FirstOrDefaultAsync(i => i.Id == request.InvoiceId && !i.IsDeleted);
 
         if (invoice == null)
+        {
             throw new InvalidOperationException("Invoice not found.");
+        }
 
         if (!PaymentInvoiceAccessHelper.CanAccessInvoice(invoice, userId, userRole))
+        {
             throw new ForbiddenAccessException("You do not have permission to create a payment for this invoice.");
+        }
 
         // Create payment record
         var payment = new Payment
@@ -80,7 +84,9 @@ public class PaymentService : IPaymentService
         string? transactionId = null;
 
         if (string.IsNullOrWhiteSpace(request.PaymentMethod))
+        {
             throw new InvalidOperationException("Payment method is required.");
+        }
 
         try
         {
@@ -131,10 +137,14 @@ public class PaymentService : IPaymentService
             .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
 
         if (invoice == null)
+        {
             throw new InvalidOperationException("Invoice not found.");
+        }
 
         if (!PaymentInvoiceAccessHelper.CanAccessInvoice(invoice, userId, userRole))
+        {
             throw new ForbiddenAccessException("You do not have permission to generate a payment link for this invoice.");
+        }
 
         var request = new CreatePaymentRequestDto
         {
@@ -169,10 +179,14 @@ public class PaymentService : IPaymentService
             .FirstOrDefaultAsync(p => p.Id == request.PaymentId && !p.IsDeleted);
 
         if (payment == null)
+        {
             throw new InvalidOperationException("Payment not found.");
+        }
 
         if (!PaymentInvoiceAccessHelper.CanAccessInvoice(payment.Invoice, userId, userRole))
+        {
             throw new ForbiddenAccessException("You do not have permission to process this payment.");
+        }
 
         bool verified = false;
 
@@ -262,7 +276,9 @@ public class PaymentService : IPaymentService
         await _context.SaveChangesAsync();
 
         if (payment.Status == PaymentStatus.Completed)
+        {
             InvalidateFinancialReadModels();
+        }
 
         return _mapper.Map<PaymentResponseDto>(payment);
     }
@@ -366,7 +382,7 @@ public class PaymentService : IPaymentService
                 : "https://api.paypal.com";
 
             var httpClient = _httpClientFactory.CreateClient();
-            
+
             // Get access token
             var tokenRequest = new Dictionary<string, string>
             {
@@ -393,11 +409,11 @@ public class PaymentService : IPaymentService
             var accessToken = tokenData.GetProperty("access_token").GetString();
 
             // Verify order
-            httpClient.DefaultRequestHeaders.Authorization = 
+            httpClient.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
             var orderResponse = await httpClient.GetAsync($"{baseUrl}/v2/checkout/orders/{orderId}");
-            
+
             if (!orderResponse.IsSuccessStatusCode)
             {
                 return false;
@@ -432,7 +448,7 @@ public class PaymentService : IPaymentService
             httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
             var response = await httpClient.GetAsync($"https://api.transferwise.com/v1/transfers/{transferId}");
-            
+
             if (!response.IsSuccessStatusCode)
             {
                 return false;
@@ -502,7 +518,9 @@ public class PaymentService : IPaymentService
         await _context.SaveChangesAsync();
 
         if (payment.Status == PaymentStatus.Completed)
+        {
             InvalidateFinancialReadModels();
+        }
 
         return _mapper.Map<PaymentResponseDto>(payment);
     }
@@ -619,14 +637,14 @@ public class PaymentService : IPaymentService
             { "grant_type", "client_credentials" }
         };
 
-            var tokenRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/oauth2/token")
-            {
-                Content = new FormUrlEncodedContent(tokenRequest)
-            };
-            var credentials = Convert.ToBase64String(
-                System.Text.Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
-            tokenRequestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
-            var tokenResponse = await httpClient.SendAsync(tokenRequestMessage);
+        var tokenRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/oauth2/token")
+        {
+            Content = new FormUrlEncodedContent(tokenRequest)
+        };
+        var credentials = Convert.ToBase64String(
+            System.Text.Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
+        tokenRequestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
+        var tokenResponse = await httpClient.SendAsync(tokenRequestMessage);
 
         if (!tokenResponse.IsSuccessStatusCode)
         {
@@ -638,7 +656,7 @@ public class PaymentService : IPaymentService
         var accessToken = tokenData.GetProperty("access_token").GetString();
 
         // Create order
-        httpClient.DefaultRequestHeaders.Authorization = 
+        httpClient.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
         httpClient.DefaultRequestHeaders.Add("Prefer", "return=representation");
 
@@ -679,14 +697,14 @@ public class PaymentService : IPaymentService
         var orderContent = await orderResponse.Content.ReadAsStringAsync();
         var orderData = JsonSerializer.Deserialize<JsonElement>(orderContent);
         var orderId = orderData.GetProperty("id").GetString();
-        
-            // Get approval link
-            var links = orderData.GetProperty("links").EnumerateArray();
-            var approveLink = links.FirstOrDefault(l => 
-                l.GetProperty("rel").GetString() == "approve");
-            var approvalLink = approveLink.ValueKind != System.Text.Json.JsonValueKind.Undefined 
-                ? approveLink.GetProperty("href").GetString() 
-                : null;
+
+        // Get approval link
+        var links = orderData.GetProperty("links").EnumerateArray();
+        var approveLink = links.FirstOrDefault(l =>
+            l.GetProperty("rel").GetString() == "approve");
+        var approvalLink = approveLink.ValueKind != System.Text.Json.JsonValueKind.Undefined
+            ? approveLink.GetProperty("href").GetString()
+            : null;
 
         return (approvalLink ?? string.Empty, orderId);
     }
@@ -704,7 +722,7 @@ public class PaymentService : IPaymentService
         // Wise payment link generation
         // Note: This is a simplified implementation. In production, you'd use Wise's API to create quotes and transfers
         var paymentLink = $"{GetFrontendUrl()}/payments/wise/{request.InvoiceId}?amount={request.Amount}&currency={request.Currency ?? "USD"}";
-        
+
         return (paymentLink, null);
     }
 

@@ -12,7 +12,7 @@
         <p class="alert-message">{{ item.alertMessage }}</p>
         <div class="alert-meta">
           <span>Last order: {{ formatDate(item.lastOrderDate) }}</span>
-          <span>Revenue: {{ formatCurrency(item.totalRevenue) }}</span>
+          <span>Revenue: {{ formatCurrency(item.totalRevenue, item.currencyCode) }}</span>
           <span>{{ item.orderCount }} order(s)</span>
         </div>
       </div>

@@ -83,6 +83,7 @@ describe('AuthService', () => {
     localStorage.setItem('auth_user', JSON.stringify({ email: 'x@y.com', roleName: 'Client' }));
     service['currentUserSubject'].next({ email: 'x@y.com', roleName: 'Client' } as any);
     service.logout();
+    httpMock.match(() => true).forEach((req) => req.flush({ count: 0 }));
     expect(localStorage.getItem('auth_token')).toBeNull();
     expect(router.navigate).toHaveBeenCalledWith(['/login']);
   });
@@ -142,6 +143,8 @@ describe('AuthService', () => {
     httpMock.expectOne((r) => r.url.includes('/auth/reset-password-with-token')).flush({});
 
     service.resetUserPassword('uid', 'pw').subscribe();
-    httpMock.expectOne((r) => r.url.includes('/auth/reset-password')).flush({});
+    const resetReq = httpMock.expectOne((r) => r.url.includes('/auth/reset-password'));
+    expect(resetReq.request.method).toBe('POST');
+    resetReq.flush({});
   });
 });

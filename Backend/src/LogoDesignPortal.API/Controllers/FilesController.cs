@@ -47,6 +47,10 @@ public class FilesController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (ForbiddenAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
+        }
     }
 
     [HttpPost("upload-multiple/{orderId}")]
@@ -70,6 +74,10 @@ public class FilesController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (ForbiddenAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
     }
 
@@ -107,9 +115,9 @@ public class FilesController : ControllerBase
                 return Unauthorized(new { error = "User not authenticated." });
             }
             var userRole = User.FindFirstValue(ClaimTypes.Role);
-            
+
             var (fileContent, fileName, contentType) = await _fileService.DownloadFileAsync(id, userId.Value, userRole);
-            
+
             return File(fileContent, contentType, fileName);
         }
         catch (FileNotFoundException ex)

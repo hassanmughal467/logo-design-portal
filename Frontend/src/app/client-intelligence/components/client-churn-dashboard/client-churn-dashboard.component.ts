@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ClientChurnAnalyticsService, ClientRiskScoreItem, ClientChurnAlertItem, ClientRetentionStats } from '@core/services/client-churn-analytics.service';
+import { formatCurrencyAmount } from '@core/utils/currency-format';
 import { Subject } from 'rxjs';
 import { takeUntil, catchError } from 'rxjs/operators';
 import { forkJoin, of } from 'rxjs';
@@ -55,12 +56,7 @@ export class ClientChurnDashboardComponent implements OnInit, OnDestroy {
       });
   }
 
-  formatCurrency(value: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value);
+  formatCurrency(value: number, currencyCode?: string): string {
+    return formatCurrencyAmount(value, currencyCode);
   }
 }

@@ -32,7 +32,9 @@ public static class CookieAuthHelper
     public static string? ExtractSetCookieValue(HttpResponseMessage response, string cookieName)
     {
         if (!response.Headers.TryGetValues("Set-Cookie", out var headers))
+        {
             return null;
+        }
 
         foreach (var header in headers)
         {
@@ -52,7 +54,9 @@ public static class CookieAuthHelper
     public static string BuildCookieHeader(HttpResponseMessage loginResponse)
     {
         if (!loginResponse.Headers.TryGetValues("Set-Cookie", out var headers))
+        {
             throw new InvalidOperationException("Login response did not set cookies.");
+        }
 
         var parts = new List<string>();
         foreach (var header in headers)
@@ -87,6 +91,8 @@ public static class CookieAuthHelper
     {
         request.Headers.TryAddWithoutValidation("Cookie", cookieHeader);
         if (csrfToken != null)
+        {
             SetCsrfHeader(request, csrfToken);
+        }
     }
 }

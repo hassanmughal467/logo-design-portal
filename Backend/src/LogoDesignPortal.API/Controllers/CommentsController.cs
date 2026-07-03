@@ -114,7 +114,10 @@ public class CommentsController : ControllerBase
             var userRole = User.FindFirstValue(ClaimTypes.Role)!;
             var comment = await _commentService.SetCommentVisibilityAsync(id, request, userId, userRole);
             if (comment == null)
+            {
                 return NotFound(new { error = "Comment not found." });
+            }
+
             return Ok(comment);
         }
         catch (UnauthorizedAccessException ex)
@@ -147,7 +150,7 @@ public class CommentsController : ControllerBase
             var userId = User.GetUserIdOrThrow();
             var userRole = User.FindFirstValue(ClaimTypes.Role)!;
             var result = await _commentService.DeleteCommentAsync(id, userId, userRole);
-            
+
             if (!result)
             {
                 return NotFound(new { error = "Comment not found." });

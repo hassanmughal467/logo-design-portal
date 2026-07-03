@@ -11,4 +11,6 @@ public interface IQuoteService
     Task<QuoteResponseDto> RespondToQuoteAsync(Guid quoteId, RespondQuoteRequestDto request, Guid adminUserId);
     Task<QuoteResponseDto> RejectQuoteAsync(Guid quoteId, Guid clientUserId);
     Task<QuoteResponseDto> ConvertToOrderAsync(Guid quoteId, Guid clientUserId, Guid? existingOrderId = null);
+    Task<(byte[] Content, string FileName, string ContentType)> DownloadQuoteAttachmentAsync(
+        Guid quoteId, string storedFileName, Guid userId, string? role);
 }

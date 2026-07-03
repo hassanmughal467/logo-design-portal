@@ -1,6 +1,6 @@
 import { Injectable, Injector } from '@angular/core';
-import { BehaviorSubject, Observable, throwError } from 'rxjs';
-import { map, catchError, tap } from 'rxjs/operators';
+import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
+import { catchError, finalize, map, shareReplay, tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { ApiService } from './api.service';
 import { SharedListDataService } from './shared-list-data.service';
@@ -14,6 +14,7 @@ const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'auth_refresh_token';
 const EXPIRES_AT_KEY = 'auth_expires_at';
 const USER_KEY = 'auth_user';
+const CSRF_SESSION_KEY = 'ldp_csrf';
 
 @Injectable({
   providedIn: 'root'
@@ -25,6 +26,7 @@ export class AuthService {
   // Token in memory for fast access; persisted in localStorage for refresh
   private accessToken: string | null = null;
   private tokenExpiry: number | null = null;
+  private csrfSyncInFlight$: Observable<string | null> | null = null;
 
   constructor(
     private apiService: ApiService,
@@ -48,6 +50,35 @@ export class AuthService {
 
   register(data: RegisterRequest): Observable<any> {
     return this.apiService.post('auth/register', data);
+  }
+
+  /**
+   * Cookie auth stores CSRF in an API-host cookie that JS on the SPA host cannot read.
+   * Refresh returns csrfToken in the JSON body so mutating requests can send X-XSRF-TOKEN.
+   */
+  syncCsrfToken(): Observable<string | null> {
+    const existing = sessionStorage.getItem(CSRF_SESSION_KEY);
+    if (existing) {
+      return of(existing);
+    }
+
+    if (!useCookieAuth || !this.getCurrentUser()) {
+      return of(null);
+    }
+
+    if (!this.csrfSyncInFlight$) {
+      this.csrfSyncInFlight$ = this.apiService.post<LoginResponse>('auth/refresh-token', {}).pipe(
+        tap(response => this.setAuthData(response)),
+        map(response => response.csrfToken ?? sessionStorage.getItem(CSRF_SESSION_KEY)),
+        catchError(() => of(null)),
+        finalize(() => {
+          this.csrfSyncInFlight$ = null;
+        }),
+        shareReplay(1)
+      );
+    }
+
+    return this.csrfSyncInFlight$;
   }
 
   refreshToken(): Observable<LoginResponse> {
@@ -193,6 +224,9 @@ export class AuthService {
     }
 
     sessionStorage.setItem('user', JSON.stringify(user));
+    if (response.csrfToken) {
+      sessionStorage.setItem(CSRF_SESSION_KEY, response.csrfToken);
+    }
     this.currentUserSubject.next(user);
   }
 
@@ -205,6 +239,7 @@ export class AuthService {
     localStorage.removeItem(EXPIRES_AT_KEY);
     localStorage.removeItem(USER_KEY);
     sessionStorage.removeItem('user');
+    sessionStorage.removeItem(CSRF_SESSION_KEY);
   }
 
   private loadUserFromStorage(): void {
@@ -226,6 +261,9 @@ export class AuthService {
           role: (userData.role || userData.roleName || UserRole.Client) as UserRole
         };
         this.currentUserSubject.next(user);
+        if (!sessionStorage.getItem(CSRF_SESSION_KEY)) {
+          this.syncCsrfToken().subscribe();
+        }
       } catch {
         this.clearStoredAuth();
       }

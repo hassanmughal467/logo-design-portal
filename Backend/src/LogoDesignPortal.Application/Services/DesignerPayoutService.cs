@@ -110,23 +110,35 @@ public class DesignerPayoutService : IDesignerPayoutService
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
+        {
             throw new InvalidOperationException("Order not found.");
+        }
 
         var designer = await _context.DesignerProfiles.FirstOrDefaultAsync(d => d.UserId == designerUserId && !d.IsDeleted);
         if (designer == null || order.DesignerId != designer.Id)
+        {
             throw new ForbiddenAccessException("You don't have access to submit pricing for this order.");
+        }
 
         if (OrderLockingHelper.IsOrderLocked(order.Status))
+        {
             throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
+        }
 
         if (DesignerPayoutPricingRules.HasFinalizedDesignerPayout(order))
+        {
             throw new InvalidOperationException("Price has already been approved. You cannot change it.");
+        }
 
         if (request.ProposedPrice < 0)
+        {
             throw new InvalidOperationException("Proposed price cannot be negative.");
+        }
         // ComplexVector requires ProposedPrice > 0
         if (request.DesignType == DesignType.ComplexVector && request.ProposedPrice <= 0)
+        {
             throw new InvalidOperationException("Complex Vector requires a proposed price greater than zero.");
+        }
 
         // Get standard price: DesignerLogoPricing first, then DesignPricing (global)
         var standardPrice = await GetStandardPriceFromTableAsync(request.DesignCategory, request.DesignType, designer.Id);
@@ -168,7 +180,10 @@ public class DesignerPayoutService : IDesignerPayoutService
         {
             var submitLine = $"Proposed designer payout: PKR {request.ProposedPrice:N0}.";
             if (!string.IsNullOrWhiteSpace(request.Reason))
+            {
                 submitLine += $" Note: {request.Reason.Trim()}";
+            }
+
             await _commentService.AppendPriceNegotiationNoteAsync(orderId, designerUserId, CommentType.PriceNegotiationDesigner, submitLine);
 
             try
@@ -193,20 +208,30 @@ public class DesignerPayoutService : IDesignerPayoutService
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
+        {
             throw new InvalidOperationException("Order not found.");
+        }
 
         var designer = await _context.DesignerProfiles.FirstOrDefaultAsync(d => d.UserId == designerUserId && !d.IsDeleted);
         if (designer == null || order.DesignerId != designer.Id)
+        {
             throw new ForbiddenAccessException("You don't have access to propose pricing for this order.");
+        }
 
         if (OrderLockingHelper.IsOrderLocked(order.Status))
+        {
             throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
+        }
 
         if (DesignerPayoutPricingRules.HasFinalizedDesignerPayout(order))
+        {
             throw new InvalidOperationException("Price has already been approved. You cannot change it.");
+        }
 
         if (request.ProposedPrice <= 0)
+        {
             throw new InvalidOperationException("Proposed price must be greater than zero.");
+        }
 
         order.DesignerProposedPrice = request.ProposedPrice;
         order.ProposedPrice = request.ProposedPrice;
@@ -225,7 +250,10 @@ public class DesignerPayoutService : IDesignerPayoutService
 
         var proposeLine = $"Proposed designer payout: PKR {request.ProposedPrice:N0}.";
         if (!string.IsNullOrWhiteSpace(request.Message))
+        {
             proposeLine += $" {request.Message.Trim()}";
+        }
+
         await _commentService.AppendPriceNegotiationNoteAsync(orderId, designerUserId, CommentType.PriceNegotiationDesigner, proposeLine);
 
         try
@@ -249,10 +277,14 @@ public class DesignerPayoutService : IDesignerPayoutService
     private void TransitionToPriceApprovalPendingForDesignerIfNeeded(LogoOrder order, Guid userId)
     {
         if (order.Status == OrderStatus.PriceApprovalPending)
+        {
             return;
+        }
 
         if (order.Status != OrderStatus.InProgress && order.Status != OrderStatus.RevisionRequested)
+        {
             return;
+        }
 
         var previousStatus = order.Status;
         OrderStatusStateMachine.ValidateTransition(previousStatus, OrderStatus.PriceApprovalPending);
@@ -281,14 +313,19 @@ public class DesignerPayoutService : IDesignerPayoutService
             var designerPricing = await _context.DesignerLogoPricings
                 .FirstOrDefaultAsync(p => p.DesignerId == designerId.Value && p.DesignCategory == category && p.DesignType == designType && p.IsActive && !p.IsDeleted);
             if (designerPricing != null && designerPricing.DefaultPrice > 0)
+            {
                 return designerPricing.DefaultPrice;
+            }
         }
 
         // 2. Fall back to global DesignPricing
         var pricing = await _context.DesignPricings
             .FirstOrDefaultAsync(p => p.DesignCategory == category && p.DesignType == designType && p.IsActive && !p.IsDeleted);
         if (pricing == null || pricing.DefaultPrice <= 0)
+        {
             return null;
+        }
+
         return pricing.DefaultPrice;
     }
 
@@ -299,10 +336,14 @@ public class DesignerPayoutService : IDesignerPayoutService
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
+        {
             throw new InvalidOperationException("Order not found.");
+        }
 
         if (order.PriceApprovalStatus != PriceApprovalStatus.PendingApproval && order.PriceApprovalStatus != PriceApprovalStatus.Modified)
+        {
             throw new InvalidOperationException("This order does not have a price pending approval.");
+        }
 
         var previousOrderStatus = order.Status;
         var previousDesignerPriceStatus = order.PriceApprovalStatus;
@@ -312,7 +353,10 @@ public class DesignerPayoutService : IDesignerPayoutService
         {
             case DesignerPriceApprovalAction.Approve:
                 if (!proposedPrice.HasValue)
+                {
                     throw new InvalidOperationException("No proposed price to approve.");
+                }
+
                 order.ApprovedPrice = proposedPrice.Value;
                 order.DesignerApprovedPrice = proposedPrice.Value;
                 order.PriceApprovalStatus = PriceApprovalStatus.Approved;
@@ -320,7 +364,10 @@ public class DesignerPayoutService : IDesignerPayoutService
 
             case DesignerPriceApprovalAction.Modify:
                 if (!request.ApprovedPrice.HasValue || request.ApprovedPrice.Value <= 0)
+                {
                     throw new InvalidOperationException("Approved price is required when modifying.");
+                }
+
                 order.ApprovedPrice = request.ApprovedPrice.Value;
                 order.DesignerApprovedPrice = request.ApprovedPrice.Value;
                 order.PriceApprovalStatus = PriceApprovalStatus.Approved;
@@ -357,7 +404,10 @@ public class DesignerPayoutService : IDesignerPayoutService
             _ => "Updated designer payout approval."
         };
         if (!string.IsNullOrWhiteSpace(request.Message))
+        {
             payoutLine += $" Message: {request.Message.Trim()}";
+        }
+
         await _commentService.AppendPriceNegotiationNoteAsync(orderId, adminUserId, CommentType.PriceNegotiationDesigner, payoutLine);
 
         try
@@ -390,7 +440,9 @@ public class DesignerPayoutService : IDesignerPayoutService
                         _ => $"A designer payout decision was recorded for order (#{orderNumber})."
                     };
                     if (!string.IsNullOrWhiteSpace(request.Message))
+                    {
                         designerMessage += $" Note: {request.Message.Trim()}";
+                    }
 
                     await _notificationService.CreateNotificationForUserAsync(
                         designerUserId,
@@ -429,7 +481,9 @@ public class DesignerPayoutService : IDesignerPayoutService
         var userIds = new List<Guid>();
 
         if (order.Client != null)
+        {
             userIds.Add(order.Client.UserId);
+        }
 
         userIds.AddRange(await GetAdminAndSuperAdminUserIdsAsync());
 
@@ -440,7 +494,9 @@ public class DesignerPayoutService : IDesignerPayoutService
                 .Select(d => d.UserId)
                 .FirstOrDefaultAsync();
             if (designerUserId != Guid.Empty)
+            {
                 userIds.Add(designerUserId);
+            }
         }
 
         return userIds.Distinct().ToList();
@@ -451,11 +507,20 @@ public class DesignerPayoutService : IDesignerPayoutService
         var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
         var superAdminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
         if (adminRole == null && superAdminRole == null)
+        {
             return new List<Guid>();
+        }
 
         var roleIds = new List<Guid>();
-        if (adminRole != null) roleIds.Add(adminRole.Id);
-        if (superAdminRole != null) roleIds.Add(superAdminRole.Id);
+        if (adminRole != null)
+        {
+            roleIds.Add(adminRole.Id);
+        }
+
+        if (superAdminRole != null)
+        {
+            roleIds.Add(superAdminRole.Id);
+        }
 
         return await _context.Users
             .Where(u => !u.IsDeleted && roleIds.Contains(u.RoleId))
@@ -475,16 +540,23 @@ public class DesignerPayoutService : IDesignerPayoutService
         Guid adminUserId)
     {
         if (previousOrderStatus != OrderStatus.PriceApprovalPending)
+        {
             return;
+        }
+
         if (previousDesignerPriceStatus != PriceApprovalStatus.PendingApproval &&
             previousDesignerPriceStatus != PriceApprovalStatus.Modified)
+        {
             return;
+        }
 
         var clientPriceDiffersFromCharge = order.ClientPrice.HasValue &&
             Math.Abs(order.ClientChargePrice - order.ClientPrice.Value) > 0.01m;
 
         if (clientPriceDiffersFromCharge)
+        {
             return;
+        }
 
         var now = DateTime.UtcNow;
         OrderStatusStateMachine.ValidateTransition(OrderStatus.PriceApprovalPending, OrderStatus.InProgress);
@@ -541,14 +613,18 @@ public class DesignerPayoutService : IDesignerPayoutService
     public async Task<DesignerInvoiceResponseDto> GenerateDesignerInvoiceAsync(Guid designerId, int year, int month, Guid adminUserId)
     {
         if (_safetyOptions.DisableDesignerPayout)
+        {
             throw new InvalidOperationException("Designer payout temporarily disabled by administrator.");
+        }
 
         var designer = await _context.DesignerProfiles
             .Include(d => d.User)
             .FirstOrDefaultAsync(d => d.Id == designerId && !d.IsDeleted);
 
         if (designer == null)
+        {
             throw new InvalidOperationException("Designer not found.");
+        }
 
         var startDate = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
         var endDate = startDate.AddMonths(1);
@@ -565,7 +641,9 @@ public class DesignerPayoutService : IDesignerPayoutService
             .ToListAsync();
 
         if (eligibleOrders.Count == 0)
+        {
             throw new InvalidOperationException($"No completed orders with approved prices found for designer in {startDate:MMMM yyyy}.");
+        }
 
         var invoiceNumber = $"DINV-{year}{month:D2}-{Guid.NewGuid().ToString()[..8].ToUpper()}";
         var billingPeriod = startDate.ToString("MMMM yyyy");
@@ -592,23 +670,32 @@ public class DesignerPayoutService : IDesignerPayoutService
             {
                 // Financial safety guard: validate order status and amounts
                 if (order.Status != OrderStatus.Completed)
+                {
                     continue;
+                }
+
                 var approvedAmount = order.DesignerApprovedPrice ?? order.ApprovedPrice ?? 0;
                 if (approvedAmount <= 0)
+                {
                     continue;
+                }
 
                 // Re-check: skip if already invoiced (race condition guard)
                 var freshOrder = await _context.LogoOrders
                     .AsNoTracking()
                     .FirstOrDefaultAsync(o => o.Id == order.Id && !o.IsDeleted, ct);
                 if (freshOrder == null || freshOrder.IsDesignerInvoiced)
+                {
                     continue;
+                }
 
                 // Defensive: ensure no duplicate orderId in this invoice (unique constraint per invoice)
                 var existingItem = await _context.DesignerInvoiceItems
                     .AnyAsync(i => i.DesignerInvoiceId == invoiceId && i.OrderId == order.Id && !i.IsDeleted, ct);
                 if (existingItem)
+                {
                     continue;
+                }
 
                 var item = new DesignerInvoiceItem
                 {
@@ -637,7 +724,9 @@ public class DesignerPayoutService : IDesignerPayoutService
 
         var itemsCount = await _context.DesignerInvoiceItems.CountAsync(i => i.DesignerInvoiceId == invoiceId && !i.IsDeleted);
         if (itemsCount == 0)
+        {
             throw new InvalidOperationException($"All eligible orders were already invoiced. No new invoice items created for designer in {startDate:MMMM yyyy}.");
+        }
 
         InvalidatePayoutReadModels();
 
@@ -681,7 +770,9 @@ public class DesignerPayoutService : IDesignerPayoutService
             .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
 
         if (invoice == null)
+        {
             throw new InvalidOperationException("Designer invoice not found.");
+        }
 
         invoice.Status = DesignerInvoiceStatus.Paid;
         invoice.PaidDate = DateTime.UtcNow;
@@ -747,7 +838,9 @@ public class DesignerPayoutService : IDesignerPayoutService
                 ? $"{o.Client.User.FirstName} {o.Client.User.LastName}".Trim()
                 : o.Client?.CompanyName ?? "Unknown";
             if (string.IsNullOrEmpty(clientName))
+            {
                 clientName = "Unknown";
+            }
 
             var previewUrl = firstGalleryByOrder.TryGetValue(o.Id, out var gallery)
                 ? $"/api/files/{gallery.FileId}/download"
@@ -775,13 +868,17 @@ public class DesignerPayoutService : IDesignerPayoutService
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
+        {
             return null;
+        }
 
         var clientName = order.Client?.User != null
             ? $"{order.Client.User.FirstName} {order.Client.User.LastName}".Trim()
             : order.Client?.CompanyName ?? "Unknown";
         if (string.IsNullOrEmpty(clientName))
+        {
             clientName = "Unknown";
+        }
 
         var finalFiles = await _context.ClientGalleries
             .Where(g => g.OrderId == orderId && !g.IsDeleted)
@@ -804,17 +901,23 @@ public class DesignerPayoutService : IDesignerPayoutService
     public async Task<DesignerInvoiceResponseDto> GenerateInvoiceFromBuilderAsync(GenerateDesignerInvoiceRequestDto request, Guid adminUserId)
     {
         if (_safetyOptions.DisableDesignerPayout)
+        {
             throw new InvalidOperationException("Designer payout temporarily disabled by administrator.");
+        }
 
         if (request.Orders == null || !request.Orders.Any())
+        {
             throw new InvalidOperationException("At least one order must be selected.");
+        }
 
         var designer = await _context.DesignerProfiles
             .Include(d => d.User)
             .FirstOrDefaultAsync(d => d.Id == request.DesignerId && !d.IsDeleted);
 
         if (designer == null)
+        {
             throw new InvalidOperationException("Designer not found.");
+        }
 
         var orderIds = request.Orders.Select(x => x.OrderId).Distinct().ToList();
         var orderAmounts = request.Orders.ToDictionary(x => x.OrderId, x => x.Amount);
@@ -842,24 +945,32 @@ public class DesignerPayoutService : IDesignerPayoutService
             foreach (var orderId in orderIds)
             {
                 if (!orderAmounts.TryGetValue(orderId, out var amount) || amount <= 0)
+                {
                     continue;
+                }
 
                 var order = await _context.LogoOrders
                     .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted, ct);
 
                 if (order == null)
+                {
                     continue;
+                }
 
                 if (order.Status != OrderStatus.Completed ||
                     !DesignerPayoutPricingRules.HasFinalizedDesignerPayout(order) ||
                     order.IsDesignerInvoiced ||
                     order.DesignerId != request.DesignerId)
+                {
                     continue;
+                }
 
                 var alreadyInvoiced = await _context.DesignerInvoiceItems
                     .AnyAsync(i => i.OrderId == orderId && !i.IsDeleted, ct);
                 if (alreadyInvoiced)
+                {
                     continue;
+                }
 
                 var item = new DesignerInvoiceItem
                 {
@@ -886,7 +997,9 @@ public class DesignerPayoutService : IDesignerPayoutService
 
         var itemsCount = await _context.DesignerInvoiceItems.CountAsync(i => i.DesignerInvoiceId == invoiceId && !i.IsDeleted);
         if (itemsCount == 0)
+        {
             throw new InvalidOperationException("No valid orders were added to the invoice. All selected orders may have failed validation or were already invoiced.");
+        }
 
         InvalidatePayoutReadModels();
 
@@ -967,17 +1080,25 @@ public class DesignerPayoutService : IDesignerPayoutService
             .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
 
         if (invoice == null)
+        {
             throw new InvalidOperationException("Designer invoice not found.");
+        }
 
         if (invoice.Status == DesignerInvoiceStatus.Paid)
+        {
             throw new InvalidOperationException("Cannot edit a paid invoice.");
+        }
 
         var item = invoice.Items.FirstOrDefault(i => i.Id == itemId);
         if (item == null)
+        {
             throw new InvalidOperationException("Invoice item not found.");
+        }
 
         if (amount <= 0)
+        {
             throw new InvalidOperationException("Amount must be greater than zero.");
+        }
 
         item.Amount = amount;
         item.UpdatedAt = DateTime.UtcNow;
@@ -1000,13 +1121,19 @@ public class DesignerPayoutService : IDesignerPayoutService
             .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
 
         if (invoice == null)
+        {
             throw new InvalidOperationException("Designer invoice not found.");
+        }
 
         if (invoice.Status == DesignerInvoiceStatus.Paid)
+        {
             throw new InvalidOperationException("Cannot edit a paid invoice.");
+        }
 
         if (string.IsNullOrWhiteSpace(description))
+        {
             throw new InvalidOperationException("Description is required.");
+        }
 
         var adjustment = new DesignerInvoiceAdjustment
         {
@@ -1038,14 +1165,20 @@ public class DesignerPayoutService : IDesignerPayoutService
             .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
 
         if (invoice == null)
+        {
             throw new InvalidOperationException("Designer invoice not found.");
+        }
 
         if (invoice.Status == DesignerInvoiceStatus.Paid)
+        {
             throw new InvalidOperationException("Cannot edit a paid invoice.");
+        }
 
         var adjustment = invoice.Adjustments?.FirstOrDefault(a => a.Id == adjustmentId);
         if (adjustment == null)
+        {
             throw new InvalidOperationException("Adjustment not found.");
+        }
 
         _context.DesignerInvoiceAdjustments.Remove(adjustment);
 
@@ -1081,7 +1214,9 @@ public class DesignerPayoutService : IDesignerPayoutService
                     ? $"{designer.User.FirstName} {designer.User.LastName}".Trim()
                     : "Designer";
                 if (string.IsNullOrEmpty(designerName))
+                {
                     designerName = "Designer";
+                }
 
                 return new DesignerPayoutOverviewDto
                 {

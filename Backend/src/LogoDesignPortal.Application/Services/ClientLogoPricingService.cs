@@ -101,7 +101,10 @@ public class ClientLogoPricingService : IClientLogoPricingService
     {
         var entity = await _context.ClientLogoPricings
             .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted);
-        if (entity == null) return false;
+        if (entity == null)
+        {
+            return false;
+        }
 
         entity.IsDeleted = true;
         entity.DeletedAt = DateTime.UtcNow;
@@ -116,7 +119,9 @@ public class ClientLogoPricingService : IClientLogoPricingService
     public async Task<ClientLogoPricingResponseDto?> GetByClientAndDesignAsync(Guid clientId, int designCategory, int designType)
     {
         if (!Enum.IsDefined(typeof(DesignCategory), designCategory) || !Enum.IsDefined(typeof(DesignType), designType))
+        {
             return null;
+        }
 
         var entity = await _context.ClientLogoPricings
             .FirstOrDefaultAsync(p =>
@@ -152,7 +157,9 @@ public class ClientLogoPricingService : IClientLogoPricingService
         {
             clientName = $"{entity.Client.User.FirstName} {entity.Client.User.LastName}".Trim();
             if (string.IsNullOrEmpty(clientName))
+            {
                 clientName = entity.Client.CompanyName;
+            }
         }
         else if (entity.ClientId != Guid.Empty)
         {
@@ -160,8 +167,10 @@ public class ClientLogoPricingService : IClientLogoPricingService
                 .Include(c => c.User)
                 .FirstOrDefaultAsync(c => c.Id == entity.ClientId);
             if (client != null)
+            {
                 clientName = $"{client.User.FirstName} {client.User.LastName}".Trim()
                     ?? client.CompanyName;
+            }
         }
 
         return new ClientLogoPricingResponseDto

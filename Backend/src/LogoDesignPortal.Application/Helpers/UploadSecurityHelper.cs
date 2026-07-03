@@ -67,45 +67,40 @@ public static partial class UploadSecurityHelper
     {
 
         if (string.IsNullOrWhiteSpace(fileName))
-
+        {
             throw new InvalidOperationException("File name is required.");
-
-
+        }
 
         var normalized = fileName.Replace('\\', '/').Trim();
 
         if (normalized.Contains("..", StringComparison.Ordinal))
-
+        {
             throw new InvalidOperationException("Path traversal in file name is not allowed.");
-
-
+        }
 
         var nameOnly = Path.GetFileName(normalized);
 
         if (string.IsNullOrWhiteSpace(nameOnly))
-
+        {
             throw new InvalidOperationException("Invalid file name.");
-
-
+        }
 
         var effectiveExt = GetEffectiveExtension(nameOnly);
 
         if (string.IsNullOrWhiteSpace(effectiveExt))
-
+        {
             throw new InvalidOperationException("File must have an extension.");
-
-
+        }
 
         if (BlockedExtensions.Contains(effectiveExt))
-
+        {
             throw new InvalidOperationException($"File type '{effectiveExt}' is not allowed.");
-
-
+        }
 
         if (HasDoubleExtension(nameOnly))
-
+        {
             throw new InvalidOperationException("Double file extensions are not allowed.");
-
+        }
     }
 
 
@@ -139,7 +134,10 @@ public static partial class UploadSecurityHelper
         var withoutLast = Path.GetFileNameWithoutExtension(nameOnly);
         var penultimate = Path.GetExtension(withoutLast);
         if (string.IsNullOrEmpty(penultimate))
+        {
             return false;
+        }
+
         return DecoyExtensions.Contains(penultimate)
                && !string.Equals(penultimate, last, StringComparison.OrdinalIgnoreCase);
     }
@@ -157,56 +155,49 @@ public static partial class UploadSecurityHelper
     {
 
         if (string.IsNullOrWhiteSpace(fileName))
-
+        {
             return $"upload{fallbackExtension}";
-
-
+        }
 
         var nameOnly = Path.GetFileName(fileName.Replace('\\', '/').Trim());
 
         if (string.IsNullOrWhiteSpace(nameOnly))
-
+        {
             return $"upload{fallbackExtension}";
-
-
+        }
 
         var ext = GetEffectiveExtension(nameOnly);
 
         if (string.IsNullOrWhiteSpace(ext))
-
+        {
             ext = fallbackExtension.StartsWith('.') ? fallbackExtension : "." + fallbackExtension;
-
-
+        }
 
         var baseName = Path.GetFileNameWithoutExtension(nameOnly);
 
         if (HasDoubleExtension(nameOnly))
-
+        {
             baseName = baseName.Contains('.') ? baseName[..baseName.LastIndexOf('.')] : baseName;
-
-
+        }
 
         if (string.IsNullOrWhiteSpace(baseName))
-
+        {
             baseName = "upload";
-
-
+        }
 
         baseName = InvalidFileNameChars().Replace(baseName, "_");
 
         baseName = baseName.Trim('.', ' ');
 
         if (baseName.Length > 120)
-
+        {
             baseName = baseName[..120];
-
-
+        }
 
         if (string.IsNullOrWhiteSpace(baseName))
-
+        {
             baseName = "upload";
-
-
+        }
 
         return $"{baseName}{ext}";
 
@@ -225,18 +216,16 @@ public static partial class UploadSecurityHelper
     {
 
         if (string.IsNullOrWhiteSpace(contentType))
-
+        {
             return;
-
-
+        }
 
         var ext = extension.StartsWith('.') ? extension : "." + extension;
 
         if (!AllowedMimeByExtension.TryGetValue(ext, out var expected))
-
+        {
             return;
-
-
+        }
 
         if (!contentType.StartsWith(expected, StringComparison.OrdinalIgnoreCase)
 
@@ -261,10 +250,9 @@ public static partial class UploadSecurityHelper
     {
 
         if (!MagicBytes.TryGetValue(extension.ToLowerInvariant(), out var signatures))
-
+        {
             return;
-
-
+        }
 
         var header = new byte[Math.Max(12, signatures.Max(s => s.Length))];
 
@@ -275,10 +263,9 @@ public static partial class UploadSecurityHelper
 
 
         if (read < signatures.Min(s => s.Length))
-
+        {
             throw new InvalidOperationException($"File content does not match extension '{extension}'.");
-
-
+        }
 
         var matches = signatures.Any(sig => header.Take(sig.Length).SequenceEqual(sig));
 
@@ -297,9 +284,9 @@ public static partial class UploadSecurityHelper
 
 
         if (!matches)
-
+        {
             throw new InvalidOperationException($"File content does not match extension '{extension}'. Possible file type spoofing.");
-
+        }
     }
 
 

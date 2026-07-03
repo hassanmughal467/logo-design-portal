@@ -80,13 +80,17 @@ public class MessageService : IMessageService
                 if (senderRole == "Client")
                 {
                     if (order.Client == null || order.Client.UserId != senderId)
+                    {
                         throw new ForbiddenAccessException("You don't have access to send messages for this order.");
+                    }
                 }
                 else if (senderRole == "Designer")
                 {
                     var designer = await _context.DesignerProfiles.FirstOrDefaultAsync(d => d.UserId == senderId && !d.IsDeleted);
                     if (designer == null || order.DesignerId != designer.Id)
+                    {
                         throw new ForbiddenAccessException("You don't have access to send messages for this order.");
+                    }
                 }
                 // Admin/SuperAdmin: allow
             }
@@ -120,7 +124,11 @@ public class MessageService : IMessageService
         try
         {
             var senderName = $"{sender.FirstName} {sender.LastName}".Trim();
-            if (string.IsNullOrEmpty(senderName)) senderName = "Someone";
+            if (string.IsNullOrEmpty(senderName))
+            {
+                senderName = "Someone";
+            }
+
             var orderNumber = request.OrderId.HasValue ? NotificationFormatHelper.GetOrderNumber(request.OrderId.Value) : "N/A";
             var title = "New Message";
             var refId = request.OrderId ?? message.Id;
@@ -365,18 +373,45 @@ public class MessageService : IMessageService
         var recipientRole = message.Recipient?.Role?.Name;
 
         string senderName = $"{message.Sender?.FirstName} {message.Sender?.LastName}".Trim();
-        if (string.IsNullOrEmpty(senderName)) senderName = "Someone";
+        if (string.IsNullOrEmpty(senderName))
+        {
+            senderName = "Someone";
+        }
+
         string? recipientName = message.Recipient != null ? $"{message.Recipient.FirstName} {message.Recipient.LastName}" : null;
 
         // Identity masking: Client must not see designer name; Designer must not see client name
-        if (userRole == "Client" && senderRole == "Designer") senderName = "Company Design Team";
-        if (userRole == "Client" && recipientRole == "Designer") recipientName = "Company Design Team";
-        if (userRole == "Designer" && senderRole == "Client") senderName = "Company Project";
-        if (userRole == "Designer" && recipientRole == "Client") recipientName = "Company Project";
+        if (userRole == "Client" && senderRole == "Designer")
+        {
+            senderName = "Company Design Team";
+        }
+
+        if (userRole == "Client" && recipientRole == "Designer")
+        {
+            recipientName = "Company Design Team";
+        }
+
+        if (userRole == "Designer" && senderRole == "Client")
+        {
+            senderName = "Company Project";
+        }
+
+        if (userRole == "Designer" && recipientRole == "Client")
+        {
+            recipientName = "Company Project";
+        }
+
         if (message.ForwardedByAdmin && message.OriginalSenderRole.HasValue)
         {
-            if (userRole == "Client" && message.OriginalSenderRole == MessageSenderRole.Designer) senderName = "Company Design Team";
-            if (userRole == "Designer" && message.OriginalSenderRole == MessageSenderRole.Client) senderName = "Company Project";
+            if (userRole == "Client" && message.OriginalSenderRole == MessageSenderRole.Designer)
+            {
+                senderName = "Company Design Team";
+            }
+
+            if (userRole == "Designer" && message.OriginalSenderRole == MessageSenderRole.Client)
+            {
+                senderName = "Company Project";
+            }
         }
 
         return new MessageResponseDto

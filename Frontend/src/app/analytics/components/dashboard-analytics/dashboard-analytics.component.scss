@@ -167,6 +167,42 @@
         color: var(--text-color-secondary);
         text-transform: uppercase;
         letter-spacing: 0.3px;
+
+        &.kpi-label--top { margin-bottom: 0.35rem; }
+      }
+
+      .kpi-currency-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+
+        li {
+          display: flex;
+          align-items: baseline;
+          gap: 0.4rem;
+          line-height: 1.2;
+        }
+
+        .kpi-currency-amount {
+          font-size: 1.05rem;
+          font-weight: 700;
+          color: var(--text-color);
+          font-variant-numeric: tabular-nums;
+        }
+
+        .kpi-currency-meta {
+          font-size: 0.7rem;
+          color: var(--text-color-secondary);
+        }
+      }
+
+      &.kpi-card-multicurrency {
+        align-items: flex-start;
+
+        .kpi-icon { margin-top: 0.25rem; }
       }
     }
   }

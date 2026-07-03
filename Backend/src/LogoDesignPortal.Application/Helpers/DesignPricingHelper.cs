@@ -50,7 +50,10 @@ public static class DesignPricingHelper
     {
         var defaultPrice = GetDefaultPrice(designType);
         if (!defaultPrice.HasValue)
+        {
             return true; // ComplexVector always requires approval
+        }
+
         return proposedPrice != defaultPrice.Value;
     }
 }

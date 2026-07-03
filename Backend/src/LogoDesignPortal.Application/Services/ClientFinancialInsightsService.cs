@@ -12,9 +12,21 @@ public class ClientFinancialInsightsService : IClientFinancialInsightsService
 
     private static string GetPackageFromPrice(decimal price)
     {
-        if (price < 200) return "Basic";
-        if (price < 500) return "Standard";
-        if (price < 1000) return "Premium";
+        if (price < 200)
+        {
+            return "Basic";
+        }
+
+        if (price < 500)
+        {
+            return "Standard";
+        }
+
+        if (price < 1000)
+        {
+            return "Premium";
+        }
+
         return "Custom";
     }
 

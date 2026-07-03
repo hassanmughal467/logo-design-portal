@@ -2,13 +2,12 @@
   <!-- Header -->
   <div class="page-header">
     <div class="header-left">
-      <button 
-        pButton 
+      <p-button 
         icon="pi pi-arrow-left" 
         label="Back" 
         (onClick)="goBack()"
         styleClass="p-button-text">
-      </button>
+      </p-button>
       <div class="header-content" *ngIf="project">
         <h1 class="page-title">{{ project.title }}</h1>
         <p class="page-subtitle">Project Details & Management</p>
@@ -60,12 +59,12 @@
   <div *ngIf="project" class="tabs-section">
     <p-card styleClass="tabs-card">
       <p-tabView [(activeIndex)]="activeTab">
-        <!-- Files & Revisions Tab -->
-        <p-tabPanel header="Files & Revisions" leftIcon="pi pi-file">
+        <!-- Files Tab -->
+        <p-tabPanel header="Files" leftIcon="pi pi-file">
           <div class="tab-content">
             <div class="tab-header">
-              <h3>Revisions & Files</h3>
-              <p class="subtitle">{{ revisions.length }} revisions</p>
+              <h3>Project Files</h3>
+              <p class="subtitle">{{ projectFiles.length }} {{ projectFiles.length === 1 ? 'file' : 'files' }}</p>
             </div>
 
             <!-- Upload Section -->
@@ -106,47 +105,33 @@
               </p-card>
             </div>
 
-            <!-- Revisions List -->
-            <div *ngIf="revisionsLoading" class="loading-state">
+            <!-- Files List -->
+            <div *ngIf="filesLoading" class="loading-state">
               <p-progressSpinner></p-progressSpinner>
             </div>
 
-            <div *ngIf="!revisionsLoading" class="revisions-list">
-              <div class="revision-item" *ngFor="let revision of revisions; let i = index">
-                <div class="revision-header">
-                  <div class="revision-info">
-                    <h4>Revision {{ revision.version }}</h4>
-                    <span class="revision-date">{{ formatDate(revision.createdAt) }}</span>
-                  </div>
-                  <p-tag value="v{{ revision.version }}" severity="info" [rounded]="true"></p-tag>
+            <div *ngIf="!filesLoading" class="files-list">
+              <div class="file-item" *ngFor="let file of projectFiles">
+                <div class="file-icon">
+                  <i class="pi pi-file"></i>
                 </div>
-                <div class="revision-notes" *ngIf="revision.notes">
-                  <p>{{ revision.notes }}</p>
+                <div class="file-info">
+                  <h5>{{ file.originalFileName || file.fileName || file.name }}</h5>
+                  <p>{{ formatDate(file.uploadedAt || file.createdAt) }}</p>
                 </div>
-                <div class="revision-files">
-                  <div class="file-item" *ngFor="let file of revision.files">
-                    <div class="file-icon">
-                      <i class="pi pi-file"></i>
-                    </div>
-                    <div class="file-info">
-                      <h5>{{ file.fileName || file.name }}</h5>
-                      <p>{{ formatDate(file.uploadedAt || file.createdAt) }}</p>
-                    </div>
-                    <p-button 
-                      icon="pi pi-download" 
-                      styleClass="p-button-text p-button-rounded"
-                      (onClick)="downloadFile(file)"
-                      pTooltip="Download">
-                    </p-button>
-                  </div>
-                </div>
+                <p-button 
+                  icon="pi pi-download" 
+                  styleClass="p-button-text p-button-rounded"
+                  (onClick)="downloadFile(file)"
+                  pTooltip="Download">
+                </p-button>
               </div>
             </div>
 
-            <div *ngIf="!revisionsLoading && revisions.length === 0" class="empty-state">
+            <div *ngIf="!filesLoading && projectFiles.length === 0" class="empty-state">
               <i class="pi pi-file empty-icon"></i>
-              <p>No revisions yet</p>
-              <p class="empty-subtext">Upload files to create the first revision</p>
+              <p>No files yet</p>
+              <p class="empty-subtext">Upload artwork to attach files to this project</p>
             </div>
           </div>
         </p-tabPanel>

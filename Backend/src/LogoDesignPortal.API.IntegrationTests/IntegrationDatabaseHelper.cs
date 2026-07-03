@@ -35,7 +35,9 @@ public static class IntegrationDatabaseHelper
         Guid clientProfileId)
     {
         if (clientProfileId != Guid.Empty)
+        {
             return clientProfileId;
+        }
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

@@ -42,7 +42,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                             d.ServiceType == typeof(ApplicationDbContext))
                 .ToList();
             foreach (var d in descriptorsToRemove)
+            {
                 services.Remove(d);
+            }
 
             services.AddDbContext<ApplicationDbContext>(options =>
             {

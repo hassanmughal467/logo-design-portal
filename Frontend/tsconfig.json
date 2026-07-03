@@ -12,6 +12,7 @@
     "sourceMap": true,
     "declaration": false,
     "experimentalDecorators": true,
+    "useDefineForClassFields": false,
     "moduleResolution": "node",
     "importHelpers": true,
     "target": "ES2022",

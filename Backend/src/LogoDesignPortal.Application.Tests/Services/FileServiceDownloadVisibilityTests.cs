@@ -6,6 +6,7 @@ using LogoDesignPortal.Application.Mappings;
 using LogoDesignPortal.Application.Services;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
+using LogoDesignPortal.Application.Tests.Storage;
 using LogoDesignPortal.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -122,7 +123,9 @@ public class FileServiceDownloadVisibilityTests : IDisposable
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Mock.Of<IDesignerPayoutService>(),
             Mock.Of<IFileUploadScanHook>(),
-            Options.Create(new ProductionSafetyOptions()));
+            TestFileStorageFactory.CreateLocal(_tempStoragePath),
+            Options.Create(new ProductionSafetyOptions()),
+            TestFileStorageFactory.CreateLocalOptions(_tempStoragePath));
     }
 
     public void Dispose() => Directory.Delete(_tempStoragePath, recursive: true);

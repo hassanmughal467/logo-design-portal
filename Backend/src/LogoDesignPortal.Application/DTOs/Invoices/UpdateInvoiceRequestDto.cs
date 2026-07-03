@@ -9,7 +9,7 @@ public class UpdateInvoiceRequestDto
     public DateTime? DueDate { get; set; }
     public string? PaymentMethod { get; set; }
     public string? Notes { get; set; }
-    
+
     // Allow updating individual item amounts/descriptions
     public List<UpdateInvoiceItemDto>? Items { get; set; }
 }

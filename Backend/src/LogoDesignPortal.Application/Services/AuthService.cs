@@ -61,7 +61,7 @@ public class AuthService : IAuthService
         {
             // Increment failed login attempts
             user.FailedLoginAttempts++;
-            
+
             // Lock account after 5 failed attempts for 30 minutes
             if (user.FailedLoginAttempts >= 5)
             {
@@ -69,7 +69,7 @@ public class AuthService : IAuthService
                 await _context.SaveChangesAsync();
                 throw new UnauthorizedAccessException("Account locked due to multiple failed login attempts. Please try again in 30 minutes.");
             }
-            
+
             await _context.SaveChangesAsync();
             throw new UnauthorizedAccessException("Invalid email or password.");
         }
@@ -149,6 +149,7 @@ public class AuthService : IAuthService
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
+            CurrencyCode = "USD",
             CompanyName = companyName,
             ContactName = $"{user.FirstName} {user.LastName}".Trim(),
             CreatedAt = DateTime.UtcNow
@@ -161,7 +162,11 @@ public class AuthService : IAuthService
         try
         {
             var clientName = $"{user.FirstName} {user.LastName}".Trim();
-            if (string.IsNullOrEmpty(clientName)) clientName = companyName;
+            if (string.IsNullOrEmpty(clientName))
+            {
+                clientName = companyName;
+            }
+
             var title = "New Client Registered";
             var message = $"New client registered: {clientName}";
             await _notificationService.CreateNotificationForRoleAsync("Admin", title, message, NotificationType.Info, NotificationReferenceType.System, user.Id);
@@ -215,7 +220,7 @@ public class AuthService : IAuthService
             .Include(u => u.Role)
             .FirstOrDefaultAsync(u => u.Id == userId && !u.IsDeleted);
 
-        if (user == null || user.RefreshToken != request.RefreshToken || 
+        if (user == null || user.RefreshToken != request.RefreshToken ||
             user.RefreshTokenExpiryTime <= DateTime.UtcNow)
         {
             throw new UnauthorizedAccessException("Invalid refresh token.");
@@ -249,9 +254,15 @@ public class AuthService : IAuthService
     private DateTime GetAccessTokenExpiry()
     {
         if (int.TryParse(_configuration["Jwt:AccessTokenExpiryMinutes"], out var minutes) && minutes > 0)
+        {
             return DateTime.UtcNow.AddMinutes(minutes);
+        }
+
         if (int.TryParse(_configuration["Jwt:AccessTokenExpiryHours"], out var hours))
+        {
             return DateTime.UtcNow.AddHours(hours);
+        }
+
         return DateTime.UtcNow.AddMinutes(15);
     }
 
@@ -369,7 +380,10 @@ public class AuthService : IAuthService
 
         // Non-blocking: password reset mail is sent by Hangfire worker.
         if (smtpConfigured)
+        {
             _backgroundJobs.EnqueuePasswordResetEmail(user.Email, resetLink, $"{user.FirstName} {user.LastName}".Trim());
+        }
+
         var emailQueued = smtpConfigured;
 
         var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development"
@@ -402,9 +416,9 @@ public class AuthService : IAuthService
 
         // Get user by email and token
         var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Email == request.Email && 
-                u.PasswordResetToken == request.Token && 
-                !u.IsDeleted && 
+            .FirstOrDefaultAsync(u => u.Email == request.Email &&
+                u.PasswordResetToken == request.Token &&
+                !u.IsDeleted &&
                 u.IsActive);
 
         if (user == null)
@@ -413,7 +427,7 @@ public class AuthService : IAuthService
         }
 
         // Check if token is expired
-        if (user.PasswordResetTokenExpiryTime == null || 
+        if (user.PasswordResetTokenExpiryTime == null ||
             user.PasswordResetTokenExpiryTime < DateTime.UtcNow)
         {
             throw new InvalidOperationException("Reset token has expired. Please request a new password reset.");

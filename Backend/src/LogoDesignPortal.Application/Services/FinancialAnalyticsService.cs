@@ -1,4 +1,5 @@
 using LogoDesignPortal.Application.Caching;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
@@ -30,9 +31,21 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
 
     private static string GetPackageFromPrice(decimal price)
     {
-        if (price < 200) return "Basic";
-        if (price < 500) return "Standard";
-        if (price < 1000) return "Premium";
+        if (price < 200)
+        {
+            return "Basic";
+        }
+
+        if (price < 500)
+        {
+            return "Standard";
+        }
+
+        if (price < 1000)
+        {
+            return "Premium";
+        }
+
         return "Custom";
     }
 
@@ -41,7 +54,9 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
         var cacheKey = $"ldp:cache:financial:overview:e{_readModelCacheVersions.OrdersEpoch}";
         var cached = await DistributedJsonCache.GetSafeAsync<FinancialOverviewDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var dto = await BuildFinancialOverviewUncachedAsync().ConfigureAwait(false);
         await DistributedJsonCache.SetSafeAsync(_distributedCache, cacheKey, dto, TimeSpan.FromMinutes(7), _logger).ConfigureAwait(false);
@@ -87,9 +102,42 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
         var completedCount = await comp.CountAsync();
         var avgOrderValue = completedCount > 0 ? totalRevenue / completedCount : 0;
 
+        var perCurrencyRaw = await comp
+            .GroupBy(o => o.CurrencyCode == null || o.CurrencyCode == "" ? "USD" : o.CurrencyCode)
+            .Select(g => new
+            {
+                CurrencyCode = g.Key,
+                TotalRevenue = g.Sum(o => o.Price),
+                MonthlyRevenue = g.Where(o => (o.UpdatedAt ?? o.CreatedAt) >= startOfMonth).Sum(o => o.Price),
+                CompletedCount = g.Count()
+            })
+            .ToListAsync();
+
+        var revenueByCurrency = perCurrencyRaw
+            .Select(g => new RevenueByCurrencyItemDto
+            {
+                CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(g.CurrencyCode),
+                TotalRevenue = g.TotalRevenue,
+                MonthlyRevenue = g.MonthlyRevenue,
+                CompletedCount = g.CompletedCount,
+                AverageOrderValue = g.CompletedCount > 0 ? g.TotalRevenue / g.CompletedCount : 0
+            })
+            .OrderByDescending(x => x.TotalRevenue)
+            .ToList();
+
+        var (revenueCurrencyCode, revenueCurrencyMixed) = revenueByCurrency.Count switch
+        {
+            1 => (revenueByCurrency[0].CurrencyCode, false),
+            > 1 => (ClientCurrencyHelper.DefaultCode, true),
+            _ => (ClientCurrencyHelper.DefaultCode, false)
+        };
+
         return new FinancialOverviewDto
         {
             TotalRevenue = totalRevenue,
+            RevenueCurrencyCode = revenueCurrencyCode,
+            RevenueCurrencyMixed = revenueCurrencyMixed,
+            RevenueByCurrency = revenueByCurrency,
             RevenueThisMonth = revenueThisMonth,
             RevenueThisWeek = revenueThisWeek,
             AverageOrderValue = avgOrderValue,
@@ -109,7 +157,9 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
         var cacheKey = $"ldp:cache:financial:revenueTrend:e{_readModelCacheVersions.OrdersEpoch}";
         var cached = await DistributedJsonCache.GetSafeAsync<RevenueTrendDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -143,7 +193,9 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
         var cacheKey = $"ldp:cache:financial:ordersVsRevenue:e{_readModelCacheVersions.OrdersEpoch}";
         var cached = await DistributedJsonCache.GetSafeAsync<OrdersVsRevenueDto>(_distributedCache, cacheKey, _logger).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
         var startOfSixMonths = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -248,20 +300,25 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
         var ids = agg.Select(x => x.ClientId).ToList();
         var profiles = await _context.ClientProfiles.AsNoTracking()
             .Where(c => ids.Contains(c.Id) && !c.IsDeleted)
-            .Select(c => new { c.Id, c.CompanyName, c.User!.FirstName, c.User.LastName })
+            .Select(c => new { c.Id, c.CompanyName, c.CurrencyCode, c.User!.FirstName, c.User.LastName })
             .ToListAsync();
-        var nameLookup = profiles.ToDictionary(
-            x => x.Id,
-            x => string.IsNullOrWhiteSpace($"{x.FirstName} {x.LastName}".Trim())
-                ? (x.CompanyName ?? "Unknown")
-                : $"{x.FirstName} {x.LastName} ({x.CompanyName})");
+        var profileLookup = profiles.ToDictionary(x => x.Id);
 
-        var items = agg.Select(x => new ClientRevenueItemDto
+        var items = agg.Select(x =>
         {
-            ClientId = x.ClientId,
-            ClientName = nameLookup.TryGetValue(x.ClientId, out var n) ? n : "Unknown",
-            OrdersCount = x.OrdersCount,
-            TotalRevenue = x.TotalRevenue
+            profileLookup.TryGetValue(x.ClientId, out var p);
+            var name = p == null ? "Unknown"
+                : string.IsNullOrWhiteSpace($"{p.FirstName} {p.LastName}".Trim())
+                    ? (p.CompanyName ?? "Unknown")
+                    : $"{p.FirstName} {p.LastName} ({p.CompanyName})";
+            return new ClientRevenueItemDto
+            {
+                ClientId = x.ClientId,
+                ClientName = name,
+                OrdersCount = x.OrdersCount,
+                TotalRevenue = x.TotalRevenue,
+                CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(p?.CurrencyCode)
+            };
         }).ToList();
 
         return new ClientRevenueDto { Items = items };
@@ -352,76 +409,98 @@ public class FinancialAnalyticsService : IFinancialAnalyticsService
         var last30Days = DateTime.UtcNow.AddDays(-30);
         var items = new List<FinancialActivityItemDto>();
 
-        var paidInvoices = await _context.Invoices
+        var paidInvoiceRows = await _context.Invoices
+            .AsNoTracking()
             .Where(i => !i.IsDeleted && i.Status == InvoiceStatus.Paid && i.PaidDate.HasValue && i.PaidDate >= last30Days)
             .OrderByDescending(i => i.PaidDate)
             .Take(10)
-            .Select(i => new FinancialActivityItemDto
-            {
-                Type = "InvoicePaid",
-                Description = $"Invoice {i.InvoiceNumber} paid",
-                Amount = i.TotalAmount,
-                OccurredAt = i.PaidDate!.Value
-            })
+            .Select(i => new { i.InvoiceNumber, i.TotalAmount, i.PaidDate, i.ClientId })
             .ToListAsync();
-        items.AddRange(paidInvoices);
+        var paidClientIds = paidInvoiceRows.Select(i => i.ClientId).Distinct().ToList();
+        var paidClientCurrencies = await _context.ClientProfiles.AsNoTracking()
+            .Where(c => paidClientIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.CurrencyCode);
+        items.AddRange(paidInvoiceRows.Select(i => new FinancialActivityItemDto
+        {
+            Type = "InvoicePaid",
+            Description = $"Invoice {i.InvoiceNumber} paid",
+            Amount = i.TotalAmount,
+            OccurredAt = i.PaidDate!.Value,
+            CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(
+                paidClientCurrencies.GetValueOrDefault(i.ClientId))
+        }));
 
-        var newOrders = await _context.LogoOrders
+        var newOrderRows = await _context.LogoOrders
+            .AsNoTracking()
             .Where(o => !o.IsDeleted && o.CreatedAt >= last30Days)
             .OrderByDescending(o => o.CreatedAt)
             .Take(10)
-            .Select(o => new FinancialActivityItemDto
-            {
-                Type = "NewOrder",
-                Description = $"New order: {o.Title}",
-                Amount = o.Price,
-                OccurredAt = o.CreatedAt
-            })
+            .Select(o => new { o.Title, o.Price, o.CurrencyCode, o.CreatedAt })
             .ToListAsync();
-        items.AddRange(newOrders);
+        items.AddRange(newOrderRows.Select(o => new FinancialActivityItemDto
+        {
+            Type = "NewOrder",
+            Description = $"New order: {o.Title}",
+            Amount = o.Price,
+            OccurredAt = o.CreatedAt,
+            CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(o.CurrencyCode)
+        }));
 
-        var completedOrders = await _context.LogoOrders
+        var completedOrderRows = await _context.LogoOrders
+            .AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed && o.UpdatedAt.HasValue && o.UpdatedAt >= last30Days)
             .OrderByDescending(o => o.UpdatedAt)
             .Take(10)
-            .Select(o => new FinancialActivityItemDto
-            {
-                Type = "OrderCompleted",
-                Description = $"Order completed: {o.Title}",
-                Amount = o.Price,
-                OccurredAt = o.UpdatedAt!.Value
-            })
+            .Select(o => new { o.Title, o.Price, o.CurrencyCode, UpdatedAt = o.UpdatedAt!.Value })
             .ToListAsync();
-        items.AddRange(completedOrders);
+        items.AddRange(completedOrderRows.Select(o => new FinancialActivityItemDto
+        {
+            Type = "OrderCompleted",
+            Description = $"Order completed: {o.Title}",
+            Amount = o.Price,
+            OccurredAt = o.UpdatedAt,
+            CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(o.CurrencyCode)
+        }));
 
-        var refunds = await _context.LogoOrders
+        var refundRows = await _context.LogoOrders
+            .AsNoTracking()
             .Where(o => !o.IsDeleted && o.IsRefunded && o.RefundedAt.HasValue && o.RefundedAt >= last30Days)
             .OrderByDescending(o => o.RefundedAt)
             .Take(10)
-            .Select(o => new FinancialActivityItemDto
-            {
-                Type = "RefundIssued",
-                Description = $"Refund: {o.Title}",
-                Amount = o.RefundAmount ?? 0,
-                OccurredAt = o.RefundedAt!.Value
-            })
+            .Select(o => new { o.Title, RefundAmount = o.RefundAmount ?? 0, o.CurrencyCode, RefundedAt = o.RefundedAt!.Value })
             .ToListAsync();
-        items.AddRange(refunds);
+        items.AddRange(refundRows.Select(o => new FinancialActivityItemDto
+        {
+            Type = "RefundIssued",
+            Description = $"Refund: {o.Title}",
+            Amount = o.RefundAmount,
+            OccurredAt = o.RefundedAt,
+            CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(o.CurrencyCode)
+        }));
 
         var largeThreshold = 1000m;
-        var largePayments = await _context.Invoices
+        var largePaymentRows = await _context.Invoices
+            .AsNoTracking()
             .Where(i => !i.IsDeleted && i.Status == InvoiceStatus.Paid && i.PaidDate.HasValue && i.PaidDate >= last30Days && i.TotalAmount >= largeThreshold)
             .OrderByDescending(i => i.PaidDate)
             .Take(5)
-            .Select(i => new FinancialActivityItemDto
-            {
-                Type = "LargeTransaction",
-                Description = $"Large payment: {i.InvoiceNumber}",
-                Amount = i.TotalAmount,
-                OccurredAt = i.PaidDate!.Value
-            })
+            .Select(i => new { i.InvoiceNumber, i.TotalAmount, i.PaidDate, i.ClientId })
             .ToListAsync();
-        items.AddRange(largePayments);
+        var largeClientIds = largePaymentRows.Select(i => i.ClientId).Distinct().ToList();
+        var largeClientCurrencies = largeClientIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _context.ClientProfiles.AsNoTracking()
+                .Where(c => largeClientIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.CurrencyCode);
+        items.AddRange(largePaymentRows.Select(i => new FinancialActivityItemDto
+        {
+            Type = "LargeTransaction",
+            Description = $"Large payment: {i.InvoiceNumber}",
+            Amount = i.TotalAmount,
+            OccurredAt = i.PaidDate!.Value,
+            CurrencyCode = ClientCurrencyHelper.NormalizeOrDefault(
+                largeClientCurrencies.GetValueOrDefault(i.ClientId))
+        }));
 
         var sorted = items.OrderByDescending(x => x.OccurredAt).Take(25).ToList();
         return new FinancialActivityFeedDto { Items = sorted };

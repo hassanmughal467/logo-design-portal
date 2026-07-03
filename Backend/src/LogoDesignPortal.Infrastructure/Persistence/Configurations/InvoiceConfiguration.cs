@@ -48,6 +48,12 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.Property(e => e.BillingPeriod)
             .HasMaxLength(100);
 
+        builder.Property(e => e.ExchangeRate)
+            .HasPrecision(18, 6);
+
+        builder.Property(e => e.ExchangeRateIsStale)
+            .HasDefaultValue(false);
+
         builder.HasOne(e => e.Client)
             .WithMany()
             .HasForeignKey(e => e.ClientId)

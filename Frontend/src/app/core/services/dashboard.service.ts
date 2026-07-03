@@ -575,6 +575,11 @@ export class DashboardService {
       case 'PriceApprovalPending':
       case '2':
         return OrderStatus.PriceApprovalPending;
+      case 'ApprovedUnassigned':
+      case 'Approved Unassigned':
+      case 'approved_unassigned':
+      case '16':
+        return OrderStatus.ApprovedUnassigned;
       case 'InProgress':
       case 'In Progress':
       case '3':

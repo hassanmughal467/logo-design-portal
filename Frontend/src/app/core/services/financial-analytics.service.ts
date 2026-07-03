@@ -2,8 +2,19 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 
+export interface FinancialRevenueByCurrencyItem {
+  currencyCode: string;
+  totalRevenue: number;
+  monthlyRevenue: number;
+  completedCount: number;
+  averageOrderValue: number;
+}
+
 export interface FinancialOverview {
   totalRevenue: number;
+  revenueCurrencyCode?: string;
+  revenueCurrencyMixed?: boolean;
+  revenueByCurrency?: FinancialRevenueByCurrencyItem[];
   revenueThisMonth: number;
   revenueThisWeek: number;
   averageOrderValue: number;
@@ -47,6 +58,7 @@ export interface ClientRevenueItem {
   clientName: string;
   ordersCount: number;
   totalRevenue: number;
+  currencyCode?: string;
 }
 
 export interface InvoiceStatusItem {
@@ -71,6 +83,7 @@ export interface FinancialActivityItem {
   description: string;
   amount?: number;
   occurredAt: string;
+  currencyCode?: string;
 }
 
 export interface RevenueForecastItem {

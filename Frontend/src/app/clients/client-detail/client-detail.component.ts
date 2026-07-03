@@ -6,7 +6,9 @@ import { MessageService } from 'primeng/api';
 import { Subject, forkJoin } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus } from '@shared/models/order.model';
-import { getOrderStatusLabel, getOrderStatusSeverity } from '@shared/utils/order-status-display';
+import { getOrderStatusLabel, getOrderStatusSeverity, OrderStatusSeverity } from '@shared/utils/order-status-display';
+import { TagSeverity } from '@shared/types/primeng.types';
+import { compactCurrencyLabel, formatCurrencyAmount } from '@core/utils/currency-format';
 
 export interface Client {
   id: string;
@@ -18,6 +20,7 @@ export interface Client {
   customerType?: 'Residential' | 'Business' | 'Student';
   totalOrders: number;
   totalSpent: number;
+  currencyCode?: string;
   createdAt: Date;
   lastOrderDate?: Date;
   status?: 'Active' | 'Inactive';
@@ -142,6 +145,7 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
               customerType: clientDetail.clientProfile?.customerType as 'Residential' | 'Business' | 'Student' | undefined,
               totalOrders: clientDetail.orderHistory?.length || 0,
               totalSpent: clientDetail.invoices?.filter((inv: any) => inv.status === 'Paid').reduce((sum: number, inv: any) => sum + (inv.totalAmount || inv.amount || 0), 0) || 0,
+              currencyCode: clientDetail.clientProfile?.currencyCode,
               createdAt: new Date(user.createdAt),
               status: user.isActive ? 'Active' : 'Inactive',
               lastOrderDate: clientDetail.orderHistory?.length > 0 
@@ -188,6 +192,7 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
               phoneNumber: (user as any).phoneNumber,
               totalOrders: 0,
               totalSpent: 0,
+              currencyCode: (user as any).clientProfile?.currencyCode,
               createdAt: new Date(user.createdAt),
               status: 'Active'
             };
@@ -341,11 +346,12 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
     });
   }
 
-  formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+  formatCurrency(amount: number, currencyCode?: string | null): string {
+    return formatCurrencyAmount(amount, currencyCode ?? this.client?.currencyCode);
+  }
+
+  private chartCurrencyTick(v: number): string {
+    return compactCurrencyLabel(v, this.client?.currencyCode);
   }
 
   formatDate(date: Date | string | undefined): string {
@@ -361,12 +367,12 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
     return getOrderStatusLabel(status);
   }
 
-  getStatusSeverity(status: string): string {
+  getStatusSeverity(status: string): TagSeverity {
     const orderSeverity = getOrderStatusSeverity(status);
     if (orderSeverity !== 'secondary') {
       return orderSeverity;
     }
-    const invoiceSeverityMap: Record<string, string> = {
+    const invoiceSeverityMap: Record<string, TagSeverity> = {
       Paid: 'success',
       Unpaid: 'warning',
       Overdue: 'danger'
@@ -620,7 +626,7 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: (v: number) => '$' + v } }
+        y: { beginAtZero: true, ticks: { callback: (v: number) => this.chartCurrencyTick(v) } }
       }
     };
   }
@@ -659,7 +665,7 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: (v: number) => '$' + v } }
+        y: { beginAtZero: true, ticks: { callback: (v: number) => this.chartCurrencyTick(v) } }
       }
     };
   }
@@ -720,7 +726,7 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
           yAxisID: 'y'
         },
         {
-          label: 'Spending ($)',
+          label: 'Spending',
           data: sorted.map(([, v]) => v.spend),
           type: 'line',
           borderColor: 'rgba(16, 185, 129, 1)',
@@ -737,7 +743,7 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
       plugins: { legend: { position: 'top' } },
       scales: {
         y: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: 'Orders' } },
-        y1: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: (v: number) => '$' + v } }
+        y1: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: (v: number) => this.chartCurrencyTick(v) } }
       }
     };
   }

@@ -1,4 +1,5 @@
 using LogoDesignPortal.Application.Caching;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
@@ -35,7 +36,9 @@ public class ClientProfileEnsureService : IClientProfileEnsureService
         _readModelCache.BumpOrders();
         _readModelCache.BumpAnalytics();
         if (invalidateUsersToo)
+        {
             _readModelCache.BumpUsers();
+        }
     }
 
     private static string DeriveDisplayName(User user)
@@ -67,7 +70,9 @@ public class ClientProfileEnsureService : IClientProfileEnsureService
     {
         var existing = await TryLoadActiveProfileAsync(userId, cancellationToken);
         if (existing != null)
+        {
             return existing;
+        }
 
         var user = await _context.Users
             .Include(u => u.Role)
@@ -103,7 +108,10 @@ public class ClientProfileEnsureService : IClientProfileEnsureService
                 ? display
                 : deletedProfile.CompanyName;
             if (string.IsNullOrWhiteSpace(deletedProfile.CompanyName))
+            {
                 deletedProfile.CompanyName = DefaultCompanyLabel;
+            }
+
             deletedProfile.UpdatedAt = DateTime.UtcNow;
 
             try
@@ -136,12 +144,15 @@ public class ClientProfileEnsureService : IClientProfileEnsureService
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
+            CurrencyCode = ClientCurrencyHelper.DefaultCode,
             CompanyName = companyName,
             ContactName = companyName,
             CreatedAt = DateTime.UtcNow
         };
         if (string.IsNullOrWhiteSpace(newProfile.CompanyName))
+        {
             newProfile.CompanyName = DefaultCompanyLabel;
+        }
 
         _context.ClientProfiles.Add(newProfile);
 

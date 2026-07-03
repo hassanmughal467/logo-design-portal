@@ -105,6 +105,12 @@
             "polyfills": ["zone.js", "zone.js/testing"],
             "tsConfig": "src/tsconfig.spec.json",
             "karmaConfig": "karma.conf.js",
+            "fileReplacements": [
+              {
+                "replace": "src/environments/environment.ts",
+                "with": "src/environments/environment.testing.ts"
+              }
+            ],
             "codeCoverage": true,
             "codeCoverageExclude": [
               "**/*.module.ts",
@@ -139,23 +145,23 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "browserTarget": "logo-design-portal-frontend:build"
+            "buildTarget": "logo-design-portal-frontend:build"
           },
           "configurations": {
             "production": {
-              "browserTarget": "logo-design-portal-frontend:build:production"
+              "buildTarget": "logo-design-portal-frontend:build:production"
             },
             "development": {
-              "browserTarget": "logo-design-portal-frontend:build:development"
+              "buildTarget": "logo-design-portal-frontend:build:development"
             },
             "e2e": {
-              "browserTarget": "logo-design-portal-frontend:build:e2e"
+              "buildTarget": "logo-design-portal-frontend:build:e2e"
             },
             "testing": {
-              "browserTarget": "logo-design-portal-frontend:build:testing"
+              "buildTarget": "logo-design-portal-frontend:build:testing"
             },
             "staging": {
-              "browserTarget": "logo-design-portal-frontend:build:staging"
+              "buildTarget": "logo-design-portal-frontend:build:staging"
             }
           },
           "defaultConfiguration": "development"

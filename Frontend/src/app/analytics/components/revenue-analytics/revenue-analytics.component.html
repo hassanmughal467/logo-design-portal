@@ -1,6 +1,6 @@
 <div class="revenue-analytics">
   <div class="empty-section" *ngIf="!data">
-    <i class="pi pi-dollar"></i>
+    <i [class]="revenueIconClass"></i>
     <p>No revenue analytics data available.</p>
   </div>
   <div class="revenue-growth-banner" *ngIf="data && data.revenueGrowthRate != null">

@@ -26,6 +26,12 @@
           <environmentVariable name="ConnectionStrings__DefaultConnection" value="REPLACE_AT_DEPLOY_TIME" />
           <environmentVariable name="ConnectionStrings__Redis" value="REPLACE_AT_DEPLOY_TIME" />
           <environmentVariable name="Jwt__Key" value="REPLACE_AT_DEPLOY_TIME" />
+          <environmentVariable name="Storage__Provider" value="R2" />
+          <environmentVariable name="Storage__R2__AccountId" value="REPLACE_AT_DEPLOY_TIME" />
+          <environmentVariable name="Storage__R2__AccessKeyId" value="REPLACE_AT_DEPLOY_TIME" />
+          <environmentVariable name="Storage__R2__SecretAccessKey" value="REPLACE_AT_DEPLOY_TIME" />
+          <environmentVariable name="Storage__R2__BucketName" value="hawk-files" />
+          <environmentVariable name="ExchangeRate__ApiKey" value="REPLACE_AT_DEPLOY_TIME" />
         </environmentVariables>
       </aspNetCore>
       <webSocket enabled="true" />

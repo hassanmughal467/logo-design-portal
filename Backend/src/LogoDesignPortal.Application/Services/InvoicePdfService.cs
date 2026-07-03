@@ -94,13 +94,24 @@ public class InvoicePdfService : IInvoicePdfService
                                     .FontSize(9).SemiBold().FontColor(Colors.Grey.Darken2);
 
                                 if (!string.IsNullOrWhiteSpace(companyFullAddress))
+                                {
                                     left.Item().PaddingTop(6).Text(companyFullAddress).FontSize(9).FontColor(Colors.Grey.Darken1);
+                                }
+
                                 if (!string.IsNullOrWhiteSpace(companyPhone))
+                                {
                                     left.Item().Text($"Phone: {companyPhone}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                                }
+
                                 if (!string.IsNullOrWhiteSpace(companyEmail))
+                                {
                                     left.Item().Text($"Email: {companyEmail}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                                }
+
                                 if (!string.IsNullOrWhiteSpace(companyWebsite))
+                                {
                                     left.Item().Text($"Web: {companyWebsite}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                                }
                             });
 
                             bottomRow.RelativeItem().AlignRight().Column(right =>
@@ -191,7 +202,9 @@ public class InvoicePdfService : IInvoicePdfService
                             if (clientProfile != null)
                             {
                                 if (!string.IsNullOrWhiteSpace(clientProfile.CompanyName))
+                                {
                                     col.Item().PaddingTop(2).Text(clientProfile.CompanyName).FontSize(9);
+                                }
 
                                 var clientAddress = BuildAddress(
                                     clientProfile.Address, clientProfile.City,
@@ -199,13 +212,19 @@ public class InvoicePdfService : IInvoicePdfService
                                     clientProfile.PostalCode);
 
                                 if (!string.IsNullOrWhiteSpace(clientAddress))
+                                {
                                     col.Item().PaddingTop(2).Text(clientAddress).FontSize(9);
+                                }
 
                                 if (!string.IsNullOrWhiteSpace(clientProfile.PhoneNumber))
+                                {
                                     col.Item().PaddingTop(2).Text($"Phone: {clientProfile.PhoneNumber}").FontSize(9);
+                                }
 
                                 if (!string.IsNullOrWhiteSpace(clientProfile.User?.Email))
+                                {
                                     col.Item().PaddingTop(2).Text($"Email: {clientProfile.User.Email}").FontSize(9);
+                                }
                             }
                         });
                     });
@@ -406,9 +425,14 @@ public class InvoicePdfService : IInvoicePdfService
                             left.Item().PaddingTop(4).Text(InvoicePdfBranding.Tagline)
                                 .FontSize(8).SemiBold().FontColor(Colors.Grey.Darken2);
                             if (!string.IsNullOrWhiteSpace(companyEmail))
+                            {
                                 left.Item().PaddingTop(6).Text(companyEmail).FontSize(9).FontColor(Colors.Grey.Darken1);
+                            }
+
                             if (!string.IsNullOrWhiteSpace(companyPhone))
+                            {
                                 left.Item().Text(companyPhone).FontSize(9).FontColor(Colors.Grey.Darken1);
+                            }
                         });
 
                         bottomRow.RelativeItem().AlignRight().Column(right =>
@@ -567,7 +591,9 @@ public class InvoicePdfService : IInvoicePdfService
             try
             {
                 if (File.Exists(path))
+                {
                     return File.ReadAllBytes(path);
+                }
             }
             catch
             {
@@ -584,11 +610,15 @@ public class InvoicePdfService : IInvoicePdfService
         var resourceName = assembly.GetManifestResourceNames()
             .FirstOrDefault(n => n.EndsWith("hawk-merchandising-logo.png", StringComparison.OrdinalIgnoreCase));
         if (string.IsNullOrEmpty(resourceName))
+        {
             return null;
+        }
 
         using var stream = assembly.GetManifestResourceStream(resourceName);
         if (stream == null)
+        {
             return null;
+        }
 
         using var ms = new MemoryStream();
         stream.CopyTo(ms);
@@ -600,21 +630,35 @@ public class InvoicePdfService : IInvoicePdfService
         var parts = new List<string>();
 
         if (!string.IsNullOrWhiteSpace(address))
+        {
             parts.Add(address);
+        }
 
         var cityState = new List<string>();
         if (!string.IsNullOrWhiteSpace(city))
+        {
             cityState.Add(city);
+        }
+
         if (!string.IsNullOrWhiteSpace(state))
+        {
             cityState.Add(state);
+        }
+
         if (cityState.Any())
+        {
             parts.Add(string.Join(", ", cityState));
+        }
 
         if (!string.IsNullOrWhiteSpace(postalCode))
+        {
             parts.Add(postalCode);
+        }
 
         if (!string.IsNullOrWhiteSpace(country))
+        {
             parts.Add(country);
+        }
 
         return string.Join(", ", parts);
     }
@@ -623,17 +667,26 @@ public class InvoicePdfService : IInvoicePdfService
     private static string ResolveInvoiceTotalsCurrency(InvoiceResponseDto invoice, string settingsFallback)
     {
         if (!string.IsNullOrWhiteSpace(invoice.CurrencyCode))
+        {
             return invoice.CurrencyCode.Trim();
+        }
+
         var fromItem = invoice.Items.FirstOrDefault(i => !string.IsNullOrWhiteSpace(i.CurrencyCode))?.CurrencyCode;
         if (!string.IsNullOrWhiteSpace(fromItem))
+        {
             return fromItem.Trim();
+        }
+
         return settingsFallback;
     }
 
     private static string ResolveLineItemCurrency(InvoiceItemDto item, InvoiceResponseDto invoice, string settingsFallback)
     {
         if (!string.IsNullOrWhiteSpace(item.CurrencyCode))
+        {
             return item.CurrencyCode.Trim();
+        }
+
         return ResolveInvoiceTotalsCurrency(invoice, settingsFallback);
     }
 

@@ -9,8 +9,10 @@ public static class OrderStatusStateMachine
 {
     private static readonly Dictionary<OrderStatus, HashSet<OrderStatus>> AllowedTransitions = new()
     {
-        [OrderStatus.WaitingForAdminApproval] = new() { OrderStatus.InProgress, OrderStatus.PriceApprovalPending, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin, OrderStatus.CancelledByUser },
-        [OrderStatus.PriceApprovalPending] = new() { OrderStatus.InProgress, OrderStatus.WaitingForAdminApproval, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin, OrderStatus.CancelledByUser },
+        [OrderStatus.WaitingForAdminApproval] = new() { OrderStatus.InProgress, OrderStatus.ApprovedUnassigned, OrderStatus.PriceApprovalPending, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin, OrderStatus.CancelledByUser },
+        // Admin-approved order is parked here until a designer is assigned. Assigning moves it to InProgress.
+        [OrderStatus.ApprovedUnassigned] = new() { OrderStatus.InProgress, OrderStatus.PriceApprovalPending, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin },
+        [OrderStatus.PriceApprovalPending] = new() { OrderStatus.InProgress, OrderStatus.ApprovedUnassigned, OrderStatus.WaitingForAdminApproval, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin, OrderStatus.CancelledByUser },
         [OrderStatus.InProgress] = new() { OrderStatus.PreviewDelivered, OrderStatus.PriceApprovalPending, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin },
         [OrderStatus.PreviewDelivered] = new() { OrderStatus.RevisionRequested, OrderStatus.ClientApproved, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin },
         [OrderStatus.RevisionRequested] = new() { OrderStatus.PreviewDelivered, OrderStatus.InProgress, OrderStatus.PriceApprovalPending, OrderStatus.Cancelled, OrderStatus.CancelledByAdmin },
@@ -26,7 +28,10 @@ public static class OrderStatusStateMachine
     public static bool IsTransitionAllowed(OrderStatus current, OrderStatus next)
     {
         if (current == next)
+        {
             return true;
+        }
+
         return AllowedTransitions.TryGetValue(current, out var allowed) && allowed.Contains(next);
     }
 
@@ -34,9 +39,15 @@ public static class OrderStatusStateMachine
     public static void ValidateTransition(OrderStatus currentStatus, OrderStatus newStatus)
     {
         if (currentStatus == newStatus)
+        {
             return;
+        }
+
         if (AllowedTransitions.TryGetValue(currentStatus, out var allowed) && allowed.Contains(newStatus))
+        {
             return;
+        }
+
         throw new InvalidOperationException($"Invalid order status transition from {currentStatus} to {newStatus}.");
     }
 }

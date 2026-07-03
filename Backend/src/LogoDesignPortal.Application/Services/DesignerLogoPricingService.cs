@@ -97,7 +97,10 @@ public class DesignerLogoPricingService : IDesignerLogoPricingService
     {
         var entity = await _context.DesignerLogoPricings
             .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted);
-        if (entity == null) return false;
+        if (entity == null)
+        {
+            return false;
+        }
 
         entity.IsDeleted = true;
         entity.DeletedAt = DateTime.UtcNow;
@@ -112,7 +115,9 @@ public class DesignerLogoPricingService : IDesignerLogoPricingService
     public async Task<DesignerLogoPricingResponseDto?> GetByDesignerAndDesignAsync(Guid designerId, int designCategory, int designType)
     {
         if (!Enum.IsDefined(typeof(DesignCategory), designCategory) || !Enum.IsDefined(typeof(DesignType), designType))
+        {
             return null;
+        }
 
         var entity = await _context.DesignerLogoPricings
             .FirstOrDefaultAsync(p =>
@@ -136,7 +141,10 @@ public class DesignerLogoPricingService : IDesignerLogoPricingService
                 && !p.IsDeleted);
 
         if (entity == null || entity.DefaultPrice <= 0)
+        {
             return null;
+        }
+
         return entity.DefaultPrice;
     }
 
@@ -154,7 +162,9 @@ public class DesignerLogoPricingService : IDesignerLogoPricingService
                 .Include(d => d.User)
                 .FirstOrDefaultAsync(d => d.Id == entity.DesignerId);
             if (designer?.User != null)
+            {
                 designerName = $"{designer.User.FirstName} {designer.User.LastName}".Trim();
+            }
         }
 
         return new DesignerLogoPricingResponseDto

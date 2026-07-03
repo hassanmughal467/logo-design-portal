@@ -450,14 +450,18 @@
       white-space: nowrap;
     }
     .order-history-search-wrap {
-      flex: 0 0 420px;
-      min-width: 0;
+      flex: 1 1 280px;
+      min-width: 220px;
+      max-width: 420px;
+      display: inline-block;
       @media (max-width: 1024px) {
         flex: 1 1 100%;
+        max-width: none;
       }
     }
     .order-history-search-input {
       width: 100%;
+      padding-left: 2.5rem;
     }
     .order-history-status-dropdown {
       min-width: 160px;
@@ -782,6 +786,91 @@
     @media (min-width: 1400px) { grid-template-columns: repeat(4, 1fr); }
     @media (max-width: 768px) { grid-template-columns: repeat(2, 1fr); }
     @media (max-width: 480px) { grid-template-columns: 1fr; }
+  }
+
+  // ═══ UNASSIGNED ORDERS ALERT BANNER (Admin/SuperAdmin only) ═══
+  // High-contrast call-to-action banner that surfaces approved orders without a designer.
+  // Kept visually distinct from the stat cards so it cannot blend into the dashboard.
+  .unassigned-alert-card {
+    display: flex;
+    align-items: center;
+    gap: 1.15rem;
+    padding: 1rem 1.4rem;
+    margin-bottom: 1.5rem;
+    background: linear-gradient(135deg, #fef2f2 0%, #fff7ed 100%);
+    border: 1px solid #fecaca;
+    border-left: 4px solid #dc2626;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.08);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+
+    &:hover, &:focus-visible {
+      transform: translateY(-1px);
+      background: linear-gradient(135deg, #fee2e2 0%, #ffedd5 100%);
+      box-shadow: 0 6px 14px rgba(220, 38, 38, 0.18);
+      outline: none;
+    }
+
+    .unassigned-alert-icon {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #dc2626;
+      color: #fff;
+      border-radius: 50%;
+      box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+
+      i { font-size: 1.35rem; }
+    }
+
+    .unassigned-alert-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .unassigned-alert-title {
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #991b1b;
+      margin-bottom: 0.15rem;
+    }
+
+    .unassigned-alert-message {
+      font-size: 1rem;
+      color: #7f1d1d;
+      line-height: 1.35;
+
+      strong {
+        font-size: 1.25rem;
+        font-weight: 800;
+        margin-right: 0.15rem;
+      }
+    }
+
+    .unassigned-alert-action {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 0.9rem;
+      background: #dc2626;
+      color: #fff;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+
+      i { font-size: 0.85rem; }
+    }
+
+    @media (max-width: 640px) {
+      .unassigned-alert-action-label { display: none; }
+    }
   }
 
   // ═══ ADMIN CHARTS ═══

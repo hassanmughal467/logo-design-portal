@@ -24,6 +24,7 @@ import { DropdownModule } from 'primeng/dropdown';
 import { PanelModule } from 'primeng/panel';
 import { InputTextareaModule } from 'primeng/inputtextarea';
 import { FileUploadModule } from 'primeng/fileupload';
+import { InputNumberModule } from 'primeng/inputnumber';
 
 @NgModule({
   declarations: [
@@ -52,7 +53,8 @@ import { FileUploadModule } from 'primeng/fileupload';
     DropdownModule,
     PanelModule,
     InputTextareaModule,
-    FileUploadModule
+    FileUploadModule,
+    InputNumberModule
   ]
 })
 export class DashboardModule { }

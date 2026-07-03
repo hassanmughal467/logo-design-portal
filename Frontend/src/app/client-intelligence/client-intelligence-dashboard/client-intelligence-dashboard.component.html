@@ -24,7 +24,7 @@
         </div>
       </div>
       <div class="kpi-card kpi-revenue">
-        <div class="kpi-icon"><i class="pi pi-star"></i></div>
+        <div class="kpi-icon"><i [class]="topClientCurrencyIconClass"></i></div>
         <div class="kpi-content">
           <span class="kpi-value">{{ formatCurrency(overview.topClientRevenue) }}</span>
           <span class="kpi-label">Top Client Revenue</span>
@@ -62,7 +62,11 @@
             <h3><i class="pi pi-chart-line"></i> Client Revenue Trend</h3>
           </div>
         </ng-template>
-        <app-client-revenue-trend-chart [items]="revenueTrendItems"></app-client-revenue-trend-chart>
+        <app-client-revenue-trend-chart
+          [items]="revenueTrendItems"
+          [currencyCode]="revenueTrendCurrencyCode"
+          [currencyMixed]="revenueTrendCurrencyMixed">
+        </app-client-revenue-trend-chart>
       </p-card>
     </div>
 
@@ -84,7 +88,11 @@
             </p-dropdown>
           </div>
         </ng-template>
-        <app-client-monthly-revenue-chart [items]="monthlyRevenueItems" [loading]="monthlyRevenueLoading"></app-client-monthly-revenue-chart>
+        <app-client-monthly-revenue-chart
+          [items]="monthlyRevenueItems"
+          [loading]="monthlyRevenueLoading"
+          [currencyCode]="monthlyRevenueCurrencyCode">
+        </app-client-monthly-revenue-chart>
       </p-card>
       <p-card styleClass="chart-card">
         <ng-template pTemplate="header">

@@ -37,7 +37,9 @@ public class BillingAutoInvoiceService
         var shouldRunMonthly = now.Day == 1;
 
         if (!shouldRunWeekly && !shouldRunMonthly)
+        {
             return;
+        }
 
         using var scope = _serviceProvider.CreateScope();
         var billingService = scope.ServiceProvider.GetRequiredService<IBillingService>();
@@ -59,7 +61,9 @@ public class BillingAutoInvoiceService
                     .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
                 if (superAdminUserId != Guid.Empty)
+                {
                     systemUserId = superAdminUserId;
+                }
             }
         }
         catch

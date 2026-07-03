@@ -133,11 +133,20 @@
 
         <!-- Table Body -->
         <ng-template pTemplate="body" let-order>
-          <tr>
+          <tr [class.row-unassigned]="isUnassignedApproved(order)"
+              [attr.data-testid]="isUnassignedApproved(order) ? 'orders-row-unassigned' : null">
             <td>
               <div class="order-title-cell">
                 <i class="pi pi-file-edit"></i>
                 <span class="order-title-text" (click)="viewOrder(order.id)">{{ order.title }}</span>
+                <!-- UNASSIGNED badge: drives admin attention when approved order has no designer. -->
+                <span *ngIf="isUnassignedApproved(order)"
+                      class="badge-unassigned"
+                      pTooltip="This approved order needs a designer assigned"
+                      tooltipPosition="top">
+                  <i class="pi pi-exclamation-circle"></i>
+                  UNASSIGNED
+                </span>
               </div>
             </td>
             <td class="status-cell">
@@ -221,9 +230,23 @@
                   pTooltip="Submit Preview" tooltipPosition="top">
                 </p-button>
 
-                <!-- Admin: Assign Designer (hidden when order is locked) -->
+                <!--
+                  Admin: Assign Designer
+                  - When the order is in ApprovedUnassigned we elevate the button to a labeled, solid CTA
+                    so the next action is unmistakable.
+                  - Otherwise it stays an icon-only sized to the rest of the row toolbar.
+                -->
                 <p-button
-                  *ngIf="canAssignDesigner() && !isOrderLocked(order.status)"
+                  *ngIf="canAssignDesigner() && isUnassignedApproved(order)"
+                  icon="pi pi-user-plus"
+                  label="Assign Designer"
+                  styleClass="p-button-sm p-button-danger assign-designer-cta"
+                  (onClick)="openAssignDialog(order)"
+                  [attr.data-testid]="'orders-assign-designer-cta'"
+                  pTooltip="Assign a designer to start work" tooltipPosition="top">
+                </p-button>
+                <p-button
+                  *ngIf="canAssignDesigner() && !isUnassignedApproved(order) && !isOrderLocked(order.status)"
                   icon="pi pi-user-plus"
                   styleClass="p-button-text p-button-rounded p-button-sm"
                   (onClick)="openAssignDialog(order)"

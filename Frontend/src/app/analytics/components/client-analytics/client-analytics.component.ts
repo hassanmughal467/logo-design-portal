@@ -2,8 +2,14 @@ import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
 import {
   ClientAnalytics,
   OrdersPerClientItem,
-  ClientRetentionTrendItem
+  ClientRetentionTrendItem,
+  ClientLifetimeValueItem
 } from '@core/services/admin-analytics.service';
+import {
+  compactCurrencyLabel,
+  formatCurrencyAmount,
+  resolveSingleCurrencyCode
+} from '@core/utils/currency-format';
 
 @Component({
   selector: 'app-client-analytics',
@@ -77,14 +83,24 @@ export class ClientAnalyticsComponent implements OnChanges {
     } : null;
 
     const clv = this.data.clientLifetimeValue || [];
+    const { code: clvCode, mixed: clvMixed } = resolveSingleCurrencyCode(clv.map(i => i.currencyCode));
+    const clvAxis = (v: number) => compactCurrencyLabel(v, clvMixed ? undefined : clvCode, clvMixed);
     this.clientLifetimeValueChart = clv.length > 0 ? {
-      series: [{ name: 'Revenue', data: clv.map((i: any) => i.revenue) }],
+      series: [{ name: 'Revenue', data: clv.map((i: ClientLifetimeValueItem) => i.revenue) }],
       chart: { type: 'bar', height: 260, toolbar: { show: false } },
       plotOptions: { bar: { borderRadius: 6, horizontal: true, barHeight: '75%' } },
       colors: ['#10b981'],
-      xaxis: { categories: clv.map((i: any) => (i.clientName || '').substring(0, 25) + ((i.clientName || '').length > 25 ? '...' : '')) },
-      yaxis: { labels: { maxWidth: 140, formatter: (v: number) => '$' + v } },
-      dataLabels: { enabled: true, formatter: (v: number) => '$' + v }
+      xaxis: { categories: clv.map((i: ClientLifetimeValueItem) => (i.clientName || '').substring(0, 25) + ((i.clientName || '').length > 25 ? '...' : '')) },
+      yaxis: { labels: { maxWidth: 140, formatter: clvAxis } },
+      dataLabels: { enabled: true, formatter: clvAxis },
+      tooltip: {
+        y: {
+          formatter: (v: number, opts: any) => {
+            const idx = opts?.dataPointIndex ?? 0;
+            return formatCurrencyAmount(v, clv[idx]?.currencyCode);
+          }
+        }
+      }
     } : null;
   }
 }

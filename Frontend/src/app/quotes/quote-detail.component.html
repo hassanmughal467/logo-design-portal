@@ -8,13 +8,52 @@
   <app-card-container>
     <div class="detail-grid">
       <div><strong>Status:</strong> <p-tag [value]="q.status"></p-tag></div>
-      <div><strong>Requested Budget:</strong> {{ q.requestedBudget ?? '-' }}</div>
-      <div><strong>Admin Quoted Price:</strong> {{ q.adminQuotedPrice ?? '-' }}</div>
+      <div><strong>Requested Budget:</strong> {{ formatPrice(q.requestedBudget) }}</div>
+      <div><strong>Admin Quoted Price:</strong> {{ formatPrice(q.adminQuotedPrice) }}</div>
       <div><strong>Created:</strong> {{ q.createdAt | date:'medium' }}</div>
     </div>
 
     <h4>Request Details</h4>
     <p>{{ q.description }}</p>
+
+    <h4 *ngIf="canViewAttachments">Attachments</h4>
+    <div *ngIf="canViewAttachments">
+      <ul class="attachment-list" *ngIf="q.attachments?.length; else noQuoteAttachments">
+        <li *ngFor="let file of q.attachments" [class.is-image]="isPreviewable(file)">
+          <div class="attachment-main">
+            <button
+              *ngIf="isPreviewable(file) && attachmentThumbnails[file]"
+              type="button"
+              class="attachment-thumb-btn"
+              (click)="openAttachmentPreview(file)"
+              [attr.aria-label]="'Preview ' + file">
+              <img [src]="attachmentThumbnails[file]" [alt]="file" class="attachment-thumb" />
+            </button>
+            <i *ngIf="isPreviewable(file) && !attachmentThumbnails[file]" class="pi pi-image attachment-thumb-placeholder"></i>
+            <i *ngIf="!isPreviewable(file)" class="pi pi-file attachment-file-icon"></i>
+            <span class="file-name">{{ file }}</span>
+          </div>
+          <div class="attachment-actions">
+            <p-button
+              *ngIf="isPreviewable(file)"
+              icon="pi pi-eye"
+              label="Preview"
+              styleClass="p-button-text p-button-sm"
+              (onClick)="openAttachmentPreview(file)">
+            </p-button>
+            <p-button
+              icon="pi pi-download"
+              label="Download"
+              styleClass="p-button-text p-button-sm"
+              (onClick)="downloadAttachment(file)">
+            </p-button>
+          </div>
+        </li>
+      </ul>
+      <ng-template #noQuoteAttachments>
+        <p class="muted">No files attached to this quote.</p>
+      </ng-template>
+    </div>
 
     <h4>Admin Notes</h4>
     <p>{{ q.adminNotes || 'No notes provided.' }}</p>
@@ -26,3 +65,37 @@
     </div>
   </app-card-container>
 </div>
+
+<p-dialog
+  [(visible)]="showImagePreviewDialog"
+  [modal]="true"
+  appendTo="body"
+  [baseZIndex]="12000"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: '80vw', maxWidth: '1000px' }"
+  [header]="imagePreviewDialogHeader"
+  styleClass="quote-image-preview-dialog"
+  (onHide)="closeImagePreview()">
+  <div class="image-preview-container">
+    <div class="image-preview-toolbar" *ngIf="imagePreviewGalleryLength > 1">
+      <p-button icon="pi pi-chevron-left" styleClass="p-button-text" (onClick)="previousImagePreview()"></p-button>
+      <span>{{ imagePreviewIndex + 1 }} / {{ imagePreviewGalleryLength }}</span>
+      <p-button icon="pi pi-chevron-right" styleClass="p-button-text" (onClick)="nextImagePreview()"></p-button>
+    </div>
+
+    <div class="image-preview-stage" *ngIf="!imagePreviewLoading && imagePreviewUrl; else previewLoadingTpl">
+      <img [src]="imagePreviewUrl" [alt]="imagePreviewDialogHeader" />
+    </div>
+    <ng-template #previewLoadingTpl>
+      <div class="image-preview-loading">
+        <p-progressSpinner></p-progressSpinner>
+      </div>
+    </ng-template>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <p-button icon="pi pi-download" label="Download" (onClick)="downloadCurrentImagePreview()"></p-button>
+    <p-button label="Close" icon="pi pi-times" styleClass="p-button-text" (onClick)="closeImagePreview()"></p-button>
+  </ng-template>
+</p-dialog>

@@ -1,5 +1,8 @@
 import { Component, Input } from '@angular/core';
 import { ClientChurnAlertItem } from '@core/services/client-churn-analytics.service';
+import { formatCurrencyAmount } from '@core/utils/currency-format';
+
+import { TagSeverity } from '@shared/types/primeng.types';
 
 @Component({
   selector: 'app-client-churn-alerts-panel',
@@ -9,13 +12,8 @@ import { ClientChurnAlertItem } from '@core/services/client-churn-analytics.serv
 export class ClientChurnAlertsPanelComponent {
   @Input() items: ClientChurnAlertItem[] = [];
 
-  formatCurrency(value: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value);
+  formatCurrency(value: number, currencyCode?: string): string {
+    return formatCurrencyAmount(value, currencyCode);
   }
 
   formatDate(value: string | undefined): string {
@@ -27,10 +25,10 @@ export class ClientChurnAlertsPanelComponent {
     });
   }
 
-  getSeverity(days: number): string {
+  getSeverity(days: number): TagSeverity {
     if (days >= 90) return 'danger';
     if (days >= 60) return 'danger';
-    if (days >= 30) return 'warn';
+    if (days >= 30) return 'warning';
     return 'info';
   }
 }

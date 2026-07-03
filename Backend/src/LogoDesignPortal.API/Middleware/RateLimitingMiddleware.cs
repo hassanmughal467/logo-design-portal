@@ -5,7 +5,7 @@ using LogoDesignPortal.API.Configuration;
 using LogoDesignPortal.API.Extensions;
 using LogoDesignPortal.API.Infrastructure;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Configuration;
+using StackExchange.Redis;
 
 namespace LogoDesignPortal.API.Middleware;
 
@@ -18,7 +18,9 @@ public class RateLimitingMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<RateLimitingMiddleware> _logger;
     private readonly IDistributedRateLimiter _limiter;
+    private readonly MemoryDistributedRateLimiter? _emergencyMemoryLimiter;
     private readonly RateLimitingOptions _options;
+    private readonly ScalabilityOptions _scalability;
     private readonly bool _disabled;
     private readonly IConfiguration _configuration;
 
@@ -27,13 +29,17 @@ public class RateLimitingMiddleware
         ILogger<RateLimitingMiddleware> logger,
         IDistributedRateLimiter limiter,
         IOptions<RateLimitingOptions> options,
+        IOptions<ScalabilityOptions> scalabilityOptions,
         IWebHostEnvironment env,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        MemoryDistributedRateLimiter? emergencyMemoryLimiter = null)
     {
         _next = next;
         _logger = logger;
         _limiter = limiter;
+        _emergencyMemoryLimiter = emergencyMemoryLimiter;
         _options = options.Value;
+        _scalability = scalabilityOptions.Value;
         _configuration = configuration;
         _disabled = env.IsDevelopment()
             || env.IsEnvironment("Testing")
@@ -72,7 +78,8 @@ public class RateLimitingMiddleware
 
         var identity = ResolveIdentity(context, bucket);
         var compositeKey = $"{bucket}:{identity}";
-        var (allowed, retry) = await _limiter.TryAcquireAsync(compositeKey, limit, context.RequestAborted).ConfigureAwait(false);
+        var (allowed, retry) = await TryAcquireWithRedisResilienceAsync(compositeKey, limit, context.RequestAborted)
+            .ConfigureAwait(false);
 
         if (!allowed)
         {
@@ -95,19 +102,58 @@ public class RateLimitingMiddleware
         await _next(context).ConfigureAwait(false);
     }
 
+    private async Task<(bool Allowed, int RetryAfterSeconds)> TryAcquireWithRedisResilienceAsync(
+        string compositeKey,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _limiter.TryAcquireAsync(compositeKey, limit, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsRedisUnavailable(ex))
+        {
+            if (_scalability.EmergencyFallbackEnabled && _emergencyMemoryLimiter is not null)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Redis unavailable for rate limiting; falling back to in-memory emergency limiter. Key={Key}",
+                    compositeKey);
+                return await _emergencyMemoryLimiter.TryAcquireAsync(compositeKey, limit, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            _logger.LogWarning(
+                ex,
+                "Redis unavailable for rate limiting; allowing request (fail-open). Key={Key}",
+                compositeKey);
+            return (true, 0);
+        }
+    }
+
+    private static bool IsRedisUnavailable(Exception ex) =>
+        ex is RedisException or RedisConnectionException or TimeoutException
+        || ex.InnerException is RedisException or RedisConnectionException;
+
     private (string Bucket, int Limit) Classify(string path, string method, HttpContext context)
     {
         if (path.Contains("/api/auth/login") || path.Contains("/api/auth/register") || path.Contains("/api/auth/forgot-password"))
+        {
             return ("auth", _options.AuthPerMinute);
+        }
 
         if (!HttpMethods.IsGet(method) && path.StartsWith("/api/orders", StringComparison.Ordinal))
+        {
             return ("orders", _options.OrdersMutationsPerMinute);
+        }
 
         if (HttpMethods.IsPost(method) && path.StartsWith("/api/files", StringComparison.Ordinal))
         {
             var ct = context.Request.ContentType ?? "";
             if (ct.Contains("multipart/form-data", StringComparison.OrdinalIgnoreCase))
+            {
                 return ("files", _options.FileUploadPerMinute);
+            }
         }
 
         return ("general", _options.GeneralPerMinute);
@@ -119,7 +165,9 @@ public class RateLimitingMiddleware
         {
             var uid = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!string.IsNullOrEmpty(uid))
+            {
                 return $"u:{uid}";
+            }
         }
 
         return $"ip:{context.GetRateLimitClientId()}";

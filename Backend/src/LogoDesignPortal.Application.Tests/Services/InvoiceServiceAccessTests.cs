@@ -75,6 +75,7 @@ public class InvoiceServiceAccessTests
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Options.Create(new ProductionSafetyOptions()),
             Mock.Of<IReadModelCacheVersions>(),
+            Mock.Of<ICurrencyService>(),
             Mock.Of<ILogger<InvoiceService>>());
     }
 

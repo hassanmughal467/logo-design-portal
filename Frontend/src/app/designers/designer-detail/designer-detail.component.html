@@ -46,7 +46,7 @@
             <tr>
               <td>{{ order.title }}</td>
               <td><span [class]="'badge-' + getStatusSeverity(order.status)">{{ formatStatus(order.status) }}</span></td>
-              <td>{{ formatCurrency((order as any).price || 0) }}</td>
+              <td>{{ formatCurrency((order as any).price || 0, order.currencyCode) }}</td>
               <td>{{ formatDate(order.createdAt) }}</td>
               <td>
                 <button pButton type="button" label="View" (click)="viewOrder(order.id)" class="p-button-sm"></button>

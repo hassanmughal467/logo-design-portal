@@ -5,6 +5,7 @@ import { MessageService } from 'primeng/api';
 import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
+import { TagSeverity } from '@shared/types/primeng.types';
 
 export interface Project {
   id: string;
@@ -49,9 +50,12 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   project: Project | null = null;
   activeTab: number = 0;
 
-  // Revisions
-  revisions: Revision[] = [];
-  revisionsLoading = false;
+  // Files (designer-uploaded artwork attached to the order).
+  // NOTE: these are NOT "revisions". Real revisions are tracked by
+  // order.revisionCount and managed via /api/revisions/*. We show the
+  // remaining revision allowance as the "Revisions Left" stat at the top.
+  projectFiles: any[] = [];
+  filesLoading = false;
   newRevisionNotes = '';
 
   // Comments
@@ -80,7 +84,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.projectId = this.route.snapshot.paramMap.get('id');
     if (this.projectId) {
       this.loadProject();
-      this.loadRevisions();
+      this.loadFiles();
       this.loadComments();
     }
   }
@@ -126,28 +130,24 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       });
   }
 
-  loadRevisions(): void {
-    this.revisionsLoading = true;
-    // Load revisions (might be from files or a separate endpoint)
+  loadFiles(): void {
+    this.filesLoading = true;
     this.apiService.get<any[]>(`files/order/${this.projectId}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (files) => {
-          // Group files by version or create revision entries
-          this.revisions = files.map((file, index) => ({
-            id: file.id,
-            projectId: this.projectId!,
-            version: index + 1,
-            notes: file.notes || `Revision ${index + 1}`,
-            files: [file],
-            createdAt: new Date(file.uploadedAt || file.createdAt),
-            createdBy: file.uploadedBy || 'Designer'
-          }));
-          this.revisionsLoading = false;
+          this.projectFiles = (files || [])
+            .slice()
+            .sort((a, b) => {
+              const at = new Date(a.uploadedAt || a.createdAt).getTime();
+              const bt = new Date(b.uploadedAt || b.createdAt).getTime();
+              return bt - at;
+            });
+          this.filesLoading = false;
         },
         error: () => {
-          this.revisions = [];
-          this.revisionsLoading = false;
+          this.projectFiles = [];
+          this.filesLoading = false;
         }
       });
   }
@@ -253,7 +253,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         });
         this.selectedFiles = [];
         this.newRevisionNotes = '';
-        this.loadRevisions();
+        this.loadFiles();
         this.uploading = false;
       })
       .catch(() => {
@@ -379,8 +379,8 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     });
   }
 
-  getStatusSeverity(status: string): string {
-    const severityMap: { [key: string]: string } = {
+  getStatusSeverity(status: string): TagSeverity {
+    const severityMap: Record<string, TagSeverity> = {
       'Pending': 'warning',
       'InProgress': 'info',
       'Review': 'secondary',

@@ -19,6 +19,15 @@ public class Invoice : BaseEntity
     /// <summary>Billing period for display (e.g. "March 2026", "Week of 2026-03-09").</summary>
     public string? BillingPeriod { get; set; }
 
+    /// <summary>USD→PKR rate snapshot at invoice issue time (permanent; never recalculated).</summary>
+    public decimal? ExchangeRate { get; set; }
+
+    /// <summary>When <see cref="ExchangeRate"/> was fetched from the currency service.</summary>
+    public DateTime? ExchangeRateFetchedAt { get; set; }
+
+    /// <summary>True when the stored rate came from a stale or fallback source at issue time.</summary>
+    public bool ExchangeRateIsStale { get; set; }
+
     /// <summary>EF Core optimistic concurrency token (MySQL <c>timestamp(6)</c>, database-generated).</summary>
     public DateTime RowVersion { get; set; }
 

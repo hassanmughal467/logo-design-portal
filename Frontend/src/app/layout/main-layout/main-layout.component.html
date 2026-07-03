@@ -138,17 +138,23 @@
             </ng-template>
           </p-overlayPanel>
         </div>
-        <p-menu #userMenu [model]="userMenuItems" [popup]="true"></p-menu>
-        <button 
-          pButton 
-          [label]="user?.firstName + ' ' + user?.lastName" 
-          icon="pi pi-user" 
+        <p-menu
+          #userMenu
+          [model]="userMenuItems"
+          [popup]="true"
+          appendTo="body"
+          styleClass="user-profile-menu-popup">
+        </p-menu>
+        <button
+          type="button"
+          class="user-profile-trigger"
           (click)="userMenu.toggle($event)"
-          class="p-button-text user-menu-btn"
           [attr.data-testid]="'header-user-menu'">
+          <i class="pi pi-user user-profile-icon"></i>
           <span class="user-role-badge" [class]="'role-' + user?.role?.toLowerCase()">
             {{ user?.role }}
           </span>
+          <span class="user-profile-name">{{ user?.firstName }} {{ user?.lastName }}</span>
         </button>
       </div>
     </header>

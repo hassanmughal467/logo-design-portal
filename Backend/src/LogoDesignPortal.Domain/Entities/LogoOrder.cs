@@ -47,6 +47,15 @@ public class LogoOrder : BaseEntity
     public string? ColorPreferences { get; set; }
     public string? StylePreferences { get; set; }
 
+    // Approval & assignment timestamps (Unassigned Orders Alert System).
+    // ApprovedAt is set when Admin moves the order out of WaitingForAdminApproval (to ApprovedUnassigned or directly to InProgress).
+    // AssignedAt is set when a designer is assigned. Together they support escalation rules
+    // (e.g. alert if ApprovedAt is older than N minutes and AssignedAt is still null) without coupling to a scheduler.
+    public DateTime? ApprovedAt { get; set; }
+    public Guid? ApprovedBy { get; set; }
+    public DateTime? AssignedAt { get; set; }
+    public Guid? AssignedBy { get; set; }
+
     // Cancellation fields
     public string? CancellationReason { get; set; }
     public Guid? CancelledBy { get; set; }

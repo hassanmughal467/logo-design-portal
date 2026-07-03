@@ -9,6 +9,7 @@ import { FileType } from '@shared/models/file.model';
 import { isOrderLocked } from '@shared/utils/order-locking';
 import { DesignCategory, DesignType, DesignerPricingInfo } from '@shared/models/design-pricing.model';
 import { MAX_UPLOAD_BYTES, combinedFileBytes } from '@core/constants/upload-limits';
+import { extractApiErrorMessage, isHttpForbidden } from '@core/utils/api-error-message';
 
 @Component({
   selector: 'app-file-upload',
@@ -464,11 +465,7 @@ export class FileUploadComponent implements OnInit {
           this.uploadSuccess = true;
         },
         error: (error) => {
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: error.error?.error || 'Failed to upload file'
-          });
+          this.showUploadError(error, 'Failed to upload file');
           this.uploadingFiles = false;
         }
       });
@@ -500,15 +497,24 @@ export class FileUploadComponent implements OnInit {
           this.uploadSuccess = true;
         },
         error: (error) => {
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: error.error?.error || 'Failed to upload files'
-          });
+          this.showUploadError(error, 'Failed to upload files');
           this.uploadingFiles = false;
         }
       });
     }
+  }
+
+  private showUploadError(error: unknown, fallback: string): void {
+    const forbidden = isHttpForbidden(error);
+    const detail = extractApiErrorMessage(
+      error,
+      forbidden ? 'You do not have permission to upload files. Please contact an administrator.' : fallback
+    );
+    this.messageService.add({
+      severity: 'error',
+      summary: forbidden ? 'Access Denied' : 'Error',
+      detail
+    });
   }
 
   resetForm(): void {

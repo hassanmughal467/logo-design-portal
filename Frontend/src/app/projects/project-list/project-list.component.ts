@@ -5,6 +5,7 @@ import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Order, OrderStatus } from '@shared/models/order.model';
+import { TagSeverity } from '@shared/types/primeng.types';
 
 export interface LogoProject {
   id: string;
@@ -78,8 +79,8 @@ export class ProjectListComponent implements OnInit, OnDestroy {
             designerName: order.designer ? `${order.designer.firstName} ${order.designer.lastName}` : undefined,
             packageType: (order as any).packageType || 'Basic',
             status: order.status,
-            revisionCount: (order as any).revisionCount || 0,
-            approvalStatus: (order as any).approvalStatus || 'Pending',
+            revisionCount: order.revisionCount || 0,
+            approvalStatus: this.deriveApprovalStatus(order.status),
             deadline: order.dueDate ? new Date(order.dueDate) : new Date(),
             createdAt: new Date(order.createdAt)
           }));
@@ -95,8 +96,8 @@ export class ProjectListComponent implements OnInit, OnDestroy {
     this.router.navigate(['/projects', projectId]);
   }
 
-  getStatusSeverity(status: OrderStatus): string {
-    const severityMap: { [key: string]: string } = {
+  getStatusSeverity(status: OrderStatus): TagSeverity {
+    const severityMap: Record<string, TagSeverity> = {
       'Pending': 'warning',
       'InProgress': 'info',
       'Review': 'secondary',
@@ -106,8 +107,29 @@ export class ProjectListComponent implements OnInit, OnDestroy {
     return severityMap[status] || 'secondary';
   }
 
-  getPackageSeverity(packageType: string): string {
-    const severityMap: { [key: string]: string } = {
+  /**
+   * Approval is encoded in the order status itself:
+   *   Completed / ClientApproved        -> Approved
+   *   Cancelled* / Refunded             -> Rejected
+   *   anything else (still in flight)   -> Pending
+   */
+  private deriveApprovalStatus(status: OrderStatus): 'Pending' | 'Approved' | 'Rejected' {
+    switch (status) {
+      case OrderStatus.ClientApproved:
+      case OrderStatus.Completed:
+        return 'Approved';
+      case OrderStatus.Cancelled:
+      case OrderStatus.CancelledByUser:
+      case OrderStatus.CancelledByAdmin:
+      case OrderStatus.Refunded:
+        return 'Rejected';
+      default:
+        return 'Pending';
+    }
+  }
+
+  getPackageSeverity(packageType: string): TagSeverity {
+    const severityMap: Record<string, TagSeverity> = {
       'Basic': 'secondary',
       'Premium': 'info',
       'Enterprise': 'success'

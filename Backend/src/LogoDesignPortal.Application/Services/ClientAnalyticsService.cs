@@ -1,3 +1,4 @@
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
 using LogoDesignPortal.Domain.Entities;
@@ -23,13 +24,24 @@ public class ClientAnalyticsService : IClientAnalyticsService
 
     private static string GetClientDisplayName(ClientProfile? client)
     {
-        if (client == null) return "Unknown";
+        if (client == null)
+        {
+            return "Unknown";
+        }
+
         var name = client.User != null
             ? $"{client.User.FirstName} {client.User.LastName}".Trim()
             : string.Empty;
-        if (string.IsNullOrWhiteSpace(name)) name = client.CompanyName;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = client.CompanyName;
+        }
+
         if (!string.IsNullOrWhiteSpace(client.CompanyName) && name != client.CompanyName)
+        {
             return $"{name} ({client.CompanyName})";
+        }
+
         return name;
     }
 
@@ -52,20 +64,35 @@ public class ClientAnalyticsService : IClientAnalyticsService
         var inactiveCount = lastOrderByClient.Count(x => x.LastOrder < inactiveCutoff) +
             (totalClients - clientIdsWithOrders.Count);
 
-        var topRevenue = await _context.LogoOrders
+        var topClient = await _context.LogoOrders
             .AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
             .GroupBy(o => o.ClientId)
-            .Select(g => g.Sum(o => o.Price))
-            .OrderByDescending(r => r)
+            .Select(g => new { ClientId = g.Key, Revenue = g.Sum(o => o.Price) })
+            .OrderByDescending(r => r.Revenue)
             .FirstOrDefaultAsync();
+
+        var topClientCurrency = "USD";
+        if (topClient != null)
+        {
+            var profileCode = await _context.ClientProfiles.AsNoTracking()
+                .Where(c => c.Id == topClient.ClientId && !c.IsDeleted)
+                .Select(c => c.CurrencyCode)
+                .FirstOrDefaultAsync();
+            var orderCurrencies = await _context.LogoOrders.AsNoTracking()
+                .Where(o => !o.IsDeleted && o.ClientId == topClient.ClientId && o.Status == OrderStatus.Completed)
+                .Select(o => o.CurrencyCode)
+                .ToListAsync();
+            topClientCurrency = ClientCurrencyHelper.ResolveClientRevenueCurrency(profileCode, orderCurrencies);
+        }
 
         return new ClientAnalyticsOverviewDto
         {
             TotalClients = totalClients,
             ActiveClients = activeCount,
             InactiveClients = inactiveCount,
-            TopClientRevenue = topRevenue
+            TopClientRevenue = topClient?.Revenue ?? 0m,
+            TopClientCurrencyCode = topClientCurrency
         };
     }
 
@@ -73,13 +100,10 @@ public class ClientAnalyticsService : IClientAnalyticsService
     {
         var data = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Include(o => o.Client)
-            .ThenInclude(c => c!.User)
             .GroupBy(o => o.ClientId)
             .Select(g => new
             {
                 ClientId = g.Key,
-                Client = g.First().Client,
                 TotalOrders = g.Count(),
                 TotalRevenue = g.Sum(o => o.Price)
             })
@@ -87,12 +111,26 @@ public class ClientAnalyticsService : IClientAnalyticsService
             .Take(limit)
             .ToListAsync();
 
-        var items = data.Select(x => new TopClientItemDto
+        var clientIds = data.Select(x => x.ClientId).ToList();
+        var clients = await _context.ClientProfiles
+            .AsNoTracking()
+            .Include(c => c.User)
+            .Where(c => clientIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id);
+        var orderCurrenciesByClient = await LoadOrderCurrencyCodesByClientAsync(clientIds);
+
+        var items = data.Select(x =>
         {
-            ClientId = x.ClientId,
-            ClientName = GetClientDisplayName(x.Client),
-            TotalOrders = x.TotalOrders,
-            TotalRevenue = x.TotalRevenue
+            var client = clients.GetValueOrDefault(x.ClientId);
+            orderCurrenciesByClient.TryGetValue(x.ClientId, out var orderCodes);
+            return new TopClientItemDto
+            {
+                ClientId = x.ClientId,
+                ClientName = GetClientDisplayName(client),
+                TotalOrders = x.TotalOrders,
+                TotalRevenue = x.TotalRevenue,
+                CurrencyCode = ClientCurrencyHelper.ResolveClientRevenueCurrency(client?.CurrencyCode, orderCodes)
+            };
         }).ToList();
 
         return new TopClientsDto { Items = items };
@@ -105,7 +143,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
 
         var completedOrders = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Select(o => new { o.Price, Date = (o.UpdatedAt ?? o.CreatedAt) })
+            .Select(o => new { o.Price, o.CurrencyCode, Date = (o.UpdatedAt ?? o.CreatedAt) })
             .Where(o => o.Date >= startOfPeriod)
             .ToListAsync();
 
@@ -121,7 +159,17 @@ public class ClientAnalyticsService : IClientAnalyticsService
             })
             .ToList();
 
-        return new ClientRevenueTrendDto { Items = items };
+        var currencies = completedOrders
+            .Select(o => ClientCurrencyHelper.NormalizeOrDefault(o.CurrencyCode))
+            .Distinct()
+            .ToList();
+
+        return new ClientRevenueTrendDto
+        {
+            Items = items,
+            CurrencyCode = currencies.Count == 1 ? currencies[0] : "USD",
+            CurrencyMixed = currencies.Count > 1
+        };
     }
 
     public async Task<ClientMonthlyRevenueDto> GetClientMonthlyRevenueAsync(Guid clientId, int months = 12)
@@ -135,7 +183,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
 
         var orders = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.ClientId == clientId && o.Status == OrderStatus.Completed)
-            .Select(o => new { o.Price, Date = (o.UpdatedAt ?? o.CreatedAt) })
+            .Select(o => new { o.Price, o.CurrencyCode, Date = (o.UpdatedAt ?? o.CreatedAt) })
             .Where(o => o.Date >= startOfPeriod)
             .ToListAsync();
 
@@ -154,7 +202,10 @@ public class ClientAnalyticsService : IClientAnalyticsService
         {
             ClientId = clientId,
             ClientName = GetClientDisplayName(client),
-            Items = items
+            Items = items,
+            CurrencyCode = ClientCurrencyHelper.ResolveClientRevenueCurrency(
+                client?.CurrencyCode,
+                orders.Select(o => o.CurrencyCode))
         };
     }
 
@@ -199,25 +250,36 @@ public class ClientAnalyticsService : IClientAnalyticsService
     {
         var data = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Include(o => o.Client)
-            .ThenInclude(c => c!.User)
             .GroupBy(o => o.ClientId)
             .Select(g => new
             {
                 ClientId = g.Key,
-                Client = g.First().Client,
                 LifetimeRevenue = g.Sum(o => o.Price),
                 TotalOrders = g.Count()
             })
             .OrderByDescending(x => x.LifetimeRevenue)
             .ToListAsync();
 
-        var items = data.Select(x => new ClientAnalyticsLifetimeValueItemDto
+        var clientIds = data.Select(x => x.ClientId).ToList();
+        var clients = await _context.ClientProfiles
+            .AsNoTracking()
+            .Include(c => c.User)
+            .Where(c => clientIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id);
+        var orderCurrenciesByClient = await LoadOrderCurrencyCodesByClientAsync(clientIds);
+
+        var items = data.Select(x =>
         {
-            ClientId = x.ClientId,
-            ClientName = GetClientDisplayName(x.Client),
-            LifetimeRevenue = x.LifetimeRevenue,
-            TotalOrders = x.TotalOrders
+            var client = clients.GetValueOrDefault(x.ClientId);
+            orderCurrenciesByClient.TryGetValue(x.ClientId, out var orderCodes);
+            return new ClientAnalyticsLifetimeValueItemDto
+            {
+                ClientId = x.ClientId,
+                ClientName = GetClientDisplayName(client),
+                LifetimeRevenue = x.LifetimeRevenue,
+                TotalOrders = x.TotalOrders,
+                CurrencyCode = ClientCurrencyHelper.ResolveClientRevenueCurrency(client?.CurrencyCode, orderCodes)
+            };
         }).ToList();
 
         return new ClientLifetimeValueDto { Items = items };
@@ -232,7 +294,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
 
         var completedOrders = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Select(o => new { o.ClientId, o.Price, Date = (o.UpdatedAt ?? o.CreatedAt) })
+            .Select(o => new { o.ClientId, o.Price, o.CurrencyCode, Date = (o.UpdatedAt ?? o.CreatedAt) })
             .Where(o => o.Date >= startOfTwoMonthsAgo)
             .ToListAsync();
 
@@ -253,6 +315,7 @@ public class ClientAnalyticsService : IClientAnalyticsService
             .Include(c => c.User)
             .Where(c => allClientIds.Contains(c.Id) && !c.IsDeleted)
             .ToDictionaryAsync(c => c.Id);
+        var orderCurrenciesByClient = await LoadOrderCurrencyCodesByClientAsync(allClientIds);
 
         var items = new List<ClientGrowthItemDto>();
         foreach (var clientId in allClientIds)
@@ -273,14 +336,17 @@ public class ClientAnalyticsService : IClientAnalyticsService
                 status = "Increase";
             }
 
+            var client = clients.GetValueOrDefault(clientId);
+            orderCurrenciesByClient.TryGetValue(clientId, out var orderCodes);
             items.Add(new ClientGrowthItemDto
             {
                 ClientId = clientId,
-                ClientName = GetClientDisplayName(clients.GetValueOrDefault(clientId)),
+                ClientName = GetClientDisplayName(client),
                 LastMonthRevenue = lastRev,
                 PreviousMonthRevenue = prevRev,
                 RevenueChangePercent = Math.Round(changePercent, 1),
-                GrowthStatus = status
+                GrowthStatus = status,
+                CurrencyCode = ClientCurrencyHelper.ResolveClientRevenueCurrency(client?.CurrencyCode, orderCodes)
             });
         }
 
@@ -331,21 +397,36 @@ public class ClientAnalyticsService : IClientAnalyticsService
         var now = DateTime.UtcNow;
         var inactiveCutoff = now.AddDays(-InactiveDaysThreshold);
 
-        var clientRevenue = await _context.LogoOrders.AsNoTracking()
+        var clientRevenueRaw = await _context.LogoOrders.AsNoTracking()
             .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed)
-            .Include(o => o.Client)
-            .ThenInclude(c => c!.User)
             .GroupBy(o => o.ClientId)
             .Select(g => new
             {
                 ClientId = g.Key,
-                Client = g.First().Client,
                 TotalRevenue = g.Sum(o => o.Price),
                 LastOrder = g.Max(o => o.UpdatedAt ?? o.CreatedAt)
             })
             .OrderByDescending(x => x.TotalRevenue)
             .Take(20)
             .ToListAsync();
+
+        var alertClientIds = clientRevenueRaw.Select(x => x.ClientId).ToList();
+        var alertClients = await _context.ClientProfiles
+            .AsNoTracking()
+            .Include(c => c.User)
+            .Where(c => alertClientIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id);
+        var orderCurrenciesByClient = await LoadOrderCurrencyCodesByClientAsync(alertClientIds);
+
+        var clientRevenue = clientRevenueRaw
+            .Select(x => new
+            {
+                x.ClientId,
+                Client = alertClients.GetValueOrDefault(x.ClientId),
+                x.TotalRevenue,
+                x.LastOrder
+            })
+            .ToList();
 
         var lastMonthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-1);
         var prevMonthStart = lastMonthStart.AddMonths(-1);
@@ -367,6 +448,8 @@ public class ClientAnalyticsService : IClientAnalyticsService
         foreach (var c in clientRevenue)
         {
             var clientName = GetClientDisplayName(c.Client);
+            orderCurrenciesByClient.TryGetValue(c.ClientId, out var orderCodes);
+            var clientCurrency = ClientCurrencyHelper.ResolveClientRevenueCurrency(c.Client?.CurrencyCode, orderCodes);
             var daysSince = (int)(now - c.LastOrder).TotalDays;
 
             if (daysSince >= InactiveDaysThreshold)
@@ -377,7 +460,8 @@ public class ClientAnalyticsService : IClientAnalyticsService
                     Message = $"Client {clientName} has not ordered for {daysSince} days.",
                     ClientId = c.ClientId,
                     ClientName = clientName,
-                    OccurredAt = c.LastOrder
+                    OccurredAt = c.LastOrder,
+                    CurrencyCode = clientCurrency
                 });
             }
 
@@ -394,7 +478,8 @@ public class ClientAnalyticsService : IClientAnalyticsService
                         Message = $"Client {clientName} revenue increased by {pct * 100:F0}% compared to previous month.",
                         ClientId = c.ClientId,
                         ClientName = clientName,
-                        OccurredAt = now
+                        OccurredAt = now,
+                        CurrencyCode = clientCurrency
                     });
                 }
             }
@@ -408,16 +493,35 @@ public class ClientAnalyticsService : IClientAnalyticsService
                 alerts.Add(new ClientAlertItemDto
                 {
                     AlertType = "Milestone",
-                    Message = $"Client {clientName} reached revenue milestone of ${highestMilestone:N0}.",
+                    Message = $"Client {clientName} reached revenue milestone of {clientCurrency} {highestMilestone:N0}.",
                     ClientId = c.ClientId,
                     ClientName = clientName,
-                    OccurredAt = c.LastOrder
+                    OccurredAt = c.LastOrder,
+                    CurrencyCode = clientCurrency
                 });
             }
         }
 
         var sorted = alerts.OrderByDescending(a => a.OccurredAt).Take(50).ToList();
         return new ClientAlertsDto { Items = sorted };
+    }
+
+    private async Task<Dictionary<Guid, List<string?>>> LoadOrderCurrencyCodesByClientAsync(IEnumerable<Guid> clientIds)
+    {
+        var ids = clientIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, List<string?>>();
+        }
+
+        var rows = await _context.LogoOrders.AsNoTracking()
+            .Where(o => !o.IsDeleted && o.Status == OrderStatus.Completed && ids.Contains(o.ClientId))
+            .Select(o => new { o.ClientId, o.CurrencyCode })
+            .ToListAsync();
+
+        return rows
+            .GroupBy(r => r.ClientId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.CurrencyCode).ToList());
     }
 
     public async Task<List<ClientDropdownItemDto>> GetClientsForDropdownAsync()

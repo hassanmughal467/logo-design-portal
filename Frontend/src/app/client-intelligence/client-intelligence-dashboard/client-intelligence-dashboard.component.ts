@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ClientAnalyticsService, ClientAnalyticsOverview } from '@core/services/client-analytics.service';
+import { currencyIconClass, formatCurrencyAmount } from '@core/utils/currency-format';
 import { Subject } from 'rxjs';
 import { takeUntil, catchError } from 'rxjs/operators';
 import { forkJoin, of } from 'rxjs';
@@ -14,7 +15,10 @@ export class ClientIntelligenceDashboardComponent implements OnInit, OnDestroy {
   overview: ClientAnalyticsOverview | null = null;
   topClients: any[] = [];
   revenueTrendItems: any[] = [];
+  revenueTrendCurrencyCode = 'USD';
+  revenueTrendCurrencyMixed = false;
   monthlyRevenueItems: any[] = [];
+  monthlyRevenueCurrencyCode = 'USD';
   inactiveClients: any[] = [];
   lifetimeValueItems: any[] = [];
   growthItems: any[] = [];
@@ -44,7 +48,7 @@ export class ClientIntelligenceDashboardComponent implements OnInit, OnDestroy {
     forkJoin({
       overview: this.clientAnalytics.getOverview().pipe(catchError(() => of(null))),
       topClients: this.clientAnalytics.getTopClients(10).pipe(catchError(() => of({ items: [] }))),
-      revenueTrend: this.clientAnalytics.getRevenueTrend(6).pipe(catchError(() => of({ items: [] }))),
+      revenueTrend: this.clientAnalytics.getRevenueTrend(6).pipe(catchError(() => of({ items: [], currencyCode: 'USD', currencyMixed: false }))),
       inactiveClients: this.clientAnalytics.getInactiveClients(30).pipe(catchError(() => of({ items: [] }))),
       lifetimeValue: this.clientAnalytics.getLifetimeValue().pipe(catchError(() => of({ items: [] }))),
       growth: this.clientAnalytics.getClientGrowth().pipe(catchError(() => of({ items: [] }))),
@@ -57,6 +61,8 @@ export class ClientIntelligenceDashboardComponent implements OnInit, OnDestroy {
           this.overview = data.overview ?? null;
           this.topClients = data.topClients.items ?? [];
           this.revenueTrendItems = data.revenueTrend.items ?? [];
+          this.revenueTrendCurrencyCode = data.revenueTrend.currencyCode ?? 'USD';
+          this.revenueTrendCurrencyMixed = !!data.revenueTrend.currencyMixed;
           this.inactiveClients = data.inactiveClients.items ?? [];
           this.lifetimeValueItems = data.lifetimeValue.items ?? [];
           this.growthItems = data.growth.items ?? [];
@@ -87,10 +93,11 @@ export class ClientIntelligenceDashboardComponent implements OnInit, OnDestroy {
     if (!this.selectedClientId) return;
     this.monthlyRevenueLoading = true;
     this.clientAnalytics.getMonthlyRevenue(this.selectedClientId, 12)
-      .pipe(takeUntil(this.destroy$), catchError(() => of({ clientId: '', clientName: '', items: [] })))
+      .pipe(takeUntil(this.destroy$), catchError(() => of({ clientId: '', clientName: '', items: [], currencyCode: 'USD' })))
       .subscribe({
         next: (data) => {
           this.monthlyRevenueItems = data.items ?? [];
+          this.monthlyRevenueCurrencyCode = data.currencyCode ?? 'USD';
         },
         complete: () => {
           this.monthlyRevenueLoading = false;
@@ -98,13 +105,16 @@ export class ClientIntelligenceDashboardComponent implements OnInit, OnDestroy {
       });
   }
 
+  /**
+   * Formats a revenue value using the top client's currency (the KPI card's
+   * source). Other cards format with their own per-item currency.
+   */
   formatCurrency(value: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value);
+    return formatCurrencyAmount(value, this.overview?.topClientCurrencyCode ?? 'USD');
+  }
+
+  get topClientCurrencyIconClass(): string {
+    return currencyIconClass(this.overview?.topClientCurrencyCode);
   }
 
   getActivityStatusLabel(status: string): string {

@@ -126,7 +126,10 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
             if (rows.Count == 0)
+            {
                 return new Dictionary<Guid, double>();
+            }
+
             return rows
                 .GroupBy(x => x.DesignerId)
                 .ToDictionary(g => g.Key, g => g.Average(x => (x.End - x.CreatedAt).TotalDays));
@@ -154,7 +157,9 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     {
         var entry = ChangeTracker.Entries().FirstOrDefault(e => ReferenceEquals(e.Entity, entity));
         if (entry != null)
+        {
             entry.State = EntityState.Detached;
+        }
     }
 
     /// <summary>Result shape for raw SQL only; not mapped to a table.</summary>

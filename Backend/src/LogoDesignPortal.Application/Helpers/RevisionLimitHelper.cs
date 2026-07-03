@@ -12,8 +12,16 @@ public static class RevisionLimitHelper
     /// </summary>
     public static int? GetRevisionLimitFromPrice(decimal price)
     {
-        if (price >= 500) return null; // Premium/Custom: unlimited
-        if (price >= 200) return 4;   // Standard: 4 revisions
+        if (price >= 500)
+        {
+            return null; // Premium/Custom: unlimited
+        }
+
+        if (price >= 200)
+        {
+            return 4;   // Standard: 4 revisions
+        }
+
         return 2;                      // Basic: 2 revisions
     }
 
@@ -23,8 +31,16 @@ public static class RevisionLimitHelper
     /// </summary>
     public static bool CanRequestRevision(int revisionCount, int? revisionLimit, bool allowExtraRevisions)
     {
-        if (allowExtraRevisions) return true;
-        if (revisionLimit == null) return true; // Unlimited
+        if (allowExtraRevisions)
+        {
+            return true;
+        }
+
+        if (revisionLimit == null)
+        {
+            return true; // Unlimited
+        }
+
         return revisionCount < revisionLimit.Value;
     }
 }

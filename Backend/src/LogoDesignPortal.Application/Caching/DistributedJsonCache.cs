@@ -22,7 +22,10 @@ public static class DistributedJsonCache
     {
         var bytes = await cache.GetAsync(key, cancellationToken).ConfigureAwait(false);
         if (bytes == null || bytes.Length == 0)
+        {
             return default;
+        }
+
         return JsonSerializer.Deserialize<T>(bytes, JsonOptions);
     }
 
@@ -55,6 +58,25 @@ public static class DistributedJsonCache
         try
         {
             await SetAsync(cache, key, value, absoluteTtl, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Distributed cache write failed for key {CacheKey}", key);
+        }
+    }
+
+    public static async Task SetAsync<T>(IDistributedCache cache, string key, T value, CancellationToken cancellationToken = default)
+    {
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(value, JsonOptions);
+        await cache.SetAsync(key, bytes, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Cache write without expiration that logs and ignores failures (fail-open).</summary>
+    public static async Task SetSafeAsync<T>(IDistributedCache cache, string key, T value, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await SetAsync(cache, key, value, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

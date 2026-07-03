@@ -1,12 +1,11 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace LogoDesignPortal.Application.DTOs.Auth;
 
+/// <summary>
+/// Refresh credentials from JSON body and/or auth cookies (cookie-based SPA may send an empty body).
+/// </summary>
 public class RefreshTokenRequestDto
 {
-    [Required]
-    public string Token { get; set; } = string.Empty;
+    public string? Token { get; set; }
 
-    [Required]
-    public string RefreshToken { get; set; } = string.Empty;
+    public string? RefreshToken { get; set; }
 }

@@ -26,6 +26,8 @@ public class ClientAnalyticsOverviewDto
     public int ActiveClients { get; set; }
     public int InactiveClients { get; set; }
     public decimal TopClientRevenue { get; set; }
+    /// <summary>ISO 4217 code of the top client whose revenue is reported in <see cref="TopClientRevenue"/>.</summary>
+    public string TopClientCurrencyCode { get; set; } = "USD";
 }
 
 public class TopClientsDto
@@ -39,11 +41,17 @@ public class TopClientItemDto
     public string ClientName { get; set; } = string.Empty;
     public int TotalOrders { get; set; }
     public decimal TotalRevenue { get; set; }
+    /// <summary>ISO 4217 code for this client's revenue. Sourced from ClientProfile.CurrencyCode.</summary>
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class ClientRevenueTrendDto
 {
     public List<ClientRevenueTrendItemDto> Items { get; set; } = new();
+    /// <summary>Single ISO code when all completed orders in the window share one currency; USD otherwise.</summary>
+    public string CurrencyCode { get; set; } = "USD";
+    /// <summary>True when the trend window contains completed orders in more than one currency.</summary>
+    public bool CurrencyMixed { get; set; }
 }
 
 public class ClientRevenueTrendItemDto
@@ -59,6 +67,8 @@ public class ClientMonthlyRevenueDto
     public Guid ClientId { get; set; }
     public string ClientName { get; set; } = string.Empty;
     public List<ClientMonthlyRevenueItemDto> Items { get; set; } = new();
+    /// <summary>ISO 4217 code for this client (drives chart axis formatting).</summary>
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class ClientMonthlyRevenueItemDto
@@ -92,6 +102,7 @@ public class ClientAnalyticsLifetimeValueItemDto
     public string ClientName { get; set; } = string.Empty;
     public decimal LifetimeRevenue { get; set; }
     public int TotalOrders { get; set; }
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class ClientGrowthDto
@@ -107,6 +118,7 @@ public class ClientGrowthItemDto
     public decimal PreviousMonthRevenue { get; set; }
     public decimal RevenueChangePercent { get; set; }
     public string GrowthStatus { get; set; } = string.Empty; // Increase, Decrease, Stable
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class ClientActivityDto
@@ -135,6 +147,8 @@ public class ClientAlertItemDto
     public Guid? ClientId { get; set; }
     public string? ClientName { get; set; }
     public DateTime OccurredAt { get; set; }
+    /// <summary>ISO 4217 currency for revenue-related alert messages (Milestone, RevenueIncrease).</summary>
+    public string CurrencyCode { get; set; } = "USD";
 }
 
 public class ClientDropdownItemDto

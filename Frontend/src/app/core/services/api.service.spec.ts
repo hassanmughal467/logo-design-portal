@@ -81,12 +81,16 @@ describe('ApiService', () => {
 
   it('buildUrl strips leading api/ from endpoint', () => {
     service.get('api/orders').subscribe();
-    httpMock.expectOne(`${basePrefix}/orders`).flush([]);
+    const req = httpMock.expectOne(`${basePrefix}/orders`);
+    expect(req.request.url).toBe(`${basePrefix}/orders`);
+    req.flush([]);
   });
 
   it('buildUrl strips leading slash', () => {
     service.get('/widgets').subscribe();
-    httpMock.expectOne(`${basePrefix}/widgets`).flush([]);
+    const req = httpMock.expectOne(`${basePrefix}/widgets`);
+    expect(req.request.url).toBe(`${basePrefix}/widgets`);
+    req.flush([]);
   });
 
   it('getBlob should use blob responseType', () => {

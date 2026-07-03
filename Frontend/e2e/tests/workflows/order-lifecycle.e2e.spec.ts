@@ -20,7 +20,7 @@ test.describe('Workflow — client order and admin approval', () => {
     await teardownUsers(request, cleanupIds);
   });
 
-  test('client creates order in UI; admin approves in UI; API shows InProgress', async ({ page, request }) => {
+  test('client creates order in UI; admin approves in UI; API shows approved state', async ({ page, request }) => {
     test.slow();
     const client = await provisionLoggedInClient(request, test.info(), 'Test@123');
     cleanupIds.push(client.userId);
@@ -63,7 +63,9 @@ test.describe('Workflow — client order and admin approval', () => {
     const row = list.find((o) => o.title === orderTitle);
     expect(row, 'created order visible to client').toBeTruthy();
     const refreshed = await getOrderApi(request, clientToken, row!.id);
-    expect(refreshed.status).toMatch(/InProgress/i);
+    // Approve without assigning a designer parks the order at ApprovedUnassigned;
+    // it becomes InProgress once a designer is assigned.
+    expect(refreshed.status).toMatch(/ApprovedUnassigned|InProgress/i);
   });
 
   test('admin can reject a pending order via cancel API (backend contract)', async ({ request }) => {

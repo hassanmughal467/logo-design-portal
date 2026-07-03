@@ -13,6 +13,8 @@ Secrets must **never** appear in committed `appsettings.*.json` files for Stagin
 | JWT signing key | `Jwt__Key` env / User Secrets | Key Vault / Secrets Manager |
 | MySQL password | `ConnectionStrings__DefaultConnection` | Same |
 | Redis password | `ConnectionStrings__Redis` | Same |
+| R2 API credentials | `Storage__R2__AccessKeyId`, `Storage__R2__SecretAccessKey` | Cloudflare token rotation |
+| Exchange rate API key | `ExchangeRate__ApiKey` | Same |
 | SMTP password | `Email__SmtpPassword` | Same |
 | Payment API keys | Not in repo | Provider sandbox (staging) / live (prod) |
 | E2E CI passwords | GitHub Actions env | OIDC + short-lived test users |
@@ -61,7 +63,7 @@ dotnet user-secrets set "Jwt:Key" "<random-32+-char-key>"
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=127.0.0.1;Port=3306;Database=LogoDesignPortalDb;User=root;Password=<local>;"
 ```
 
-Optional: `ConnectionStrings:Redis`, `Email:SmtpPassword`
+Optional: `ConnectionStrings:Redis`, `Email:SmtpPassword`, `Storage:R2:*`, `ExchangeRate:ApiKey`
 
 ---
 

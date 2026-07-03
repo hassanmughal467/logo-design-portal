@@ -222,7 +222,14 @@
     gap: 1rem;
     flex-wrap: wrap;
 
-    .search-input { width: 280px; }
+    .p-input-icon-left {
+      display: inline-block;
+    }
+
+    .search-input {
+      width: 280px;
+      padding-left: 2.5rem;
+    }
 
     .table-header-right {
       display: flex;
@@ -340,6 +347,44 @@
     border-radius: 4px;
     font-size: 0.75rem;
     font-style: normal;
+  }
+
+  // ═══ UNASSIGNED ORDERS ALERT — row highlight + badge ═══
+  // Approved-but-unassigned orders get a soft red wash and a left accent bar so they
+  // are unmistakable even when scrolling a busy grid.
+  ::ng-deep tr.row-unassigned {
+    background: rgba(220, 38, 38, 0.045) !important;
+    box-shadow: inset 3px 0 0 0 #dc2626;
+
+    &:hover {
+      background: rgba(220, 38, 38, 0.085) !important;
+    }
+  }
+
+  .badge-unassigned {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    margin-left: 0.5rem;
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1.1;
+
+    i {
+      font-size: 0.7rem;
+    }
+  }
+
+  .assign-designer-cta {
+    // Match the row's danger accent; small size keeps the toolbar tidy.
+    font-weight: 600;
   }
 
   .date-text {

@@ -25,7 +25,9 @@ public class RoleService : IRoleService
         var cacheKey = $"ldp:cache:lookup:roles:e{_readModelCache.RolesEpoch}";
         var cached = await DistributedJsonCache.GetAsync<List<RoleResponseDto>>(_distributedCache, cacheKey, cancellationToken).ConfigureAwait(false);
         if (cached != null)
+        {
             return cached;
+        }
 
         var list = await _context.Roles
             .AsNoTracking()

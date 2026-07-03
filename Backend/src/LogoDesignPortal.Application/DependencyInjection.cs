@@ -44,7 +44,7 @@ public static class DependencyInjection
         services.AddScoped<IClientLogoPricingService, ClientLogoPricingService>();
         services.AddScoped<IDesignerLogoPricingService, DesignerLogoPricingService>();
         services.AddScoped<IQuoteService, QuoteService>();
-        
+
         services.AddHttpClient(Options.DefaultName, client => client.Timeout = TimeSpan.FromSeconds(120))
             .AddStandardResilienceHandler(options =>
             {

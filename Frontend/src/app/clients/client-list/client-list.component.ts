@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
 import { AuthService } from '@core/services/auth.service';
 import { SharedListDataService } from '@core/services/shared-list-data.service';
+import { formatCurrencyAmount } from '@core/utils/currency-format';
 import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -14,6 +15,7 @@ export interface Client {
   lastName: string;
   companyName?: string;
   phoneNumber?: string;
+  currencyCode?: string;
   totalOrders: number;
   totalSpent: number;
   createdAt: Date;
@@ -66,10 +68,11 @@ export class ClientListComponent implements OnInit, OnDestroy {
               email: user.email,
               firstName: user.firstName,
               lastName: user.lastName,
-              companyName: (user as any).companyName,
+              companyName: (user as any).companyName ?? (user as any).clientProfile?.companyName,
               phoneNumber: (user as any).phoneNumber,
-              totalOrders: 0, // Will be calculated from orders
-              totalSpent: 0, // Will be calculated from invoices
+              currencyCode: (user as any).clientProfile?.currencyCode,
+              totalOrders: 0,
+              totalSpent: 0,
               createdAt: new Date(user.createdAt),
               lastOrderDate: undefined
             }));
@@ -129,11 +132,8 @@ export class ClientListComponent implements OnInit, OnDestroy {
     this.router.navigate(['/clients', clientId]);
   }
 
-  formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+  formatCurrency(amount: number, currencyCode?: string): string {
+    return formatCurrencyAmount(amount, currencyCode);
   }
 
   formatDate(date: Date | string | undefined): string {

@@ -2,9 +2,9 @@ name: CI — Unit, Integration & Build
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, staging-environment]
   push:
-    branches: [main, develop]
+    branches: [main, develop, staging-environment]
 
 jobs:
   backend-tests:

@@ -27,7 +27,9 @@ public static class EnvironmentConfigurationValidator
     public static void Validate(IConfiguration configuration, IHostEnvironment environment)
     {
         if (environment.IsDevelopment() || environment.IsEnvironment("Testing"))
+        {
             return;
+        }
 
         ValidateConnectionString(configuration, environment);
         ValidateFileStoragePath(configuration, environment);
@@ -64,7 +66,9 @@ public static class EnvironmentConfigurationValidator
         }
 
         if (!ExpectedFileStoragePaths.TryGetValue(environment.EnvironmentName, out var expected))
+        {
             return;
+        }
 
         if (!string.Equals(path, expected, StringComparison.OrdinalIgnoreCase))
         {

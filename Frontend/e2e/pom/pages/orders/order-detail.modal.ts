@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 
 const OrderDetailSelectors = {
   approve: 'order-approve',
+  approveSubmit: 'approve-submit',
 } as const;
 
 /**
@@ -37,7 +38,20 @@ export class OrderDetailModalPage {
     });
   }
 
+  /**
+   * Header "Approve Order" opens a choice modal (Approve Only / Approve & Assign).
+   * Default choice is "Approve Only" → order becomes ApprovedUnassigned.
+   */
   async approveOrder(): Promise<void> {
     await this.detailDialog().getByTestId(OrderDetailSelectors.approve).click();
+    const submit = this.page.getByTestId(OrderDetailSelectors.approveSubmit);
+    await expect(submit).toBeVisible({ timeout: 15_000 });
+    const approveResponse = this.page.waitForResponse(
+      (res) => /\/api\/orders\/[^/]+\/approve/.test(res.url()) && res.request().method() === 'POST',
+      { timeout: 30_000 }
+    );
+    await submit.click();
+    const res = await approveResponse;
+    expect(res.ok()).toBeTruthy();
   }
 }

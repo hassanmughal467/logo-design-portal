@@ -27,9 +27,17 @@ public class AuthController : ControllerBase
 
     private IActionResult AuthSuccess(AuthResponseDto response, bool created = false)
     {
-        _authCookies.SetAuthCookies(Response, response);
+        var csrf = _authCookies.SetAuthCookies(Response, response);
+        if (!string.IsNullOrEmpty(csrf))
+        {
+            response.CsrfToken = csrf;
+        }
+
         if (created)
+        {
             return CreatedAtAction(nameof(Login), new { }, response);
+        }
+
         return Ok(response);
     }
 
@@ -121,6 +129,11 @@ public class AuthController : ControllerBase
                 && Request.Cookies.TryGetValue("ldp_access", out var accessFromCookie))
             {
                 request.Token = accessFromCookie;
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Token) || string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                return Unauthorized(this.StandardError("Invalid refresh token."));
             }
 
             var response = await _authService.RefreshTokenAsync(request);
@@ -235,7 +248,8 @@ public class AuthController : ControllerBase
             _logger.LogInformation("Resetting SuperAdmin password to default");
             await _authService.ResetSuperAdminPasswordAsync();
             _logger.LogWarning("SuperAdmin password reset. Dev credentials: superadmin@logodesign.com / SuperAdmin@123 - Check server logs only, never expose in API.");
-            return Ok(new { 
+            return Ok(new
+            {
                 message = "SuperAdmin password has been reset to default. Check server logs for credentials (development only)."
             });
         }

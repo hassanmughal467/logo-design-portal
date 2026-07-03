@@ -31,7 +31,9 @@ public static class FormFileTestHelper
     {
         var bytes = content ?? DefaultPngContent;
         if (bytes.Length == 0)
+        {
             bytes = DefaultPngContent;
+        }
 
         var mock = new Mock<IFormFile>();
 

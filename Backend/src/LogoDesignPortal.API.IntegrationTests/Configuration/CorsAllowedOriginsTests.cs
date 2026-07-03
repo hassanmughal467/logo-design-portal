@@ -65,7 +65,9 @@ public class CorsAllowedOriginsTests
             {
                 var candidate = Path.Combine(dir, prefix, fileName);
                 if (File.Exists(candidate))
+                {
                     return candidate;
+                }
             }
 
             dir = Directory.GetParent(dir)?.FullName;

@@ -443,10 +443,19 @@
           box-sizing: border-box;
         }
 
-        .p-password-toggle-icon {
+        .p-icon {
+          position: absolute;
           right: 1rem;
+          top: 50%;
+          transform: translateY(-50%);
           z-index: 2;
+          color: #6b7280;
           transition: color 0.15s ease;
+          cursor: pointer;
+
+          &:hover {
+            color: #0d47a1;
+          }
         }
 
         .p-password-panel {
@@ -772,12 +781,13 @@
       box-sizing: border-box;
     }
 
-    .p-password-toggle-icon {
+    .p-icon {
       color: #6b7280;
       transition: color 0.2s;
+      cursor: pointer;
 
       &:hover {
-        color: #667eea;
+        color: #0d47a1;
       }
     }
 

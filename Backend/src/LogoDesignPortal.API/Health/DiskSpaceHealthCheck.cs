@@ -15,7 +15,9 @@ public sealed class DiskSpaceHealthCheck : IHealthCheck
         var drive = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(root)) ?? root);
 
         if (!drive.IsReady)
+        {
             return Task.FromResult(HealthCheckResult.Degraded("Storage drive is not ready."));
+        }
 
         if (drive.AvailableFreeSpace < MinimumFreeBytes)
         {

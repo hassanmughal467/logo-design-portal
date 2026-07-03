@@ -8,7 +8,7 @@
       <div class="feed-content">
         <span class="feed-desc">{{ item.description }}</span>
         <span class="feed-meta">
-          <span *ngIf="item.amount != null" class="feed-amount">{{ formatCurrency(item.amount) }}</span>
+          <span *ngIf="item.amount != null" class="feed-amount">{{ formatCurrency(item.amount, item.currencyCode) }}</span>
           <span class="feed-time">{{ formatDate(item.occurredAt) }}</span>
         </span>
       </div>

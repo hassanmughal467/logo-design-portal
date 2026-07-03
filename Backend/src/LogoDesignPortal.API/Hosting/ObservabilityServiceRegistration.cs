@@ -17,7 +17,9 @@ public static class ObservabilityServiceRegistration
             ?? new ObservabilityOptions();
 
         if (!options.Enabled)
+        {
             return services;
+        }
 
         services.AddOpenTelemetry()
             .ConfigureResource(resource => resource

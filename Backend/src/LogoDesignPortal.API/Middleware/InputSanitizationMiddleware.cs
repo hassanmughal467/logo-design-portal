@@ -16,8 +16,8 @@ public class InputSanitizationMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         // Skip sanitization for CORS preflight and non-body requests
-        if (context.Request.Method == "OPTIONS" || 
-            context.Request.Method == "GET" || 
+        if (context.Request.Method == "OPTIONS" ||
+            context.Request.Method == "GET" ||
             context.Request.Method == "DELETE" ||
             !context.Request.ContentType?.Contains("application/json") == true)
         {
@@ -34,7 +34,7 @@ public class InputSanitizationMiddleware
             // Read the original body
             using var reader = new StreamReader(context.Request.Body, leaveOpen: true);
             var originalBody = await reader.ReadToEndAsync();
-            
+
             // Reset the stream position for the next middleware/controller
             context.Request.Body.Position = 0;
 
@@ -42,7 +42,7 @@ public class InputSanitizationMiddleware
             if (!string.IsNullOrEmpty(originalBody) && ContainsDangerousContent(originalBody))
             {
                 var sanitizedBody = SanitizeInput(originalBody);
-                
+
                 // Replace the body stream with sanitized content
                 var sanitizedBytes = System.Text.Encoding.UTF8.GetBytes(sanitizedBody);
                 context.Request.Body = new MemoryStream(sanitizedBytes);
@@ -64,17 +64,19 @@ public class InputSanitizationMiddleware
     private static string SanitizeInput(string input)
     {
         if (string.IsNullOrEmpty(input))
+        {
             return input;
+        }
 
         // Remove script tags
         input = Regex.Replace(input, @"<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>", "", RegexOptions.IgnoreCase);
-        
+
         // Remove javascript: protocol
         input = Regex.Replace(input, @"javascript:", "", RegexOptions.IgnoreCase);
-        
+
         // Remove on* event handlers
         input = Regex.Replace(input, @"on\w+\s*=", "", RegexOptions.IgnoreCase);
-        
+
         // Remove data: URLs that could be dangerous
         input = Regex.Replace(input, @"data:text/html", "", RegexOptions.IgnoreCase);
 

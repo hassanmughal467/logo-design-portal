@@ -16,7 +16,7 @@ test.describe('Security — hidden data exposure', () => {
     await teardownUsers(request, cleanup);
   });
 
-  test('designer my-orders does not include client email', async ({ request }, testInfo) => {
+  test('designer assigned-orders does not include client email', async ({ request }, testInfo) => {
     const adminToken = await getAdminToken(request);
     const client = await provisionClientUser(request, adminToken, testInfo);
     const designer = await provisionDesignerUser(request, adminToken, testInfo);
@@ -32,7 +32,8 @@ test.describe('Security — hidden data exposure', () => {
     await approveOrderApi(request, adminToken, order.id);
     await assignDesignerApi(request, adminToken, order.id, designer.userId);
 
-    const res = await request.get(apiUrl('/orders/my-orders'), {
+    // Designers list their work via /orders/assigned-orders (my-orders is Client-only).
+    const res = await request.get(apiUrl('/orders/assigned-orders'), {
       headers: { Authorization: `Bearer ${designerAuth.token}` },
     });
     expect(res.ok()).toBeTruthy();

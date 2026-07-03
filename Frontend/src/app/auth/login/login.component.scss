@@ -110,13 +110,30 @@
     }
 
     ::ng-deep .p-password {
+      position: relative;
+      display: block;
       width: 100%;
+
+      .p-icon {
+        position: absolute;
+        top: 50%;
+        right: 1rem;
+        transform: translateY(-50%);
+        color: #6b7280;
+        cursor: pointer;
+        transition: color 0.2s ease;
+
+        &:hover {
+          color: #0d47a1;
+        }
+      }
       
       .p-inputtext {
         width: 100%;
         border-radius: 10px;
         border: 2px solid #e5e7eb;
         padding: 0.875rem 1.25rem;
+        padding-right: 2.5rem;
         font-size: 0.95rem;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         background: #ffffff;

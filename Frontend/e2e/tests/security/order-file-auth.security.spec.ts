@@ -1,11 +1,24 @@
 import { test, expect } from '@playwright/test';
-import { apiUrl, loginApi } from '../../utils/api-client';
+import { apiUrl, createOrderApi, loginApi, loginApiBearerOnly } from '../../utils/api-client';
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from '../../utils/env';
+import {
+  getAdminToken,
+  provisionDesignerUser,
+  provisionLoggedInClient,
+  teardownUsers,
+} from '../../utils/api-helpers';
 
 /**
  * API-level security tests for order/file/auth module (no UI dependency).
+ * Users are provisioned per spec so the suite is deterministic on any database.
  */
 test.describe('Security — order, file, auth module', () => {
+  const cleanup: string[] = [];
+
+  test.afterAll(async ({ request }) => {
+    await teardownUsers(request, cleanup);
+  });
+
   test('unauthenticated order create returns 401', async ({ request }) => {
     const res = await request.post(apiUrl('/orders'), {
       data: { title: 'x', description: 'y', price: 1 },
@@ -14,27 +27,29 @@ test.describe('Security — order, file, auth module', () => {
     expect(res.status()).toBe(401);
   });
 
-  test('client cannot list all orders (ViewAllOrders)', async ({ request }) => {
-    const auth = await loginApi(request, 'client@test.com', 'Test@123');
+  test('client cannot list all orders (ViewAllOrders)', async ({ request }, testInfo) => {
+    const client = await provisionLoggedInClient(request, testInfo);
+    cleanup.push(client.userId);
     const res = await request.get(apiUrl('/orders?page=1&pageSize=5'), {
-      headers: { Authorization: `Bearer ${auth.token}` },
+      headers: { Authorization: `Bearer ${client.token}` },
     });
     expect(res.status()).toBe(403);
   });
 
-  test('designer cannot assign order', async ({ request }) => {
-    const clientAuth = await loginApi(request, 'client@test.com', 'Test@123');
-    const create = await request.post(apiUrl('/orders'), {
-      headers: {
-        Authorization: `Bearer ${clientAuth.token}`,
-        'Content-Type': 'application/json',
-      },
-      data: { title: 'E2E assign block', description: 'd', price: 50 },
+  test('designer cannot assign order', async ({ request }, testInfo) => {
+    const client = await provisionLoggedInClient(request, testInfo);
+    cleanup.push(client.userId);
+    const order = await createOrderApi(request, client.token, {
+      title: 'E2E assign block',
+      description: 'Designer must not be able to assign orders to themselves.',
+      price: 50,
     });
-    expect(create.ok()).toBeTruthy();
-    const order = (await create.json()) as { id: string };
 
-    const designerAuth = await loginApi(request, 'designer@test.com', 'Test@123');
+    const adminToken = await getAdminToken(request);
+    const designer = await provisionDesignerUser(request, adminToken, testInfo);
+    cleanup.push(designer.userId);
+    const designerAuth = await loginApiBearerOnly(request, designer.email, designer.password);
+
     const assign = await request.post(apiUrl(`/orders/${order.id}/assign`), {
       headers: {
         Authorization: `Bearer ${designerAuth.token}`,
@@ -45,16 +60,14 @@ test.describe('Security — order, file, auth module', () => {
     expect(assign.status()).toBe(403);
   });
 
-  test('invalid status transition returns 400', async ({ request }) => {
-    const clientAuth = await loginApi(request, 'client@test.com', 'Test@123');
-    const create = await request.post(apiUrl('/orders'), {
-      headers: {
-        Authorization: `Bearer ${clientAuth.token}`,
-        'Content-Type': 'application/json',
-      },
-      data: { title: 'E2E status', description: 'd', price: 50 },
+  test('invalid status transition returns 400', async ({ request }, testInfo) => {
+    const client = await provisionLoggedInClient(request, testInfo);
+    cleanup.push(client.userId);
+    const order = await createOrderApi(request, client.token, {
+      title: 'E2E status',
+      description: 'Invalid status jumps must be rejected by the state machine.',
+      price: 50,
     });
-    const order = (await create.json()) as { id: string };
 
     const adminAuth = await loginApi(request, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
     const bad = await request.put(apiUrl(`/orders/${order.id}/status`), {
@@ -67,16 +80,14 @@ test.describe('Security — order, file, auth module', () => {
     expect(bad.status()).toBe(400);
   });
 
-  test('upload with disallowed extension returns 400', async ({ request }) => {
-    const clientAuth = await loginApi(request, 'client@test.com', 'Test@123');
-    const create = await request.post(apiUrl('/orders'), {
-      headers: {
-        Authorization: `Bearer ${clientAuth.token}`,
-        'Content-Type': 'application/json',
-      },
-      data: { title: 'E2E upload', description: 'd', price: 10 },
+  test('upload with disallowed extension returns 400', async ({ request }, testInfo) => {
+    const client = await provisionLoggedInClient(request, testInfo);
+    cleanup.push(client.userId);
+    const order = await createOrderApi(request, client.token, {
+      title: 'E2E upload',
+      description: 'Executable uploads must be blocked by file validation.',
+      price: 10,
     });
-    const order = (await create.json()) as { id: string };
 
     const form = {
       file: {
@@ -88,7 +99,7 @@ test.describe('Security — order, file, auth module', () => {
     };
 
     const upload = await request.post(apiUrl(`/files/upload/${order.id}`), {
-      headers: { Authorization: `Bearer ${clientAuth.token}` },
+      headers: { Authorization: `Bearer ${client.token}` },
       multipart: form,
     });
     expect(upload.status()).toBe(400);

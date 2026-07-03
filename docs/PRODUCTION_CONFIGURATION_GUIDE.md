@@ -38,7 +38,9 @@
 |----------|---------|
 | `ConnectionStrings__DefaultConnection` | MySQL connection (not `REPLACE_IN_*`) |
 | `ConnectionStrings__Redis` | Redis — **startup fails without it** |
-| `Jwt__Key` | Signing key ≥32 chars |
+| `Jwt__Key` | Signing key ≥32 chars (empty in committed JSON) |
+| `Storage__R2__AccountId`, `Storage__R2__AccessKeyId`, `Storage__R2__SecretAccessKey` | Cloudflare R2 — required when `Storage:Provider` is `R2` |
+| `ExchangeRate__ApiKey` | USD→PKR rate API (optional; uses fallback if unset) |
 | `Email__SmtpPassword` | Optional if SMTP used |
 | `Email__FrontendUrl` | Password-reset links (now `https://admin.hawkmerchandising.com` in Production JSON) |
 
@@ -49,10 +51,18 @@ See `docs/SECRET_MANAGEMENT_GUIDE.md` for full mapping.
 ## IIS configuration
 
 1. Set `ASPNETCORE_ENVIRONMENT=Production` in IIS Application **Environment Variables** (not only `web.config`).
-2. Add connection string, JWT key, Redis — **never commit secrets to git**.
+2. Add connection string, JWT key, Redis, R2 credentials, and optional exchange-rate API key — **never commit secrets to git**.
 3. Enable **WebSockets** for SignalR.
 4. If behind ARR/reverse proxy: ensure forwarded headers; restrict who can send `X-Forwarded-*`.
 5. `web.config`: 500MB `maxAllowedContentLength`; stdout logs under `api\logs` — rotate.
+6. **CORS / login blocked in browser:** API `web.config` must remove IIS `OPTIONSVerbHandler` and `WebDAV` so OPTIONS preflight reaches ASP.NET Core. Redeploy API after pulling latest `web.config`. Verify:
+   ```powershell
+   curl -i -X OPTIONS "https://api.hawkmerchandising.com/api/auth/login" `
+     -H "Origin: https://admin.hawkmerchandising.com" `
+     -H "Access-Control-Request-Method: POST"
+   ```
+   Response must include `Access-Control-Allow-Origin: https://admin.hawkmerchandising.com` and `Access-Control-Allow-Credentials: true`.
+7. Disable **Windows Authentication** on the API site (anonymous + ASP.NET Core JWT/cookies only).
 
 ---
 
@@ -68,9 +78,10 @@ See `docs/SECRET_MANAGEMENT_GUIDE.md` for full mapping.
 
 ## File storage
 
-- Use absolute path outside publish directory for `FileStorage:Path`
-- Grant IIS app pool identity read/write
-- Backup strategy: `docs/BACKUP_STRATEGY.md`
+- Production/staging use **Cloudflare R2** via `Storage:Provider` = `R2` and `Storage__R2__*` env vars
+- Development uses local disk (`Storage:Provider` = `Local`, `Files_Dev`)
+- Grant IIS app pool identity read/write only when using local paths; R2 uses API tokens
+- Backup strategy: `ops/BACKUP_RUNBOOK.md` (MySQL); R2 versioning/lifecycle in Cloudflare console
 
 ---
 

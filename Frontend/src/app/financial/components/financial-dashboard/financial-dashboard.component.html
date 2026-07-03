@@ -25,36 +25,64 @@
 
     <!-- Row 3: Revenue Trend -->
     <div class="dashboard-row full-width">
-      <app-revenue-trend-chart [items]="revenueTrendItems"></app-revenue-trend-chart>
+        <app-revenue-trend-chart
+          [items]="revenueTrendItems"
+          [currencyCode]="revenueCurrencyCode"
+          [currencyMixed]="revenueCurrencyMixed">
+        </app-revenue-trend-chart>
     </div>
 
     <!-- Row 4: Orders vs Revenue -->
     <div class="dashboard-row full-width">
-      <app-orders-revenue-chart [items]="ordersVsRevenueItems"></app-orders-revenue-chart>
+        <app-orders-revenue-chart
+          [items]="ordersVsRevenueItems"
+          [currencyCode]="revenueCurrencyCode"
+          [currencyMixed]="revenueCurrencyMixed">
+        </app-orders-revenue-chart>
     </div>
 
     <!-- Row 5: Revenue by Package | Invoice Status -->
     <div class="dashboard-row two-col">
-      <app-package-revenue-chart [items]="packageRevenueItems"></app-package-revenue-chart>
+      <app-package-revenue-chart
+        [items]="packageRevenueItems"
+        [currencyCode]="revenueCurrencyCode"
+        [currencyMixed]="revenueCurrencyMixed">
+      </app-package-revenue-chart>
       <app-invoice-status-chart [items]="invoiceStatusItems"></app-invoice-status-chart>
     </div>
 
     <!-- Row 6: Revenue by Designer | Revenue by Client -->
     <div class="dashboard-row two-col">
-      <app-designer-revenue-chart [items]="designerRevenueItems"></app-designer-revenue-chart>
+      <app-designer-revenue-chart
+        [items]="designerRevenueItems"
+        [currencyCode]="revenueCurrencyCode"
+        [currencyMixed]="revenueCurrencyMixed">
+      </app-designer-revenue-chart>
       <app-client-revenue-chart [items]="clientRevenueItems"></app-client-revenue-chart>
     </div>
 
     <!-- Row 7: Weekly Revenue | Average Order Value -->
     <div class="dashboard-row two-col">
-      <app-weekly-revenue-chart [items]="weeklyRevenueItems"></app-weekly-revenue-chart>
-      <app-order-value-chart [items]="orderValueItems"></app-order-value-chart>
+      <app-weekly-revenue-chart
+        [items]="weeklyRevenueItems"
+        [currencyCode]="revenueCurrencyCode"
+        [currencyMixed]="revenueCurrencyMixed">
+      </app-weekly-revenue-chart>
+      <app-order-value-chart
+        [items]="orderValueItems"
+        [currencyCode]="revenueCurrencyCode"
+        [currencyMixed]="revenueCurrencyMixed">
+      </app-order-value-chart>
     </div>
 
     <!-- Row 8: Financial Activity Feed | Revenue Forecast -->
     <div class="dashboard-row two-col">
       <app-financial-activity-feed [items]="activityItems"></app-financial-activity-feed>
-      <app-revenue-forecast-chart [items]="forecastItems"></app-revenue-forecast-chart>
+      <app-revenue-forecast-chart
+        [items]="forecastItems"
+        [currencyCode]="revenueCurrencyCode"
+        [currencyMixed]="revenueCurrencyMixed">
+      </app-revenue-forecast-chart>
     </div>
   </div>
 </div>

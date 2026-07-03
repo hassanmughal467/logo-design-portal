@@ -47,11 +47,15 @@ public sealed class SlowQueryLoggingInterceptor : DbCommandInterceptor
     private void LogIfSlow(CommandExecutedEventData eventData, DbCommand command)
     {
         if (eventData.Duration.TotalMilliseconds < 100)
+        {
             return;
+        }
 
         var text = command.CommandText;
         if (text.Length > 500)
+        {
             text = text[..500] + "…";
+        }
 
         _logger.LogWarning(
             "Slow database command: {DurationMs:F0} ms (SLO target 100 ms). {CommandText}",

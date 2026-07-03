@@ -5,7 +5,9 @@ import { MessageService } from 'primeng/api';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Order } from '@shared/models/order.model';
-import { getOrderStatusLabel, getOrderStatusSeverity } from '@shared/utils/order-status-display';
+import { getOrderStatusLabel, getOrderStatusSeverity, OrderStatusSeverity } from '@shared/utils/order-status-display';
+import { TagSeverity } from '@shared/types/primeng.types';
+import { formatCurrencyAmount } from '@core/utils/currency-format';
 
 export interface DesignerDetail {
   user: {
@@ -101,11 +103,10 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
     this.router.navigate(['/orders', orderId]);
   }
 
-  formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+  /** Hourly rate is in PKR; pass order.currencyCode for client order amounts. */
+  formatCurrency(amount: number, currencyCode?: string | null): string {
+    const code = currencyCode ?? 'PKR';
+    return formatCurrencyAmount(amount, code);
   }
 
   formatDate(date: Date | string | undefined): string {
@@ -126,12 +127,12 @@ export class DesignerDetailComponent implements OnInit, OnDestroy {
     return getOrderStatusLabel(status);
   }
 
-  getStatusSeverity(status: string): string {
+  getStatusSeverity(status: string): TagSeverity {
     const orderSeverity = getOrderStatusSeverity(status);
     if (orderSeverity !== 'secondary') {
       return orderSeverity;
     }
-    const designerSeverityMap: Record<string, string> = {
+    const designerSeverityMap: Record<string, TagSeverity> = {
       Assigned: 'info',
       PreviewUploaded: 'info',
       Approved: 'success'

@@ -13,6 +13,7 @@ using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Tests.TestHelpers;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
+using LogoDesignPortal.Application.Tests.Storage;
 using LogoDesignPortal.Infrastructure.Persistence;
 
 namespace LogoDesignPortal.Application.Tests.Services;
@@ -176,7 +177,9 @@ public class FileServiceUploadAuthorizationTests : IDisposable
             Mock.Of<IRealtimeEntityUpdateSender>(),
             Mock.Of<IDesignerPayoutService>(),
             Mock.Of<IFileUploadScanHook>(),
-            Options.Create(new ProductionSafetyOptions()));
+            TestFileStorageFactory.CreateLocal(_tempStoragePath),
+            Options.Create(new ProductionSafetyOptions()),
+            TestFileStorageFactory.CreateLocalOptions(_tempStoragePath));
     }
 
     public void Dispose() => Directory.Delete(_tempStoragePath, recursive: true);

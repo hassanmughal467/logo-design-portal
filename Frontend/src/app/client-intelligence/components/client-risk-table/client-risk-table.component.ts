@@ -1,5 +1,8 @@
 import { Component, Input } from '@angular/core';
 import { ClientRiskScoreItem } from '@core/services/client-churn-analytics.service';
+import { formatCurrencyAmount } from '@core/utils/currency-format';
+
+import { TagSeverity } from '@shared/types/primeng.types';
 
 @Component({
   selector: 'app-client-risk-table',
@@ -9,13 +12,8 @@ import { ClientRiskScoreItem } from '@core/services/client-churn-analytics.servi
 export class ClientRiskTableComponent {
   @Input() items: ClientRiskScoreItem[] = [];
 
-  formatCurrency(value: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value);
+  formatCurrency(value: number, currencyCode?: string): string {
+    return formatCurrencyAmount(value, currencyCode);
   }
 
   formatDate(value: string | undefined): string {
@@ -37,10 +35,10 @@ export class ClientRiskTableComponent {
     return map[level] || level;
   }
 
-  getRiskSeverity(level: string): string {
-    const map: Record<string, string> = {
+  getRiskSeverity(level: string): TagSeverity {
+    const map: Record<string, TagSeverity> = {
       Healthy: 'success',
-      Warning: 'warn',
+      Warning: 'warning',
       HighRisk: 'danger',
       ChurnLikely: 'danger'
     };

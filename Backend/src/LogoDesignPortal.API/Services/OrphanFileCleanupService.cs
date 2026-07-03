@@ -1,69 +1,78 @@
+using LogoDesignPortal.Application.Configuration;
+using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces.Persistence;
+using LogoDesignPortal.Application.Interfaces.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace LogoDesignPortal.API.Services;
 
 /// <summary>
-/// Scans preview (Temporary) file storage and deletes orphan files (no DB row). Invoked on a schedule via Hangfire (not IHostedService) so only cluster workers run it.
+/// Scans preview (Temporary) file storage and deletes orphan files (no DB row). Invoked on a schedule via Hangfire.
 /// </summary>
 public class OrphanFileCleanupService
 {
     private readonly IServiceProvider _serviceProvider;
-    private readonly IConfiguration _configuration;
+    private readonly IFileStorageService _fileStorage;
+    private readonly string _localBasePath;
     private readonly ILogger<OrphanFileCleanupService> _logger;
 
     public OrphanFileCleanupService(
         IServiceProvider serviceProvider,
+        IFileStorageService fileStorage,
         IConfiguration configuration,
+        IOptions<StorageOptions> storageOptions,
         ILogger<OrphanFileCleanupService> logger)
     {
         _serviceProvider = serviceProvider;
-        _configuration = configuration;
+        _fileStorage = fileStorage;
+        var options = storageOptions.Value;
+        _localBasePath = !string.IsNullOrWhiteSpace(options.Local.BasePath)
+            ? options.Local.BasePath
+            : configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
         _logger = logger;
     }
 
-    /// <summary>Single cleanup pass; scheduled via Hangfire recurring job (not duplicated per instance when Redis storage is used).</summary>
+    /// <summary>Single cleanup pass; scheduled via Hangfire recurring job.</summary>
     public async Task RunOnceAsync(CancellationToken cancellationToken = default)
     {
-        var fileStoragePath = _configuration["FileStorage:Path"]
-            ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
-        var previewStoragePath = Path.Combine(fileStoragePath, "Temporary");
-
-        if (!Directory.Exists(previewStoragePath))
+        var previewKeys = (await _fileStorage.ListKeysAsync("Temporary", cancellationToken).ConfigureAwait(false)).ToList();
+        if (previewKeys.Count == 0)
         {
-            _logger.LogDebug("Preview storage directory does not exist: {Path}", previewStoragePath);
+            _logger.LogDebug("No files found in Temporary storage prefix.");
             return;
         }
 
         using var scope = _serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
 
-        var knownPaths = await GetKnownFilePathsAsync(context, cancellationToken).ConfigureAwait(false);
+        var knownKeys = await GetKnownStorageKeysAsync(context, cancellationToken).ConfigureAwait(false);
 
         var deletedCount = 0;
-        var files = Directory.EnumerateFiles(previewStoragePath, "*", SearchOption.TopDirectoryOnly);
-
-        foreach (var filePath in files)
+        foreach (var key in previewKeys)
         {
             if (cancellationToken.IsCancellationRequested)
-                break;
-
-            var normalizedPath = NormalizePath(filePath);
-
-            if (!knownPaths.Contains(normalizedPath))
             {
-                try
-                {
-                    File.Delete(filePath);
-                    deletedCount++;
-                    _logger.LogInformation("Deleted orphan file: {Path}", filePath);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to delete orphan file: {Path}", filePath);
-                }
+                break;
+            }
+
+            var normalizedKey = StorageKeyHelper.ValidateAndNormalizeKey(key);
+            if (knownKeys.Contains(normalizedKey))
+            {
+                continue;
+            }
+
+            try
+            {
+                await _fileStorage.DeleteAsync(normalizedKey, cancellationToken).ConfigureAwait(false);
+                deletedCount++;
+                _logger.LogInformation("Deleted orphan file: {Key}", normalizedKey);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete orphan file: {Key}", normalizedKey);
             }
         }
 
@@ -73,7 +82,7 @@ public class OrphanFileCleanupService
         }
     }
 
-    private static async Task<HashSet<string>> GetKnownFilePathsAsync(
+    private async Task<HashSet<string>> GetKnownStorageKeysAsync(
         IApplicationDbContext context,
         CancellationToken cancellationToken)
     {
@@ -93,22 +102,7 @@ public class OrphanFileCleanupService
 
         return logoPaths.Concat(revisionPaths)
             .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(NormalizePath)
+            .Select(p => StorageKeyHelper.ResolveKey(p!, _localBasePath))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizePath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            return string.Empty;
-
-        try
-        {
-            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        }
-        catch
-        {
-            return path.Replace('/', Path.DirectorySeparatorChar).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        }
     }
 }

@@ -1,5 +1,7 @@
 import { Component, Input } from '@angular/core';
 
+import { TagSeverity } from '@shared/types/primeng.types';
+
 @Component({
   selector: 'app-client-activity-table',
   templateUrl: './client-activity-table.component.html',
@@ -17,10 +19,10 @@ export class ClientActivityTableComponent {
     return map[status] || status;
   }
 
-  getStatusSeverity(status: string): string {
-    const map: Record<string, string> = {
+  getStatusSeverity(status: string): TagSeverity {
+    const map: Record<string, TagSeverity> = {
       Active: 'success',
-      LowActivity: 'warn',
+      LowActivity: 'warning',
       Inactive: 'danger'
     };
     return map[status] || 'info';

@@ -168,17 +168,6 @@ public class OrderServiceFullBatchTests
         var mapperConfig = new MapperConfiguration(cfg => cfg.AddProfile<LogoDesignPortal.Application.Mappings.MappingProfile>());
         var mapper = mapperConfig.CreateMapper();
 
-        return new OrderService(
-            context,
-            mapper,
-            Mock.Of<INotificationService>(),
-            Mock.Of<IRealtimeEntityUpdateSender>(),
-            Mock.Of<IFileService>(),
-            Mock.Of<IClientLogoPricingService>(),
-            Mock.Of<ICommentService>(),
-            Mock.Of<Microsoft.Extensions.Logging.ILogger<OrderService>>(),
-            Mock.Of<IDistributedCache>(),
-            Mock.Of<IReadModelCacheVersions>(),
-            new ClientProfileEnsureService(context, Mock.Of<IReadModelCacheVersions>(), Mock.Of<Microsoft.Extensions.Logging.ILogger<ClientProfileEnsureService>>()));
+        return TestOrderServiceFactory.Create(context);
     }
 }

@@ -29,7 +29,9 @@ public sealed class DatabaseSchemaReadinessHealthCheck : IHealthCheck
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         if (!db.Database.IsRelational())
+        {
             return HealthCheckResult.Healthy("Non-relational provider.");
+        }
 
         var pending = await db.Database.GetPendingMigrationsAsync(cancellationToken).ConfigureAwait(false);
         if (pending.Any())

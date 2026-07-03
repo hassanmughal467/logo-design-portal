@@ -27,7 +27,7 @@
         </td>
         <td>{{ item.daysSinceLastOrder }} days</td>
         <td>{{ item.orderCount }}</td>
-        <td>{{ formatCurrency(item.totalRevenue) }}</td>
+        <td>{{ formatCurrency(item.totalRevenue, item.currencyCode) }}</td>
         <td>{{ item.revenueContributionPercent | number:'1.2-2' }}%</td>
         <td>{{ formatDate(item.lastOrderDate) }}</td>
       </tr>

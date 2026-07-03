@@ -1,5 +1,6 @@
 import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { OrdersVsRevenueItem } from '@core/services/financial-analytics.service';
+import { compactCurrencyLabel, formatCurrencyAmount } from '@core/utils/currency-format';
 
 @Component({
   selector: 'app-orders-revenue-chart',
@@ -8,16 +9,20 @@ import { OrdersVsRevenueItem } from '@core/services/financial-analytics.service'
 })
 export class OrdersRevenueChartComponent implements OnChanges {
   @Input() items: OrdersVsRevenueItem[] = [];
+  @Input() currencyCode = 'USD';
+  @Input() currencyMixed = false;
 
   chartOptions: any = null;
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['items'] && this.items?.length) {
+    if ((changes['items'] || changes['currencyCode'] || changes['currencyMixed']) && this.items?.length) {
       this.buildChart();
     }
   }
 
   private buildChart(): void {
+    const code = this.currencyMixed ? undefined : this.currencyCode;
+    const revAxis = (v: number) => compactCurrencyLabel(v, code, this.currencyMixed);
     this.chartOptions = {
       series: [
         { name: 'Orders Count', data: this.items.map(i => i.ordersCount), type: 'column' },
@@ -30,15 +35,15 @@ export class OrdersRevenueChartComponent implements OnChanges {
       xaxis: { categories: this.items.map(i => i.month), labels: { rotate: -45 } },
       yaxis: [
         { min: 0, title: { text: 'Orders' }, labels: { formatter: (v: number) => Math.round(v) } },
-        { opposite: true, min: 0, title: { text: 'Revenue' }, labels: { formatter: (v: number) => '$' + (v >= 1000 ? (v / 1000) + 'k' : v) } }
+        { opposite: true, min: 0, title: { text: 'Revenue' }, labels: { formatter: revAxis } }
       ],
       legend: { position: 'top' },
       dataLabels: { enabled: false },
       tooltip: {
         shared: true,
         y: [
-          { formatter: (v: number) => v },
-          { formatter: (v: number) => '$' + v.toLocaleString() }
+          { formatter: (v: number) => String(v) },
+          { formatter: (v: number) => formatCurrencyAmount(v, code) }
         ]
       }
     };

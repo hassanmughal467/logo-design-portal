@@ -13,11 +13,11 @@ public class User : BaseEntity
     public DateTime? RefreshTokenExpiryTime { get; set; }
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetTokenExpiryTime { get; set; }
-    
+
     // Account lockout fields
     public int FailedLoginAttempts { get; set; } = 0;
     public DateTime? LockoutEnd { get; set; }
-    
+
     // Additional user information fields
     public string? SecondaryEmail { get; set; }
     public string? InvoiceEmail { get; set; }

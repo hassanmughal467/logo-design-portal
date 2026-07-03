@@ -7,6 +7,7 @@ export type OrderStatusSeverity = 'success' | 'info' | 'warning' | 'danger' | 's
 const ORDER_STATUS_LABELS: Record<string, string> = {
   [OrderStatus.WaitingForAdminApproval]: 'Awaiting Admin',
   [OrderStatus.PriceApprovalPending]: 'Price Approval Pending',
+  [OrderStatus.ApprovedUnassigned]: 'Approved · Unassigned',
   [OrderStatus.InProgress]: 'In Progress',
   [OrderStatus.PreviewDelivered]: 'Preview Delivered',
   [OrderStatus.RevisionRequested]: 'Revision Requested',
@@ -19,6 +20,7 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
   // Legacy / spaced forms from APIs or regex formatters
   'Waiting For Admin Approval': 'Awaiting Admin',
   'Price Approval Pending': 'Price Approval Pending',
+  'Approved Unassigned': 'Approved · Unassigned',
   'Final Approved': 'Approved',
   Pending: 'Pending',
   Paid: 'Paid',
@@ -31,6 +33,8 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
 const ORDER_STATUS_SEVERITY: Record<string, OrderStatusSeverity> = {
   [OrderStatus.WaitingForAdminApproval]: 'warning',
   [OrderStatus.PriceApprovalPending]: 'info',
+  // Approved-but-unassigned must read as a *danger* signal so it pops in the grid badge.
+  [OrderStatus.ApprovedUnassigned]: 'danger',
   [OrderStatus.InProgress]: 'info',
   [OrderStatus.PreviewDelivered]: 'success',
   [OrderStatus.RevisionRequested]: 'warning',
@@ -50,6 +54,8 @@ const ORDER_STATUS_SEVERITY: Record<string, OrderStatusSeverity> = {
 const ORDER_STATUS_CHART_COLOR: Record<string, string> = {
   [OrderStatus.WaitingForAdminApproval]: '#f97316',
   [OrderStatus.PriceApprovalPending]: '#eab308',
+  // Distinct red-orange chart color marks unassigned orders for at-a-glance triage.
+  [OrderStatus.ApprovedUnassigned]: '#dc2626',
   [OrderStatus.InProgress]: '#0d47a1',
   [OrderStatus.PreviewDelivered]: '#8b5cf6',
   [OrderStatus.RevisionRequested]: '#6366f1',
@@ -71,6 +77,7 @@ const ORDER_STATUS_CHART_COLOR: Record<string, string> = {
 export const ORDER_STATUS_DISPLAY_ORDER: readonly OrderStatus[] = [
   OrderStatus.WaitingForAdminApproval,
   OrderStatus.PriceApprovalPending,
+  OrderStatus.ApprovedUnassigned,
   OrderStatus.InProgress,
   OrderStatus.PreviewDelivered,
   OrderStatus.RevisionRequested,

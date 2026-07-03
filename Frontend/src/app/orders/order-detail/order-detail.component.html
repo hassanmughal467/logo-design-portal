@@ -43,7 +43,7 @@
       <span class="action-label">Preview uploaded by designer:</span>
       <p-button label="View Preview" icon="pi pi-eye" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="openPreviewTab()"></p-button>
       <p-button label="Forward to Client" icon="pi pi-send" severity="success" [styleClass]="'p-button-sm'" (onClick)="openSendFilesDialog()"></p-button>
-      <p-button label="Request Revision" icon="pi pi-refresh" severity="warn" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="openRevisionDialog()"></p-button>
+      <p-button label="Request Revision" icon="pi pi-refresh" severity="warning" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="openRevisionDialog()"></p-button>
       <p-button label="Reject Preview" icon="pi pi-times" severity="danger" [styleClass]="'p-button-outlined p-button-sm'" (onClick)="openRevisionDialog()"></p-button>
     </div>
     <div class="action-group">
@@ -72,7 +72,7 @@
         *ngIf="canApproveOrder() && !isOrderLocked(order.status)"
         label="Approve Order" 
         icon="pi pi-check" 
-        (onClick)="approveOrder()"
+        (onClick)="openApproveDialog()"
         [styleClass]="'p-button-outlined'"
         [attr.data-testid]="'order-approve'"
       ></p-button>
@@ -329,7 +329,7 @@
             [label]="order.allowUploads ? 'Disable Uploads' : 'Enable Uploads'" 
             [icon]="order.allowUploads ? 'pi pi-lock' : 'pi pi-unlock'" 
             (onClick)="toggleUploads()"
-            [styleClass]="order.allowUploads ? 'p-button-warn' : 'p-button-success'"
+            [severity]="order.allowUploads ? 'warning' : 'success'"
           ></p-button>
           <p-button 
             *ngIf="canApproveLogo() && !isOrderLocked(order.status)"
@@ -343,11 +343,11 @@
             label="Request Revision" 
             icon="pi pi-refresh" 
             (onClick)="openRevisionDialog()"
-            [styleClass]="'p-button-warn'"
+            severity="warning"
           ></p-button>
-          <p-button 
+           <p-button 
             *ngIf="!isOrderLocked(order.status)"
-            label="Add Comment" 
+            label="Add Comment"
             icon="pi pi-comment" 
             (onClick)="openCommentDialog()"
           ></p-button>
@@ -598,7 +598,7 @@
             </div>
             <div class="revision-attachments" *ngIf="revision.files?.length">
               <div class="revision-attachments-header">
-                <p-tag value="Revision" severity="warn" [rounded]="true"></p-tag>
+                <p-tag value="Revision" severity="warning" [rounded]="true"></p-tag>
                 <span class="revision-attachments-title">Client reference files ({{ revision.files?.length ?? 0 }})</span>
               </div>
               <ul class="revision-file-list">
@@ -655,7 +655,7 @@
           Client comments are not shown here. Use internal comments and guidance from Admin/SuperAdmin; they speak with the client on your behalf.
         </p>
         <p class="tab-intro" *ngIf="isAdmin || isSuperAdmin">
-          Clients do not see designer notes until you approve visibility. Post general (non-internal) comments to share something with both designer and client when appropriate.
+          Clients do not see designer notes until you approve visibility. Uncheck <strong>Internal</strong> to message the client only (designers will not see it). Keep internal checked for staff-only notes visible to designers.
         </p>
         
         <div class="comment-list">
@@ -671,6 +671,11 @@
                   *ngIf="comment.isInternal && comment.commentType !== 'PriceNegotiationDesigner'"
                   value="Internal" 
                   severity="info"
+                ></p-tag>
+                <p-tag
+                  *ngIf="comment.commentType === 'AdminRelay'"
+                  value="To client"
+                  severity="success"
                 ></p-tag>
                 <p-button 
                   *ngIf="(isAdmin || isSuperAdmin) && comment.createdByRole === 'Designer' && !comment.visibleToClient && comment.commentType !== 'PriceNegotiationClient' && comment.commentType !== 'PriceNegotiationDesigner' && !isOrderLocked(order.status)"
@@ -880,7 +885,7 @@
 >
   <div class="image-preview-container">
     <div class="image-preview-revision-badge" *ngIf="imagePreviewKind === 'revision'">
-      <p-tag value="Revision" severity="warn" [rounded]="true"></p-tag>
+      <p-tag value="Revision" severity="warning" [rounded]="true"></p-tag>
       <span>Client reference — not a delivered preview file</span>
     </div>
     <div class="image-preview-toolbar" *ngIf="imagePreviewGalleryLength > 1">
@@ -984,6 +989,107 @@
       (onClick)="showDesignerPriceApprovalDialog = false"
       [styleClass]="'p-button-text'"
     ></p-button>
+  </ng-template>
+</p-dialog>
+
+<!--
+  ═══ APPROVE ORDER DIALOG (Unassigned Orders Alert System) ═══
+  Admins choose between:
+    • Approve Only           → status becomes ApprovedUnassigned (surfaced on dashboard).
+    • Approve & Assign       → status becomes InProgress in a single round-trip.
+  Notes are optional and forwarded to the backend's order history log.
+-->
+<p-dialog
+  [(visible)]="showApproveDialog"
+  header="Approve Order"
+  [modal]="true"
+  [style]="{width: '560px'}"
+  [closable]="!isSubmittingApproval"
+  [draggable]="false"
+  [resizable]="false"
+  styleClass="approve-order-dialog">
+  <div class="dialog-content approve-order-dialog__body">
+    <p class="approve-order-dialog__intro">
+      Approve this order to move it out of the pending queue. You can assign a designer now,
+      or approve it and assign someone later.
+    </p>
+
+    <div class="approve-choice-grid">
+      <button type="button"
+              class="approve-choice"
+              [class.approve-choice--selected]="approveDialogChoice === 'approveOnly'"
+              (click)="approveDialogChoice = 'approveOnly'"
+              [attr.data-testid]="'approve-choice-only'">
+        <div class="approve-choice__icon"><i class="pi pi-check-circle"></i></div>
+        <div class="approve-choice__title">Approve Only</div>
+        <div class="approve-choice__sub">
+          Mark as approved without a designer. Order will appear in the
+          <strong>Unassigned</strong> queue until assigned.
+        </div>
+      </button>
+
+      <button type="button"
+              class="approve-choice"
+              [class.approve-choice--selected]="approveDialogChoice === 'approveAndAssign'"
+              (click)="approveDialogChoice = 'approveAndAssign'"
+              [attr.data-testid]="'approve-choice-assign'">
+        <div class="approve-choice__icon approve-choice__icon--accent"><i class="pi pi-user-plus"></i></div>
+        <div class="approve-choice__title">Approve &amp; Assign Designer</div>
+        <div class="approve-choice__sub">
+          Approve and route the order to a designer immediately. Status becomes <strong>In Progress</strong>.
+        </div>
+      </button>
+    </div>
+
+    <div class="form-group" *ngIf="approveDialogChoice === 'approveAndAssign'">
+      <label for="approve-designer-select">Designer <span class="required">*</span></label>
+      <p-dropdown
+        id="approve-designer-select"
+        [(ngModel)]="approveDialogDesignerId"
+        [options]="availableDesigners"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="Select a designer"
+        [filter]="true"
+        filterPlaceholder="Search designer..."
+        [showClear]="true"
+        appendTo="body"
+        [scrollHeight]="'280px'"
+        styleClass="w-full"
+        [attr.data-testid]="'approve-designer-dropdown'">
+      </p-dropdown>
+      <small class="p-help" *ngIf="availableDesigners.length === 0">
+        No designers available. Create a designer account, or use "Approve Only".
+      </small>
+    </div>
+
+    <div class="form-group">
+      <label for="approve-notes">Internal note <span class="optional">(optional)</span></label>
+      <textarea pInputTextarea
+                id="approve-notes"
+                rows="2"
+                [(ngModel)]="approveDialogNotes"
+                placeholder="Optional context for the order history…"
+                class="w-full"></textarea>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button
+      label="Cancel"
+      icon="pi pi-times"
+      (onClick)="showApproveDialog = false"
+      [disabled]="isSubmittingApproval"
+      [styleClass]="'p-button-outlined p-button-secondary modal-footer-btn'">
+    </p-button>
+    <p-button
+      [label]="approveDialogChoice === 'approveAndAssign' ? 'Approve & Assign' : 'Approve Order'"
+      [icon]="approveDialogChoice === 'approveAndAssign' ? 'pi pi-user-plus' : 'pi pi-check'"
+      (onClick)="submitApproveOrder()"
+      [loading]="isSubmittingApproval"
+      [disabled]="isSubmittingApproval || (approveDialogChoice === 'approveAndAssign' && !approveDialogDesignerId)"
+      [styleClass]="'p-button-success modal-footer-btn'"
+      [attr.data-testid]="'approve-submit'">
+    </p-button>
   </ng-template>
 </p-dialog>
 

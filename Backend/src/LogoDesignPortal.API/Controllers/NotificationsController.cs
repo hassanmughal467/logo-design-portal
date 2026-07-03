@@ -71,7 +71,7 @@ public class NotificationsController : ControllerBase
     {
         var userId = User.GetUserIdOrThrow();
         var notification = await _notificationService.GetNotificationByIdAsync(id, userId);
-        
+
         if (notification == null)
         {
             return NotFound(new { error = "Notification not found." });
@@ -87,7 +87,7 @@ public class NotificationsController : ControllerBase
     {
         var userId = User.GetUserIdOrThrow();
         var result = await _notificationService.MarkNotificationAsReadAsync(id, userId);
-        
+
         if (!result)
         {
             return NotFound(new { error = "Notification not found." });

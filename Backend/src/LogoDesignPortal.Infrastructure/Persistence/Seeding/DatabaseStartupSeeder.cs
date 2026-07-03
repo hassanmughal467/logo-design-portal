@@ -58,7 +58,10 @@ public static class DatabaseStartupSeeder
                     logger.LogInformation("Restored soft-deleted role {RoleName} (matched by name).", name);
                 }
                 else
+                {
                     logger.LogWarning("Role {RoleName} exists with non-standard Id {RoleId}. Skipping insert by reserved id.", name, byName.Id);
+                }
+
                 continue;
             }
 
@@ -137,13 +140,17 @@ public static class DatabaseStartupSeeder
             foreach (var name in names)
             {
                 if (!permissionIds.TryGetValue(name, out var permissionId))
+                {
                     continue;
+                }
 
                 var exists = await context.RolePermissions
                     .AnyAsync(rp => rp.RoleId == roleId && rp.PermissionId == permissionId && !rp.IsDeleted, ct)
                     .ConfigureAwait(false);
                 if (exists)
+                {
                     continue;
+                }
 
                 context.RolePermissions.Add(new RolePermission
                 {

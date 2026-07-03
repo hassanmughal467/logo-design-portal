@@ -9,6 +9,8 @@ import { Subject } from 'rxjs';
 import { takeUntil, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { Order, OrderStatus } from '@shared/models/order.model';
+import { DEFAULT_CLIENT_CURRENCY } from '@core/constants/currency-options';
+import { compactCurrencyLabel, formatCurrencyAmount } from '@core/utils/currency-format';
 
 export type DateRangePreset = 'all_time' | 'this_month' | 'last_month' | 'last_3_months' | 'last_6_months' | 'this_year' | 'custom';
 
@@ -25,6 +27,7 @@ export interface DateRangeBounds {
 export class FinancialComponent implements OnInit, OnDestroy {
   isAdmin = false;
   isClient = false;
+  clientCurrencyCode = DEFAULT_CLIENT_CURRENCY;
   private destroy$ = new Subject<void>();
 
   // Date range filter (filtered by ClientId + Date Range)
@@ -117,6 +120,9 @@ export class FinancialComponent implements OnInit, OnDestroy {
     }
 
     // Client/Designer: use only client-scoped data from dashboard (filtered by ClientId for clients)
+    if (isClient) {
+      this.loadClientCurrency();
+    }
     this.initChartOptions();
 
     this.dashboardService.invalidateDashboardCache();
@@ -355,13 +361,32 @@ export class FinancialComponent implements OnInit, OnDestroy {
     this.buildInvoiceStatusChart();
   }
 
+  private loadClientCurrency(): void {
+    const userId = this.authService.getCurrentUser()?.id;
+    if (!userId) {
+      return;
+    }
+    this.apiService.get<{ clientProfile?: { currencyCode?: string } }>(`users/${userId}`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (profileUser) => {
+          this.clientCurrencyCode = profileUser?.clientProfile?.currencyCode || DEFAULT_CLIENT_CURRENCY;
+          this.initChartOptions();
+        },
+        error: () => {
+          this.clientCurrencyCode = DEFAULT_CLIENT_CURRENCY;
+        }
+      });
+  }
+
   private initChartOptions(): void {
+    const tick = (v: number) => compactCurrencyLabel(v, this.clientCurrencyCode);
     this.spendingChartOptions = {
       responsive: true,
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: (v: number) => '$' + v } }
+        y: { beginAtZero: true, ticks: { callback: tick } }
       }
     };
     this.packageChartOptions = {
@@ -369,7 +394,7 @@ export class FinancialComponent implements OnInit, OnDestroy {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: (v: number) => '$' + v } }
+        y: { beginAtZero: true, ticks: { callback: tick } }
       }
     };
     this.invoiceStatusChartOptions = {
@@ -493,12 +518,8 @@ export class FinancialComponent implements OnInit, OnDestroy {
     };
   }
 
-  formatCurrency(value: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(value);
+  formatCurrency(value: number, currencyCode?: string | null): string {
+    return formatCurrencyAmount(value, currencyCode ?? this.clientCurrencyCode);
   }
 
   getUnpaidInvoices(): any[] {

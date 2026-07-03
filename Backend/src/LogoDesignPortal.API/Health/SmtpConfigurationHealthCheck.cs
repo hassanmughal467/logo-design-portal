@@ -19,12 +19,14 @@ public sealed class SmtpConfigurationHealthCheck : IHealthCheck
         var from = _configuration["Email:FromEmail"];
 
         if (string.IsNullOrWhiteSpace(server))
+        {
             return Task.FromResult(HealthCheckResult.Degraded("Email:SmtpServer is not configured."));
+        }
 
         if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(from))
+        {
             return Task.FromResult(HealthCheckResult.Degraded("SMTP credentials or FromEmail are not configured; password reset emails may be disabled."));
-
-
+        }
 
         return Task.FromResult(HealthCheckResult.Healthy("SMTP is configured."));
     }

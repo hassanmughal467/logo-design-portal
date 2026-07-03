@@ -53,17 +53,24 @@ public class SettingsController : ControllerBase
     public async Task<IActionResult> UploadLogo([FromForm] IFormFile logo)
     {
         if (logo == null || logo.Length == 0)
+        {
             return BadRequest(new { error = "No logo file uploaded." });
+        }
 
         if (logo.Length > UploadLimits.MaxSingleFileBytes)
+        {
             return BadRequest(new { error = "Logo file exceeds maximum allowed size." });
+        }
 
         try
         {
             UploadSecurityHelper.ValidateUploadFileName(logo.FileName);
             var ext = UploadSecurityHelper.GetEffectiveExtension(logo.FileName);
             if (ext is not ".png" and not ".jpg" and not ".jpeg" and not ".webp" and not ".svg")
+            {
                 return BadRequest(new { error = "Logo must be PNG, JPEG, WebP, or SVG." });
+            }
+
             UploadSecurityHelper.ValidateDeclaredContentType(ext, logo.ContentType);
             using var stream = logo.OpenReadStream();
             UploadSecurityHelper.ValidateMagicBytes(ext, stream);
@@ -77,7 +84,7 @@ public class SettingsController : ControllerBase
         // For now, save the logo URL/path as a setting
         var userId = User.GetUserIdOrThrow();
         var logoUrl = $"/uploads/logo/{logo.FileName}"; // Placeholder
-        
+
         var data = new Dictionary<string, object> { { "logoUrl", logoUrl } };
         await _settingsService.UpdateSettingsAsync("Brand", data, userId);
 
@@ -98,9 +105,9 @@ public class SettingsController : ControllerBase
     public async Task<IActionResult> UpdatePaymentMethods([FromBody] UpdatePaymentMethodsRequestDto request)
     {
         var userId = User.GetUserIdOrThrow();
-        var data = new Dictionary<string, object> 
-        { 
-            { "paymentMethods", System.Text.Json.JsonSerializer.Serialize(request.PaymentMethods) } 
+        var data = new Dictionary<string, object>
+        {
+            { "paymentMethods", System.Text.Json.JsonSerializer.Serialize(request.PaymentMethods) }
         };
         await _settingsService.UpdateSettingsAsync("PaymentMethods", data, userId);
         return Ok(new { message = "Payment methods updated successfully." });

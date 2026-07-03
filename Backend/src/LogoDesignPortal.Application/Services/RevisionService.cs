@@ -1,4 +1,5 @@
 using AutoMapper;
+using LogoDesignPortal.Application.Configuration;
 using LogoDesignPortal.Application.Constants;
 using LogoDesignPortal.Application.DTOs.Invoices;
 using LogoDesignPortal.Application.DTOs.Orders;
@@ -7,6 +8,7 @@ using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
+using LogoDesignPortal.Application.Interfaces.Storage;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using System.IO;
@@ -14,6 +16,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace LogoDesignPortal.Application.Services;
 
@@ -25,9 +28,8 @@ public class RevisionService : IRevisionService
     private readonly INotificationService _notificationService;
     private readonly IRealtimeEntityUpdateSender _entityUpdateSender;
     private readonly IInvoiceService _invoiceService;
-    private readonly string _fileStoragePath;
-    private readonly string _temporaryStoragePath;
-    private readonly string _permanentStoragePath;
+    private readonly IFileStorageService _fileStorage;
+    private readonly string _localBasePath;
 
     private static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
     private static readonly string[] VectorExtensions = { ".svg", ".pdf", ".ai", ".eps", ".psd" };
@@ -39,7 +41,9 @@ public class RevisionService : IRevisionService
         ILogger<RevisionService> logger,
         INotificationService notificationService,
         IRealtimeEntityUpdateSender entityUpdateSender,
-        IInvoiceService invoiceService)
+        IInvoiceService invoiceService,
+        IFileStorageService fileStorage,
+        IOptions<StorageOptions> storageOptions)
     {
         _context = context;
         _mapper = mapper;
@@ -47,29 +51,15 @@ public class RevisionService : IRevisionService
         _notificationService = notificationService;
         _entityUpdateSender = entityUpdateSender;
         _invoiceService = invoiceService;
-        _fileStoragePath = configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
-        _temporaryStoragePath = Path.Combine(_fileStoragePath, "Temporary");
-        _permanentStoragePath = Path.Combine(_fileStoragePath, "Permanent");
-        
-        EnsureDirectoriesExist();
+        _fileStorage = fileStorage;
+        var options = storageOptions?.Value ?? new StorageOptions();
+        _localBasePath = !string.IsNullOrWhiteSpace(options.Local.BasePath)
+            ? options.Local.BasePath
+            : configuration["FileStorage:Path"] ?? Path.Combine(Directory.GetCurrentDirectory(), "Files");
     }
 
-    private void EnsureDirectoriesExist()
-    {
-        try
-        {
-            if (!Directory.Exists(_fileStoragePath))
-                Directory.CreateDirectory(_fileStoragePath);
-            if (!Directory.Exists(_temporaryStoragePath))
-                Directory.CreateDirectory(_temporaryStoragePath);
-            if (!Directory.Exists(_permanentStoragePath))
-                Directory.CreateDirectory(_permanentStoragePath);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _logger.LogWarning(ex, "Cannot create file storage directories at {Path}. Revision uploads will fail until write permissions are granted to the IIS App Pool identity.", _fileStoragePath);
-        }
-    }
+    private string ResolveStorageKey(string storedPathOrKey) =>
+        StorageKeyHelper.ResolveKey(storedPathOrKey, _localBasePath);
 
     private static void ValidateRevisionFile(IFormFile file)
     {
@@ -77,9 +67,15 @@ public class RevisionService : IRevisionService
         var ext = UploadSecurityHelper.GetEffectiveExtension(file.FileName);
         var allowed = ImageExtensions.Concat(VectorExtensions).Concat(EmbroiderExtensions).Distinct().ToArray();
         if (!allowed.Contains(ext))
+        {
             throw new InvalidOperationException($"File type '{ext}' is not allowed for file '{file.FileName}'.");
+        }
+
         if (file.Length > UploadLimits.MaxMultipartBytes)
+        {
             throw new InvalidOperationException($"File '{file.FileName}' exceeds maximum allowed size (500MB).");
+        }
+
         UploadSecurityHelper.ValidateDeclaredContentType(ext, file.ContentType);
         using var stream = file.OpenReadStream();
         UploadSecurityHelper.ValidateMagicBytes(ext, stream);
@@ -88,23 +84,31 @@ public class RevisionService : IRevisionService
     public async Task<bool> CanRequestRevisionAsync(Guid orderId, Guid userId, string userRole)
     {
         if (userRole != "Client")
+        {
             return false;
+        }
 
         var order = await _context.LogoOrders
             .Include(o => o.Client)
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null || order.Client.UserId != userId)
+        {
             return false;
+        }
 
         // Allow revision only when status is PreviewDelivered
         if (order.Status != OrderStatus.PreviewDelivered)
+        {
             return false;
+        }
 
         // Check revision limit (unless admin approved extra revisions)
         var limit = order.RevisionLimit ?? RevisionLimitHelper.GetRevisionLimitFromPrice(order.Price);
         if (!RevisionLimitHelper.CanRequestRevision(order.RevisionCount, limit, order.AllowExtraRevisions))
+        {
             return false;
+        }
 
         return true;
     }
@@ -116,11 +120,15 @@ public class RevisionService : IRevisionService
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
+        {
             return false;
+        }
 
         // Allow approval when status is PreviewDelivered
         if (order.Status != OrderStatus.PreviewDelivered)
+        {
             return false;
+        }
 
         // Client can approve their own orders
         if (userRole == "Client")
@@ -144,19 +152,28 @@ public class RevisionService : IRevisionService
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
+        {
             throw new InvalidOperationException("Order not found.");
+        }
 
         if (OrderLockingHelper.IsOrderLocked(order.Status))
+        {
             throw new InvalidOperationException(OrderLockingHelper.LockedOrderMessage);
+        }
 
         if (order.Client.UserId != requestedBy)
+        {
             throw new ForbiddenAccessException("You don't have permission to request revision for this order.");
+        }
 
         if (!await CanRequestRevisionAsync(orderId, requestedBy, "Client"))
         {
             var limit = order.RevisionLimit ?? RevisionLimitHelper.GetRevisionLimitFromPrice(order.Price);
             if (limit != null && order.RevisionCount >= limit.Value && !order.AllowExtraRevisions)
+            {
                 throw new InvalidOperationException($"Revision limit ({limit}) exceeded for this order. Please contact support if you need additional revisions.");
+            }
+
             throw new InvalidOperationException("Revision can only be requested when order status is PreviewDelivered.");
         }
 
@@ -204,28 +221,35 @@ public class RevisionService : IRevisionService
             foreach (var file in request.Files)
             {
                 if (file == null || file.Length == 0)
+                {
                     continue;
+                }
+
                 revisionFilesTotal += file.Length;
             }
 
             if (revisionFilesTotal > UploadLimits.MaxMultipartBytes)
+            {
                 throw new InvalidOperationException("Combined file size cannot exceed 500MB.");
+            }
 
             foreach (var file in request.Files)
             {
                 if (file == null || file.Length == 0)
+                {
                     continue;
+                }
 
                 ValidateRevisionFile(file);
 
                 var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
 
                 var fileName = $"{Guid.NewGuid()}{fileExtension}";
-                var filePath = Path.Combine(_temporaryStoragePath, fileName);
+                var storageKey = StorageKeyHelper.CombineKey("Temporary", fileName);
 
-                using (var stream = new FileStream(filePath, FileMode.Create))
+                await using (var uploadStream = file.OpenReadStream())
                 {
-                    await file.CopyToAsync(stream);
+                    await _fileStorage.UploadAsync(uploadStream, storageKey, file.ContentType);
                 }
 
                 var revisionFile = new RevisionFile
@@ -234,7 +258,7 @@ public class RevisionService : IRevisionService
                     RevisionId = newRevision.Id,
                     FileName = fileName,
                     OriginalFileName = file.FileName,
-                    FilePath = filePath,
+                    FilePath = storageKey,
                     ContentType = file.ContentType,
                     FileSize = file.Length,
                     FileType = RevisionFileType.ReferenceImage,
@@ -266,7 +290,11 @@ public class RevisionService : IRevisionService
                 .Where(u => u.Id == requestedBy)
                 .Select(u => $"{u.FirstName} {u.LastName}".Trim())
                 .FirstOrDefaultAsync() ?? "Client";
-            if (string.IsNullOrEmpty(clientName)) clientName = "Client";
+            if (string.IsNullOrEmpty(clientName))
+            {
+                clientName = "Client";
+            }
+
             var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
             var attachmentCount = request.Files?.Length ?? 0;
             var attachmentPart = attachmentCount > 0 ? $" [Revision] Includes {attachmentCount} reference file(s)." : string.Empty;
@@ -304,7 +332,9 @@ public class RevisionService : IRevisionService
                     .Select(d => d.UserId)
                     .FirstOrDefaultAsync();
                 if (designerUserId != Guid.Empty)
+                {
                     recipientIds.Add(designerUserId);
+                }
             }
             await _entityUpdateSender.SendPreviewRejectedAsync(orderId, clientName, recipientIds.Distinct());
         }
@@ -321,10 +351,21 @@ public class RevisionService : IRevisionService
         var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
         var superAdminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "SuperAdmin");
         if (adminRole == null && superAdminRole == null)
+        {
             return new List<Guid>();
+        }
+
         var roleIds = new List<Guid>();
-        if (adminRole != null) roleIds.Add(adminRole.Id);
-        if (superAdminRole != null) roleIds.Add(superAdminRole.Id);
+        if (adminRole != null)
+        {
+            roleIds.Add(adminRole.Id);
+        }
+
+        if (superAdminRole != null)
+        {
+            roleIds.Add(superAdminRole.Id);
+        }
+
         return await _context.Users
             .Where(u => !u.IsDeleted && roleIds.Contains(u.RoleId))
             .Select(u => u.Id)
@@ -338,23 +379,31 @@ public class RevisionService : IRevisionService
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
+        {
             return null;
+        }
 
         if (userRole == "Client")
         {
             if (order.Client?.UserId != userId)
+            {
                 throw new ForbiddenAccessException("You don't have access to this order's revisions.");
+            }
         }
         else if (userRole == "Designer")
         {
             if (order.DesignerId == null)
+            {
                 throw new ForbiddenAccessException("You don't have access to this order's revisions.");
+            }
 
             var designer = await _context.DesignerProfiles
                 .FirstOrDefaultAsync(d => d.UserId == userId && !d.IsDeleted);
 
             if (designer == null || order.DesignerId != designer.Id)
+            {
                 throw new ForbiddenAccessException("You don't have access to this order's revisions.");
+            }
         }
         else if (userRole != "Admin" && userRole != "SuperAdmin")
         {
@@ -368,7 +417,9 @@ public class RevisionService : IRevisionService
             .FirstOrDefaultAsync();
 
         if (latestRevision == null)
+        {
             return null;
+        }
 
         return await GetRevisionResponseAsync(latestRevision.Id);
     }
@@ -381,7 +432,9 @@ public class RevisionService : IRevisionService
             .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsDeleted);
 
         if (rf?.Revision == null)
+        {
             throw new FileNotFoundException("Revision file not found.");
+        }
 
         var order = await _context.LogoOrders
             .Include(o => o.Client)
@@ -389,34 +442,48 @@ public class RevisionService : IRevisionService
             .FirstOrDefaultAsync(o => o.Id == rf.Revision.OrderId && !o.IsDeleted);
 
         if (order == null)
+        {
             throw new FileNotFoundException("Order not found.");
+        }
 
         if (userRole == "Client")
         {
             if (order.Client?.UserId != userId)
+            {
                 throw new ForbiddenAccessException("You don't have access to this file.");
+            }
         }
         else if (userRole == "Designer")
         {
             if (order.DesignerId == null)
+            {
                 throw new ForbiddenAccessException("You don't have access to this file.");
+            }
 
             var designer = await _context.DesignerProfiles
                 .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.UserId == userId && !d.IsDeleted);
 
             if (designer == null || order.DesignerId != designer.Id)
+            {
                 throw new ForbiddenAccessException("You don't have access to this file.");
+            }
         }
         else if (userRole != "Admin" && userRole != "SuperAdmin")
         {
             throw new ForbiddenAccessException("You don't have access to this file.");
         }
 
-        if (!System.IO.File.Exists(rf.FilePath))
+        var storageKey = ResolveStorageKey(rf.FilePath);
+        if (!await _fileStorage.ExistsAsync(storageKey))
+        {
             throw new FileNotFoundException("File is no longer available on disk.");
+        }
 
-        var content = await System.IO.File.ReadAllBytesAsync(rf.FilePath);
+        await using var downloadStream = await _fileStorage.DownloadAsync(storageKey);
+        using var memoryStream = new MemoryStream();
+        await downloadStream.CopyToAsync(memoryStream);
+        var content = memoryStream.ToArray();
         var contentType = string.IsNullOrWhiteSpace(rf.ContentType) ? "application/octet-stream" : rf.ContentType;
         return (content, rf.OriginalFileName, contentType);
     }
@@ -430,7 +497,9 @@ public class RevisionService : IRevisionService
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
+        {
             throw new InvalidOperationException("Order not found.");
+        }
 
         // Get the user to check their role
         var user = await _context.Users
@@ -443,7 +512,9 @@ public class RevisionService : IRevisionService
         if (userRole == "Client")
         {
             if (order.Client.UserId != approvedBy)
+            {
                 throw new ForbiddenAccessException("You don't have permission to approve this order.");
+            }
         }
         else if (userRole != "Admin" && userRole != "SuperAdmin")
         {
@@ -451,7 +522,9 @@ public class RevisionService : IRevisionService
         }
 
         if (!await CanApproveLogoAsync(orderId, approvedBy, userRole))
+        {
             throw new InvalidOperationException("Logo can only be approved when order status is PreviewDelivered.");
+        }
 
         // When Preview files are converted to Final: if pricing exists but not yet approved, trigger admin approval flow.
         // Do NOT block approval or completion; payout eligibility waits until price approval.
@@ -482,19 +555,10 @@ public class RevisionService : IRevisionService
 
         foreach (var file in filesToConvert)
         {
-            // Move from Temporary/ to Permanent/
-            var permanentPath = Path.Combine(_permanentStoragePath, file.FileName);
-            if (System.IO.File.Exists(file.FilePath))
-            {
-                var targetDir = Path.GetDirectoryName(permanentPath);
-                if (!Directory.Exists(targetDir))
-                {
-                    Directory.CreateDirectory(targetDir!);
-                }
-
-                System.IO.File.Move(file.FilePath, permanentPath, overwrite: true);
-                file.FilePath = permanentPath;
-            }
+            var sourceKey = ResolveStorageKey(file.FilePath);
+            var permanentKey = StorageKeyHelper.CombineKey("Permanent", file.FileName);
+            await FileStorageOperations.MoveAsync(_fileStorage, sourceKey, permanentKey, file.ContentType);
+            file.FilePath = permanentKey;
 
             // Update file to Final type
             file.FileType = FileType.Final;
@@ -515,8 +579,8 @@ public class RevisionService : IRevisionService
                 FileId = file.Id,
                 FileName = file.FileName,
                 OriginalFileName = file.OriginalFileName,
-                FilePath = permanentPath,
-                PreviewImagePath = permanentPath,
+                FilePath = permanentKey,
+                PreviewImagePath = permanentKey,
                 ContentType = file.ContentType,
                 Format = Path.GetExtension(file.OriginalFileName).TrimStart('.'),
                 ApprovedAt = DateTime.UtcNow,
@@ -530,7 +594,10 @@ public class RevisionService : IRevisionService
         // When CLIENT approves: set ClientApproved so Admin can mark Completed. Admin/SuperAdmin get notification only (not client portal).
         // When ADMIN/SuperAdmin approves: set Completed directly, notify Client and Designer.
         if (order.Client == null)
+        {
             throw new InvalidOperationException("Order has no associated client.");
+        }
+
         var isClientApproval = userRole == "Client" && order.Client.UserId == approvedBy;
         OrderStatusTransitionHelper.Apply(order, isClientApproval ? OrderStatus.ClientApproved : OrderStatus.Completed);
         order.AllowUploads = false;
@@ -561,7 +628,11 @@ public class RevisionService : IRevisionService
         {
             // Client approved final logo: bell notification for Admin/SuperAdmin only (admin marks Completed next).
             var clientName = $"{order.Client.User?.FirstName} {order.Client.User?.LastName}".Trim();
-            if (string.IsNullOrEmpty(clientName)) clientName = "Client";
+            if (string.IsNullOrEmpty(clientName))
+            {
+                clientName = "Client";
+            }
+
             var orderNumber = NotificationFormatHelper.GetOrderNumber(orderId);
             var approveTitle = "Client Approved Logo";
             var approveMessage = $"{clientName} approved the logo for order (#{orderNumber}). Please mark as completed.";
@@ -585,7 +656,9 @@ public class RevisionService : IRevisionService
                     .Select(d => d.UserId)
                     .FirstOrDefaultAsync();
                 if (designerUserId != Guid.Empty)
+                {
                     recipients.Add(designerUserId);
+                }
             }
             var distinctRecipients = recipients.Distinct().ToList();
             await _entityUpdateSender.SendPreviewApprovedAsync(orderId, clientName, OrderStatus.ClientApproved.ToString(), distinctRecipients);
@@ -632,7 +705,10 @@ public class RevisionService : IRevisionService
                     .Where(d => d.Id == order.DesignerId.Value && !d.IsDeleted)
                     .Select(d => d.UserId)
                     .FirstOrDefaultAsync();
-                if (designerUserId != Guid.Empty) recipientIds.Add(designerUserId);
+                if (designerUserId != Guid.Empty)
+                {
+                    recipientIds.Add(designerUserId);
+                }
             }
             await _entityUpdateSender.SendOrderStatusChangedAsync(orderId, OrderStatus.Completed.ToString(), approvedBy, recipientIds.Distinct());
 
@@ -681,11 +757,12 @@ public class RevisionService : IRevisionService
 
         foreach (var file in nonApprovedPreviews)
         {
-            if (System.IO.File.Exists(file.FilePath))
+            var storageKey = ResolveStorageKey(file.FilePath);
+            if (await _fileStorage.ExistsAsync(storageKey))
             {
                 try
                 {
-                    System.IO.File.Delete(file.FilePath);
+                    await _fileStorage.DeleteAsync(storageKey);
                 }
                 catch (Exception ex)
                 {
@@ -705,11 +782,12 @@ public class RevisionService : IRevisionService
 
         foreach (var revisionFile in revisionFiles)
         {
-            if (System.IO.File.Exists(revisionFile.FilePath))
+            var storageKey = ResolveStorageKey(revisionFile.FilePath);
+            if (await _fileStorage.ExistsAsync(storageKey))
             {
                 try
                 {
-                    System.IO.File.Delete(revisionFile.FilePath);
+                    await _fileStorage.DeleteAsync(storageKey);
                 }
                 catch (Exception ex)
                 {
@@ -802,7 +880,9 @@ public class RevisionService : IRevisionService
             .FirstOrDefaultAsync(r => r.Id == revisionId);
 
         if (revision == null)
+        {
             throw new InvalidOperationException("Revision not found.");
+        }
 
         var requestedByUser = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == revision.RequestedBy);
@@ -813,8 +893,8 @@ public class RevisionService : IRevisionService
             OrderId = revision.OrderId,
             Instructions = revision.Instructions,
             RequestedBy = revision.RequestedBy,
-            RequestedByName = requestedByUser != null 
-                ? $"{requestedByUser.FirstName} {requestedByUser.LastName}" 
+            RequestedByName = requestedByUser != null
+                ? $"{requestedByUser.FirstName} {requestedByUser.LastName}"
                 : string.Empty,
             IsResolved = revision.IsResolved,
             ResolvedAt = revision.ResolvedAt,

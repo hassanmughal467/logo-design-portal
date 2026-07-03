@@ -75,7 +75,7 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
     public virtual async Task<int> CountAsync(Expression<Func<T, bool>>? predicate = null, CancellationToken cancellationToken = default)
     {
         var query = _dbSet.AsNoTracking().Where(e => !e.IsDeleted);
-        
+
         if (predicate != null)
         {
             query = query.Where(predicate);

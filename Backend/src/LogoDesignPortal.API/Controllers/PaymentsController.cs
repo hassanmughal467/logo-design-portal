@@ -170,14 +170,14 @@ public class PaymentsController : ControllerBase
     [ProducesResponseType(typeof(PaymentResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdatePaymentStatus(
-        Guid id, 
+        Guid id,
         [FromBody] UpdatePaymentStatusRequestDto request)
     {
         try
         {
             var payment = await _paymentService.UpdatePaymentStatusAsync(
-                id, 
-                request.Status, 
+                id,
+                request.Status,
                 request.TransactionId);
             return Ok(payment);
         }

@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { BillingService, BillingQueueOverview, BillingEligibleOrder } from '../../../core/services/billing.service';
 import { ConfirmationService, MessageService } from 'primeng/api';
+import { formatCurrencyAmount } from '@core/utils/currency-format';
 
 @Component({
   selector: 'app-billing-queue',
@@ -110,7 +111,7 @@ export class BillingQueueComponent implements OnInit {
     }
 
     this.confirmationService.confirm({
-      message: `Create invoice for ${this.selectedOrderIds.size} order(s) totaling $${this.selectedTotal.toFixed(2)}?`,
+      message: `Create invoice for ${this.selectedOrderIds.size} order(s) totaling ${this.formatCurrency(this.selectedTotal, this.selectedClient?.currencyCode)}?`,
       header: 'Confirm Invoice Creation',
       icon: 'pi pi-file-edit',
       accept: () => this.doCreateInvoice()
@@ -152,8 +153,8 @@ export class BillingQueueComponent implements OnInit {
     this.eligibleOrders = [];
   }
 
-  formatCurrency(value: number): string {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+  formatCurrency(value: number, currencyCode?: string | null): string {
+    return formatCurrencyAmount(value, currencyCode ?? this.selectedClient?.currencyCode);
   }
 
   private getDefaultBillingPeriod(): string {

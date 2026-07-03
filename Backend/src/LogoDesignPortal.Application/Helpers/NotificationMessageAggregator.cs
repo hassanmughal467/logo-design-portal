@@ -34,27 +34,65 @@ public static class NotificationMessageAggregator
 
     private static string Pluralize(string word)
     {
-        if (string.IsNullOrEmpty(word)) return word;
+        if (string.IsNullOrEmpty(word))
+        {
+            return word;
+        }
 
         var lower = word.ToLowerInvariant();
 
         // Common irregular plurals
-        if (lower == "preview") return "previews";
-        if (lower == "file") return "files";
-        if (lower == "message") return "messages";
-        if (lower == "invoice") return "invoices";
-        if (lower == "order") return "orders";
-        if (lower == "revision") return "revisions";
-        if (lower == "upload") return "uploads";
-        if (lower == "update") return "updates";
-        if (lower == "change") return "changes";
+        if (lower == "preview")
+        {
+            return "previews";
+        }
+
+        if (lower == "file")
+        {
+            return "files";
+        }
+
+        if (lower == "message")
+        {
+            return "messages";
+        }
+
+        if (lower == "invoice")
+        {
+            return "invoices";
+        }
+
+        if (lower == "order")
+        {
+            return "orders";
+        }
+
+        if (lower == "revision")
+        {
+            return "revisions";
+        }
+
+        if (lower == "upload")
+        {
+            return "uploads";
+        }
+
+        if (lower == "update")
+        {
+            return "updates";
+        }
+
+        if (lower == "change")
+        {
+            return "changes";
+        }
 
         // Standard rules
-        if (lower.EndsWith("s") || lower.EndsWith("x") || lower.EndsWith("ch") || lower.EndsWith("sh"))
+        if (lower.EndsWith('s') || lower.EndsWith('x') || lower.EndsWith("ch") || lower.EndsWith("sh"))
         {
             return word + "es";
         }
-        if (lower.EndsWith("y") && word.Length > 1 && !IsVowel(word[^2]))
+        if (lower.EndsWith('y') && word.Length > 1 && !IsVowel(word[^2]))
         {
             return word[..^1] + "ies";
         }

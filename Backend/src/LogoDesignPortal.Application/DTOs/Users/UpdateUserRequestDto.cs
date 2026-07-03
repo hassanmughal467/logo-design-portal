@@ -32,6 +32,7 @@ public class UpdateUserRequestDto
 
     // Client Profile fields (optional, used when Role is Client)
     public BillingType? BillingType { get; set; }
+    public string? CurrencyCode { get; set; }
     public string? CompanyName { get; set; }
     public string? ContactName { get; set; }
     public string? PhoneNumber { get; set; }

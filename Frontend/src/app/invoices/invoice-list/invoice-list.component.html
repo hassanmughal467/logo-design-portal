@@ -351,6 +351,10 @@
             <label>Issue Date:</label>
             <span>{{ formatDate(selectedInvoice.createdAt) }}</span>
           </div>
+          <div class="detail-item" *ngIf="selectedInvoice.updatedAt">
+            <label>Last Updated:</label>
+            <span>{{ formatDate(selectedInvoice.updatedAt) }}</span>
+          </div>
           <div class="detail-item">
             <label>Due Date:</label>
             <span [class.overdue]="isOverdue(selectedInvoice.dueDate)">
@@ -497,7 +501,26 @@
       <div class="form-group" *ngIf="editItems && editItems.length > 0">
         <label>Invoice Items</label>
         <div class="edit-items-list">
-          <div class="edit-item-row" *ngFor="let item of editItems; let i = index">
+          <div class="edit-item-row" *ngFor="let item of editItems; let i = index" [class.edit-item-row--with-order]="item.isNew || item.orderId">
+            <div class="edit-item-order" *ngIf="item.isNew">
+              <label>Order # (optional)</label>
+              <p-dropdown
+                [options]="manualOrderOptionsForItem(item)"
+                [(ngModel)]="item.linkedOrderId"
+                optionLabel="label"
+                optionValue="value"
+                [showClear]="true"
+                placeholder="No order — generic line"
+                (onChange)="onManualLineOrderChange(item)"
+                class="full-width"
+                appendTo="body">
+              </p-dropdown>
+              <span class="field-hint" *ngIf="item.linkedOrderId">Linked orders are excluded from Generate invoice.</span>
+            </div>
+            <div class="edit-item-order" *ngIf="!item.isNew && item.orderId">
+              <label>Order #</label>
+              <input pInputText [value]="orderLabelForExistingLine(item.orderId)" [disabled]="true" class="full-width" />
+            </div>
             <div class="edit-item-desc">
               <label>Description</label>
               <input pInputText [(ngModel)]="item.description" class="full-width" />
@@ -513,14 +536,30 @@
                 class="full-width">
               </p-inputNumber>
             </div>
-            <div style="display:flex;align-items:flex-end;">
+            <div class="edit-item-actions">
               <p-button icon="pi pi-trash" styleClass="p-button-text p-button-danger" (onClick)="removeEditItem(i)"></p-button>
             </div>
           </div>
         </div>
       </div>
+      <div class="form-group" *ngIf="loadingAmendOrders || amendEligibleOrders.length > 0">
+        <label>Add completed logo(s) to this invoice</label>
+        <p class="form-hint">Use this when a new logo finished after the invoice was generated. Paid invoices cannot be changed.</p>
+        <p-multiSelect
+          [options]="amendEligibleOrders"
+          [(ngModel)]="amendSelectedOrderIds"
+          optionLabel="label"
+          optionValue="value"
+          [placeholder]="loadingAmendOrders ? 'Loading logos…' : 'Select logo(s) not yet on any invoice'"
+          [filter]="true"
+          [disabled]="loadingAmendOrders"
+          class="full-width"
+          appendTo="body">
+        </p-multiSelect>
+      </div>
       <div class="form-group">
         <p-button label="Add Manual Item" icon="pi pi-plus" styleClass="p-button-outlined p-button-sm" (onClick)="addManualEditItem()"></p-button>
+        <span class="form-hint-inline">Optional order # on a manual line bills that logo and hides it from Generate invoice. Leave blank for fees or adjustments only.</span>
       </div>
     </div>
     <ng-template pTemplate="footer">

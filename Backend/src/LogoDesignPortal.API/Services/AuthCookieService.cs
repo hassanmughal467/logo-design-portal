@@ -8,7 +8,8 @@ namespace LogoDesignPortal.API.Services;
 public interface IAuthCookieService
 {
     bool IsEnabled { get; }
-    void SetAuthCookies(HttpResponse response, AuthResponseDto auth);
+    /// <summary>Sets auth cookies; returns CSRF token when cookie auth is enabled.</summary>
+    string? SetAuthCookies(HttpResponse response, AuthResponseDto auth);
     void ClearAuthCookies(HttpResponse response);
     string? GetAccessTokenFromRequest(HttpRequest request);
 }
@@ -26,10 +27,12 @@ public sealed class AuthCookieService : IAuthCookieService
 
     public bool IsEnabled => _options.Enabled;
 
-    public void SetAuthCookies(HttpResponse response, AuthResponseDto auth)
+    public string? SetAuthCookies(HttpResponse response, AuthResponseDto auth)
     {
         if (!_options.Enabled)
-            return;
+        {
+            return null;
+        }
 
         var secure = _options.Secure;
         var sameSite = _options.SameSite;
@@ -45,12 +48,15 @@ public sealed class AuthCookieService : IAuthCookieService
             .Replace("/", "_", StringComparison.Ordinal);
         response.Cookies.Append(_options.CsrfCookieName, csrf,
             BuildCookieOptions(DateTimeOffset.UtcNow.AddDays(7), httpOnly: false, secure, sameSite, _options.Path));
+        return csrf;
     }
 
     public void ClearAuthCookies(HttpResponse response)
     {
         if (!_options.Enabled)
+        {
             return;
+        }
 
         var expired = DateTimeOffset.UtcNow.AddDays(-1);
         var opts = new CookieOptions { Path = _options.Path, Expires = expired, HttpOnly = true, Secure = true, SameSite = SameSiteMode.Lax };
@@ -62,7 +68,10 @@ public sealed class AuthCookieService : IAuthCookieService
     public string? GetAccessTokenFromRequest(HttpRequest request)
     {
         if (!_options.Enabled)
+        {
             return null;
+        }
+
         return request.Cookies.TryGetValue(_options.AccessTokenCookieName, out var token) ? token : null;
     }
 

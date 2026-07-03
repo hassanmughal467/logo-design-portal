@@ -10,6 +10,7 @@ using Xunit;
 using LogoDesignPortal.Application;
 using LogoDesignPortal.Application.BackgroundJobs;
 using LogoDesignPortal.Application.Caching;
+using LogoDesignPortal.Application.DTOs.DesignerPayout;
 using LogoDesignPortal.Application.DTOs.Orders;
 using LogoDesignPortal.Application.DTOs.Revisions;
 using LogoDesignPortal.Application.Interfaces;
@@ -18,6 +19,8 @@ using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using LogoDesignPortal.Infrastructure;
 using LogoDesignPortal.Infrastructure.Persistence;
+using LogoDesignPortal.Application.Interfaces.Storage;
+using LogoDesignPortal.Application.Tests.Storage;
 using LogoDesignPortal.Application.Tests.TestHelpers;
 
 namespace LogoDesignPortal.Application.Tests.Services;
@@ -65,6 +68,8 @@ public class SystemStressWorkflowTests : IAsyncDisposable
         services.AddDistributedMemoryCache();
         services.AddSingleton<IReadModelCacheVersions, ReadModelCacheVersions>();
         services.AddSingleton<IBackgroundJobScheduler, NullBackgroundJobScheduler>();
+        services.AddSingleton<IFileStorageService>(_ => TestFileStorageFactory.CreateLocal(_storagePath));
+        services.AddSingleton<ICurrencyService>(_ => Mock.Of<ICurrencyService>());
 
         services.AddApplication();
         services.AddScoped<INotificationService>(_ => Mock.Of<INotificationService>());
@@ -90,7 +95,9 @@ public class SystemStressWorkflowTests : IAsyncDisposable
         try
         {
             if (Directory.Exists(_storagePath))
+            {
                 Directory.Delete(_storagePath, true);
+            }
         }
         catch { /* ignore */ }
         await Task.CompletedTask;
@@ -112,7 +119,9 @@ public class SystemStressWorkflowTests : IAsyncDisposable
         designerUserId = Guid.NewGuid();
         clientUserIds = new Guid[OrderCount];
         for (int i = 0; i < OrderCount; i++)
+        {
             clientUserIds[i] = Guid.NewGuid();
+        }
 
         var adminUser = new User
         {
@@ -208,7 +217,10 @@ public class SystemStressWorkflowTests : IAsyncDisposable
             var sb = new StringBuilder();
             sb.AppendLine($"FAILED: {failures.Count} orders had errors.");
             foreach (var f in failures.Take(5))
+            {
                 sb.AppendLine($"  Order {f.OrderIndex}: {f.Error?.Substring(0, Math.Min(200, f.Error?.Length ?? 0))}...");
+            }
+
             Assert.Fail(sb.ToString());
         }
 
@@ -238,6 +250,8 @@ public class SystemStressWorkflowTests : IAsyncDisposable
         var orderService = scope.ServiceProvider.GetRequiredService<IOrderService>();
         var fileService = scope.ServiceProvider.GetRequiredService<IFileService>();
         var revisionService = scope.ServiceProvider.GetRequiredService<IRevisionService>();
+        var designerPayoutService = scope.ServiceProvider.GetRequiredService<IDesignerPayoutService>();
+        var fileStorage = scope.ServiceProvider.GetRequiredService<IFileStorageService>();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
 
         // 1. Client creates order with 2 reference files
@@ -276,6 +290,13 @@ public class SystemStressWorkflowTests : IAsyncDisposable
         Assert.Equal(3, uploadResult1.Count);
         var previewUploads = 3;
 
+        await designerPayoutService.ApproveDesignerPriceAsync(orderId, new ApproveDesignerPriceRequestDto
+        {
+            Action = DesignerPriceApprovalAction.Approve
+        }, _adminUserId);
+        order = await orderService.GetOrderByIdAsync(orderId, _adminUserId, "Admin");
+        Assert.Equal(OrderStatus.InProgress.ToString(), order!.Status);
+
         // 4. Admin forwards preview batch to client
         var fileIds1 = uploadResult1.Select(f => f.Id).ToList();
         order = await orderService.SendFilesToClientAsync(orderId, fileIds1, _adminUserId);
@@ -293,7 +314,9 @@ public class SystemStressWorkflowTests : IAsyncDisposable
         Assert.Empty(previewAfterRev1);
         Assert.Equal(2, refAfterRev1.Count);
         foreach (var f in refAfterRev1)
-            Assert.True(File.Exists(f.FilePath), $"Reference file missing: {f.FilePath}");
+        {
+            Assert.True(await fileStorage.ExistsAsync(f.FilePath), $"Reference file missing: {f.FilePath}");
+        }
 
         // 6. Designer uploads new preview batch (3 files)
         var previewBatch2 = new[]
@@ -332,10 +355,13 @@ public class SystemStressWorkflowTests : IAsyncDisposable
         Assert.Equal(3, finalFilesList.Count);
 
         foreach (var f in refFilesFinal)
-            Assert.True(File.Exists(f.FilePath), $"Reference file missing after approval: {f.FilePath}");
+        {
+            Assert.True(await fileStorage.ExistsAsync(f.FilePath), $"Reference file missing after approval: {f.FilePath}");
+        }
+
         foreach (var f in finalFilesList)
         {
-            Assert.True(File.Exists(f.FilePath), $"Final file missing: {f.FilePath}");
+            Assert.True(await fileStorage.ExistsAsync(f.FilePath), $"Final file missing: {f.FilePath}");
             Assert.Contains("Permanent", f.FilePath);
         }
 

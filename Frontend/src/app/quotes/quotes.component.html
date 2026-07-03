@@ -35,8 +35,8 @@
               <a [routerLink]="['/quotes', quote.id]">{{ quote.logoName }}</a>
             </td>
             <td><p-tag [value]="quote.status"></p-tag></td>
-            <td>{{ quote.requestedBudget || '-' }}</td>
-            <td>{{ quote.adminQuotedPrice || '-' }}</td>
+            <td>{{ formatPrice(quote.requestedBudget, quote.currencyCode) }}</td>
+            <td>{{ formatPrice(quote.adminQuotedPrice, quote.currencyCode) }}</td>
             <td>{{ quote.adminNotes || '-' }}</td>
             <td>{{ quote.createdAt | date:'mediumDate' }}</td>
             <td>
@@ -61,14 +61,43 @@
         <textarea pInputTextarea rows="4" formControlName="description"></textarea>
       </div>
       <div class="field">
-        <label>Budget (optional)</label>
-        <input pInputText type="number" formControlName="requestedBudget" />
+        <label>Budget (optional, {{ currencyCode }})</label>
+        <p-inputNumber
+          formControlName="requestedBudget"
+          mode="currency"
+          [currency]="currencyCode"
+          [locale]="currencyLocale"
+          [min]="0"
+          [maxFractionDigits]="2"
+          styleClass="w-full">
+        </p-inputNumber>
       </div>
       <div class="field">
         <label>Attachments</label>
-        <p-fileUpload #quoteFileUpload mode="basic" [multiple]="true" [auto]="false" (onSelect)="onFileSelect($event)"
-          [maxFileSize]="maxUploadFileSize"
-          [showUploadButton]="false" [showCancelButton]="false"></p-fileUpload>
+        <div class="quote-file-upload">
+          <input
+            #quoteFileInput
+            type="file"
+            multiple
+            accept="image/*,.pdf,.ai,.eps,.psd,.svg"
+            (change)="onQuoteFilesSelected($event)"
+            hidden />
+          <p-button type="button" icon="pi pi-plus" label="Add files" (onClick)="quoteFileInput.click()"></p-button>
+          <small class="upload-hint">JPG, PNG, GIF, WEBP, SVG, PDF, AI, EPS, PSD · up to 500MB total</small>
+        </div>
+        <div class="selected-files" *ngIf="selectedFiles.length > 0">
+          <div class="files-header">
+            <span>{{ selectedFiles.length }} file(s) selected</span>
+            <button type="button" class="link-btn" (click)="clearQuoteFiles()">Clear all</button>
+          </div>
+          <div class="file-item" *ngFor="let file of selectedFiles; let i = index">
+            <span class="file-name">{{ file.name }}</span>
+            <span class="file-size">{{ formatFileSize(file.size) }}</span>
+            <button type="button" class="link-btn" (click)="removeQuoteFile(i)" aria-label="Remove file">
+              <i class="pi pi-times"></i>
+            </button>
+          </div>
+        </div>
       </div>
       <div class="dialog-actions">
         <p-button type="submit" label="Submit Quote" icon="pi pi-check"></p-button>
@@ -78,9 +107,41 @@
 
   <p-dialog [(visible)]="showRespondDialog" [modal]="true" header="Respond to Quote" [style]="{ width: '600px' }">
     <form [formGroup]="respondForm" (ngSubmit)="respondToQuote()">
+      <div class="field attachments-review" *ngIf="selectedQuote?.attachments?.length">
+        <label>Client attachments</label>
+        <ul class="attachment-list">
+          <li *ngFor="let file of selectedQuote!.attachments">
+            <span>{{ file }}</span>
+            <div class="attachment-actions">
+              <p-button
+                *ngIf="isPreviewableAttachment(file)"
+                icon="pi pi-eye"
+                label="Preview"
+                styleClass="p-button-text p-button-sm"
+                (onClick)="openQuoteAttachmentPreview(selectedQuote!.id, file)">
+              </p-button>
+              <p-button
+                icon="pi pi-download"
+                label="Download"
+                styleClass="p-button-text p-button-sm"
+                (onClick)="downloadQuoteAttachment(selectedQuote!.id, file)">
+              </p-button>
+            </div>
+          </li>
+        </ul>
+      </div>
+      <p class="no-attachments" *ngIf="selectedQuote && !selectedQuote.attachments?.length">No files attached to this quote.</p>
       <div class="field">
-        <label>Quoted Price</label>
-        <input pInputText type="number" formControlName="adminQuotedPrice" />
+        <label>Quoted Price ({{ currencyCode }})</label>
+        <p-inputNumber
+          formControlName="adminQuotedPrice"
+          mode="currency"
+          [currency]="currencyCode"
+          [locale]="currencyLocale"
+          [min]="0.01"
+          [maxFractionDigits]="2"
+          styleClass="w-full">
+        </p-inputNumber>
       </div>
       <div class="field">
         <label>Notes</label>
@@ -90,5 +151,37 @@
         <p-button type="submit" label="Send Response" icon="pi pi-send"></p-button>
       </div>
     </form>
+  </p-dialog>
+
+  <p-dialog
+    [(visible)]="showImagePreviewDialog"
+    [modal]="true"
+    appendTo="body"
+    [baseZIndex]="13000"
+    [draggable]="false"
+    [resizable]="false"
+    [style]="{ width: '80vw', maxWidth: '1000px' }"
+    [header]="imagePreviewDialogHeader"
+    styleClass="quote-image-preview-dialog"
+    (onHide)="closeImagePreview()">
+    <div class="image-preview-container">
+      <div class="image-preview-toolbar" *ngIf="imagePreviewGalleryLength > 1">
+        <p-button icon="pi pi-chevron-left" styleClass="p-button-text" (onClick)="previousImagePreview()"></p-button>
+        <span>{{ imagePreviewIndex + 1 }} / {{ imagePreviewGalleryLength }}</span>
+        <p-button icon="pi pi-chevron-right" styleClass="p-button-text" (onClick)="nextImagePreview()"></p-button>
+      </div>
+      <div class="image-preview-stage" *ngIf="!imagePreviewLoading && imagePreviewUrl; else respondPreviewLoading">
+        <img [src]="imagePreviewUrl" [alt]="imagePreviewDialogHeader" />
+      </div>
+      <ng-template #respondPreviewLoading>
+        <div class="image-preview-loading">
+          <p-progressSpinner></p-progressSpinner>
+        </div>
+      </ng-template>
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button icon="pi pi-download" label="Download" (onClick)="downloadCurrentImagePreview()"></p-button>
+      <p-button label="Close" icon="pi pi-times" styleClass="p-button-text" (onClick)="closeImagePreview()"></p-button>
+    </ng-template>
   </p-dialog>
 </div>
