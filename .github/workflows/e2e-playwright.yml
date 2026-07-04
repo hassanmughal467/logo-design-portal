@@ -57,6 +57,7 @@ jobs:
       CI: 'true'
       ConnectionStrings__DefaultConnection: >-
         Server=127.0.0.1;Port=3306;Database=LogoDesignPortalDb;User=root;Password=e2e_root;
+      Jwt__Key: E2ECiJwtKeyMustBeAtLeast32CharactersLong!!
 
     steps:
       - uses: actions/checkout@v4
@@ -85,13 +86,13 @@ jobs:
         working-directory: Backend
         run: |
           dotnet build src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release
-          dotnet run --project src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release --no-build --urls http://localhost:5000 &
+          dotnet run --project src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release --no-build --no-launch-profile --urls http://localhost:5000 &
           echo $! > /tmp/api.pid
 
       - name: Wait for API health
         run: |
           for i in {1..90}; do
-            curl -fsS "http://localhost:5000/health" && exit 0
+            curl -fsS "http://localhost:5000/health/live" && exit 0
             sleep 2
           done
           echo "API failed to become healthy"; exit 1

@@ -157,18 +157,22 @@ jobs:
         working-directory: Frontend
         run: npx playwright install --with-deps chromium
 
+      - name: Build API (Release)
+        working-directory: Backend
+        run: dotnet build src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release
+
       - name: Start API (in-memory Testing env)
         working-directory: Backend
         env:
           ASPNETCORE_ENVIRONMENT: Testing
         run: |
-          dotnet run --project src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release --urls http://localhost:5000 &
+          dotnet run --project src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release --no-build --no-launch-profile --urls http://localhost:5000 &
           echo $! > /tmp/api.pid
 
       - name: Wait for API health
         run: |
-          for i in $(seq 1 60); do
-            curl -fsS "http://localhost:5000/health" && exit 0
+          for i in $(seq 1 90); do
+            curl -fsS "http://localhost:5000/health/live" && exit 0
             sleep 2
           done
           echo "API failed to become healthy"; exit 1
