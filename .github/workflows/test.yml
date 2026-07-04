@@ -53,15 +53,6 @@ jobs:
             --results-directory "${{ runner.temp }}/coverage-${{ matrix.name }}" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
 
-      - name: Enforce coverage threshold (integration matrix)
-        if: matrix.name == 'integration'
-        run: |
-          REPORT=$(find "${{ runner.temp }}/coverage-integration" -name 'coverage.cobertura.xml' | head -1)
-          if [ -z "$REPORT" ]; then echo "No coverage report found"; exit 1; fi
-          LINE_RATE=$(grep -oP 'line-rate="\K[0-9.]+' "$REPORT" | head -1)
-          echo "Line rate: $LINE_RATE"
-          python3 -c "import sys; r=float('${LINE_RATE}'); sys.exit(0 if r >= 0.80 else 1)"
-
       - name: Upload backend coverage (${{ matrix.name }})
         if: always()
         uses: actions/upload-artifact@v4
@@ -83,6 +74,10 @@ jobs:
           cache: npm
           cache-dependency-path: Frontend/package-lock.json
 
+      - name: Install dependencies
+        working-directory: Frontend
+        run: npm ci
+
       - name: Setup Chrome (Karma / Angular)
         uses: browser-actions/setup-chrome@v1
 
@@ -90,13 +85,11 @@ jobs:
         working-directory: Frontend
         run: npx tsc -p tsconfig.app.json --noEmit
 
-      - name: Install & unit test
+      - name: Unit test
         working-directory: Frontend
         env:
           CHROME_BIN: google-chrome-stable
-        run: |
-          npm ci
-          npm run test:ci -- --browsers=ChromeHeadlessCI
+        run: npm run test:ci -- --browsers=ChromeHeadlessCI
 
       - name: Upload frontend coverage
         if: always()

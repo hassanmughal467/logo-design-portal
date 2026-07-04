@@ -48,6 +48,7 @@ jobs:
           --health-retries=10
 
     env:
+      ASPNETCORE_ENVIRONMENT: Development
       E2E_BASE_URL: http://localhost:4200
       E2E_API_URL: http://localhost:5000
       E2E_ADMIN_EMAIL: superadmin@logodesign.com
@@ -84,13 +85,13 @@ jobs:
         working-directory: Backend
         run: |
           dotnet build src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release
-          dotnet run --project src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release --no-build &
+          dotnet run --project src/LogoDesignPortal.API/LogoDesignPortal.API.csproj -c Release --no-build --urls http://localhost:5000 &
           echo $! > /tmp/api.pid
 
       - name: Wait for API health
         run: |
-          for i in {1..60}; do
-            curl -fsS "http://localhost:5000/api/system/health" && exit 0
+          for i in {1..90}; do
+            curl -fsS "http://localhost:5000/health" && exit 0
             sleep 2
           done
           echo "API failed to become healthy"; exit 1
