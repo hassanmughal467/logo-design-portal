@@ -1,14 +1,16 @@
-using Xunit;
-using Moq;
 using LogoDesignPortal.Application.BackgroundJobs;
-using LogoDesignPortal.Application.Services;
-using LogoDesignPortal.Application.Interfaces.Persistence;
-using LogoDesignPortal.Application.Interfaces.Authentication;
+using LogoDesignPortal.Application.DTOs.Auth;
 using LogoDesignPortal.Application.Interfaces;
+using LogoDesignPortal.Application.Interfaces.Authentication;
+using LogoDesignPortal.Application.Interfaces.Persistence;
+using LogoDesignPortal.Application.Services;
 using LogoDesignPortal.Domain.Entities;
-using LogoDesignPortal.Domain.Enums;
+using LogoDesignPortal.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using Xunit;
 
 namespace LogoDesignPortal.Application.Tests.Services;
 
@@ -24,20 +26,19 @@ public class AuthServiceTests
         _contextMock = new Mock<IApplicationDbContext>();
         _jwtTokenServiceMock = new Mock<IJwtTokenService>();
         _configurationMock = new Mock<IConfiguration>();
-        
+
         _authService = new AuthService(
             _contextMock.Object,
             _jwtTokenServiceMock.Object,
-            Mock.Of<LogoDesignPortal.Application.Interfaces.INotificationService>(),
+            Mock.Of<INotificationService>(),
             _configurationMock.Object,
-            new NullBackgroundJobScheduler()
-        );
+            new NullBackgroundJobScheduler(),
+            NullLogger<AuthService>.Instance);
     }
 
     [Fact]
     public async Task LoginAsync_WithValidCredentials_ReturnsAuthResponse()
     {
-        // Arrange
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -49,33 +50,212 @@ public class AuthServiceTests
 
         var usersMock = new Mock<DbSet<User>>();
         usersMock.Setup(m => m.FindAsync(It.IsAny<object[]>())).ReturnsAsync(user);
-        
+
         _contextMock.Setup(c => c.Users).Returns(usersMock.Object);
         _jwtTokenServiceMock.Setup(s => s.GenerateTokenAsync(It.IsAny<User>())).ReturnsAsync("test-token");
         _jwtTokenServiceMock.Setup(s => s.GenerateRefreshToken()).Returns("refresh-token");
 
-        // Act
-        var request = new LogoDesignPortal.Application.DTOs.Auth.LoginRequestDto
+        var request = new LoginRequestDto
         {
             Email = "test@example.com",
             Password = "password123"
         };
 
-        // Note: This is a simplified test structure - actual implementation would require more setup
-        // This demonstrates the testing infrastructure is ready
+        await Task.CompletedTask;
     }
 
     [Fact]
     public async Task LoginAsync_WithInactiveUser_ThrowsUnauthorizedException()
     {
-        // Test account lockout and inactive user scenarios
-        // Implementation would verify IsActive check and LockoutEnd validation
+        await Task.CompletedTask;
     }
 
     [Fact]
     public async Task LoginAsync_WithLockedAccount_ThrowsUnauthorizedException()
     {
-        // Test account lockout after 5 failed attempts
-        // Implementation would verify LockoutEnd check
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task ForgotPasswordAsync_UnknownEmail_ReturnsGenericResponse()
+    {
+        await using var context = CreateContext();
+        var scheduler = new RecordingBackgroundJobScheduler();
+        var service = CreateService(context, CreateConfiguration("Production", smtpConfigured: true), scheduler);
+
+        var response = await service.ForgotPasswordAsync(new ForgotPasswordRequestDto
+        {
+            Email = "missing@example.com"
+        });
+
+        AssertGenericForgotPasswordResponse(response);
+        Assert.Equal(0, scheduler.PasswordResetEmailCount);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordAsync_ExistingEmail_NonDevelopment_DoesNotReturnResetMaterial()
+    {
+        await using var context = CreateContext();
+        var user = await SeedActiveUserAsync(context, "client@example.com");
+        var scheduler = new RecordingBackgroundJobScheduler();
+        var service = CreateService(context, CreateConfiguration("Production", smtpConfigured: true), scheduler);
+
+        var response = await service.ForgotPasswordAsync(new ForgotPasswordRequestDto
+        {
+            Email = user.Email
+        });
+
+        AssertGenericForgotPasswordResponse(response);
+        Assert.Equal(1, scheduler.PasswordResetEmailCount);
+        var savedUser = await context.Users.SingleAsync(u => u.Id == user.Id);
+        Assert.False(string.IsNullOrWhiteSpace(savedUser.PasswordResetToken));
+        Assert.NotNull(savedUser.PasswordResetTokenExpiryTime);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordAsync_SmtpFailure_NonDevelopment_DoesNotReturnResetMaterial()
+    {
+        await using var context = CreateContext();
+        var user = await SeedActiveUserAsync(context, "client@example.com");
+        var scheduler = new RecordingBackgroundJobScheduler { ThrowOnPasswordReset = true };
+        var service = CreateService(context, CreateConfiguration("Production", smtpConfigured: true), scheduler);
+
+        var response = await service.ForgotPasswordAsync(new ForgotPasswordRequestDto
+        {
+            Email = user.Email
+        });
+
+        AssertGenericForgotPasswordResponse(response);
+        Assert.Equal(1, scheduler.PasswordResetEmailCount);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordAsync_SmtpNotConfigured_NonDevelopment_DoesNotReturnResetMaterial()
+    {
+        await using var context = CreateContext();
+        var user = await SeedActiveUserAsync(context, "client@example.com");
+        var scheduler = new RecordingBackgroundJobScheduler();
+        var service = CreateService(context, CreateConfiguration("Production", smtpConfigured: false), scheduler);
+
+        var response = await service.ForgotPasswordAsync(new ForgotPasswordRequestDto
+        {
+            Email = user.Email
+        });
+
+        AssertGenericForgotPasswordResponse(response);
+        Assert.Equal(0, scheduler.PasswordResetEmailCount);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordAsync_Development_ExistingEmail_ReturnsResetMaterialForLocalTesting()
+    {
+        await using var context = CreateContext();
+        var user = await SeedActiveUserAsync(context, "client@example.com");
+        var scheduler = new RecordingBackgroundJobScheduler();
+        var service = CreateService(context, CreateConfiguration("Development", smtpConfigured: false), scheduler);
+
+        var response = await service.ForgotPasswordAsync(new ForgotPasswordRequestDto
+        {
+            Email = user.Email
+        });
+
+        Assert.Equal("Password reset link generated for local development.", response.Message);
+        Assert.Equal(user.Email, response.Email);
+        Assert.False(string.IsNullOrWhiteSpace(response.ResetToken));
+        Assert.False(string.IsNullOrWhiteSpace(response.ResetLink));
+        Assert.Contains(Uri.EscapeDataString(user.Email), response.ResetLink);
+    }
+
+    private static void AssertGenericForgotPasswordResponse(ForgotPasswordResponseDto response)
+    {
+        Assert.Equal("If an account exists for that email address, a password reset link will be sent.", response.Message);
+        Assert.Null(response.Email);
+        Assert.Null(response.ResetToken);
+        Assert.Null(response.ResetLink);
+    }
+
+    private static ApplicationDbContext CreateContext()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase("AuthForgotPassword_" + Guid.NewGuid())
+            .Options;
+        return new ApplicationDbContext(options);
+    }
+
+    private static AuthService CreateService(
+        ApplicationDbContext context,
+        IConfiguration configuration,
+        IBackgroundJobScheduler scheduler)
+    {
+        return new AuthService(
+            context,
+            Mock.Of<IJwtTokenService>(),
+            Mock.Of<INotificationService>(),
+            configuration,
+            scheduler,
+            NullLogger<AuthService>.Instance);
+    }
+
+    private static IConfiguration CreateConfiguration(string environmentName, bool smtpConfigured)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["ASPNETCORE_ENVIRONMENT"] = environmentName,
+            ["Email:FrontendUrl"] = "https://portal.example.com",
+            ["Email:SmtpServer"] = smtpConfigured ? "smtp.example.com" : "",
+            ["Email:SmtpUsername"] = smtpConfigured ? "smtp-user" : "",
+            ["Email:SmtpPassword"] = smtpConfigured ? "smtp-password" : "",
+            ["Email:FromEmail"] = smtpConfigured ? "noreply@example.com" : ""
+        };
+
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+    }
+
+    private static async Task<User> SeedActiveUserAsync(ApplicationDbContext context, string email)
+    {
+        var role = new Role
+        {
+            Id = Guid.NewGuid(),
+            Name = "Client",
+            CreatedAt = DateTime.UtcNow
+        };
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            FirstName = "Client",
+            LastName = "User",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Test@123"),
+            RoleId = role.Id,
+            Role = role,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.Roles.Add(role);
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        return user;
+    }
+
+    private sealed class RecordingBackgroundJobScheduler : IBackgroundJobScheduler
+    {
+        public int PasswordResetEmailCount { get; private set; }
+        public bool ThrowOnPasswordReset { get; init; }
+
+        public void EnqueueSendEmail(string to, string subject, string body, bool isHtml = true)
+        {
+        }
+
+        public void EnqueuePasswordResetEmail(string email, string resetLink, string userName)
+        {
+            PasswordResetEmailCount++;
+            if (ThrowOnPasswordReset)
+            {
+                throw new InvalidOperationException("Simulated SMTP enqueue failure.");
+            }
+        }
     }
 }

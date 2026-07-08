@@ -14,6 +14,8 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly ILogger<AuthController> _logger;
     private readonly IWebHostEnvironment _environment;
+    private const string ForgotPasswordGenericMessage =
+        "If an account exists for that email address, a password reset link will be sent.";
 
     public AuthController(IAuthService authService, ILogger<AuthController> logger, IWebHostEnvironment environment)
     {
@@ -233,13 +235,13 @@ public class AuthController : ControllerBase
 
             _logger.LogInformation("Processing forgot password request for email: {Email}", request.Email);
             var response = await _authService.ForgotPasswordAsync(request);
-            _logger.LogInformation("Password reset link sent successfully for email: {Email}", request.Email);
+            _logger.LogInformation("Forgot password request processed.");
             return Ok(response);
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning("Forgot password failed - User not found: {Email}", request.Email);
-            return BadRequest(new { error = ex.Message });
+            _logger.LogWarning(ex, "Forgot password request completed with a handled service error.");
+            return Ok(new ForgotPasswordResponseDto { Message = ForgotPasswordGenericMessage });
         }
         catch (Exception ex)
         {

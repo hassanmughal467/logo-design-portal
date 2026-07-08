@@ -53,6 +53,23 @@ public class AuthControllerTests
             $"Expected 401/400, got {response.StatusCode}");
     }
 
+    [Fact]
+    public async Task ForgotPassword_UnknownEmail_ReturnsGenericSuccess()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/auth/forgot-password",
+            new { email = "unknown-user@example.com" }, JsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ForgotPasswordBody>(JsonOptions);
+        Assert.NotNull(body);
+        Assert.Contains("If an account exists", body!.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(body.Email);
+        Assert.Null(body.ResetToken);
+        Assert.Null(body.ResetLink);
+    }
+
     /// <summary>Uses shared AuthHelper contract for token shape (single place for test credentials).</summary>
     [Fact]
     public async Task Login_ViaAuthHelper_MatchesHappyPath()
@@ -60,5 +77,13 @@ public class AuthControllerTests
         var client = _factory.CreateClient();
         var token = await AuthHelper.GetClientTokenAsync(client);
         Assert.False(string.IsNullOrWhiteSpace(token));
+    }
+
+    private sealed class ForgotPasswordBody
+    {
+        public string Message { get; set; } = string.Empty;
+        public string? ResetToken { get; set; }
+        public string? Email { get; set; }
+        public string? ResetLink { get; set; }
     }
 }

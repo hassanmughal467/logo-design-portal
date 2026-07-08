@@ -8,29 +8,36 @@ using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace LogoDesignPortal.Application.Services;
 
 public class AuthService : IAuthService
 {
+    private const string ForgotPasswordGenericMessage =
+        "If an account exists for that email address, a password reset link will be sent.";
+
     private readonly IApplicationDbContext _context;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly INotificationService _notificationService;
     private readonly IConfiguration _configuration;
     private readonly IBackgroundJobScheduler _backgroundJobs;
+    private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         IApplicationDbContext context,
         IJwtTokenService jwtTokenService,
         INotificationService notificationService,
         IConfiguration configuration,
-        IBackgroundJobScheduler backgroundJobs)
+        IBackgroundJobScheduler backgroundJobs,
+        ILogger<AuthService> logger)
     {
         _context = context;
         _jwtTokenService = jwtTokenService;
         _notificationService = notificationService;
         _configuration = configuration;
         _backgroundJobs = backgroundJobs;
+        _logger = logger;
     }
 
     public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request)
@@ -339,13 +346,14 @@ public class AuthService : IAuthService
 
     public async Task<ForgotPasswordResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto request)
     {
+        var isDevelopment = IsDevelopmentEnvironment();
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Email == request.Email && !u.IsDeleted && u.IsActive);
 
-        // Check if user exists
         if (user == null)
         {
-            throw new InvalidOperationException("No user exists with this email address.");
+            _logger.LogInformation("Forgot password requested for unknown or inactive email.");
+            return CreateGenericForgotPasswordResponse();
         }
 
         // Generate reset token (using a secure random token)
@@ -365,25 +373,40 @@ public class AuthService : IAuthService
 
         var smtpConfigured = !string.IsNullOrWhiteSpace(_configuration["Email:SmtpServer"])
             && !string.IsNullOrWhiteSpace(_configuration["Email:SmtpUsername"])
-            && !string.IsNullOrWhiteSpace(_configuration["Email:SmtpPassword"]);
+            && !string.IsNullOrWhiteSpace(_configuration["Email:SmtpPassword"])
+            && !string.IsNullOrWhiteSpace(_configuration["Email:FromEmail"]);
 
         // Non-blocking: password reset mail is sent by Hangfire worker.
         if (smtpConfigured)
-            _backgroundJobs.EnqueuePasswordResetEmail(user.Email, resetLink, $"{user.FirstName} {user.LastName}".Trim());
-        var emailQueued = smtpConfigured;
-
-        var isDevelopment = _configuration["ASPNETCORE_ENVIRONMENT"] == "Development"
-            || string.IsNullOrEmpty(_configuration["Email:SmtpServer"]);
-
-        return new ForgotPasswordResponseDto
         {
-            Message = emailQueued
-                ? "Password reset link has been sent to your email address."
-                : "Password reset link generated. Please check the link below (email sending is not configured).",
-            ResetToken = isDevelopment || !emailQueued ? token : null,
-            Email = isDevelopment || !emailQueued ? user.Email : null,
-            ResetLink = isDevelopment || !emailQueued ? resetLink : null
-        };
+            try
+            {
+                _backgroundJobs.EnqueuePasswordResetEmail(user.Email, resetLink, $"{user.FirstName} {user.LastName}".Trim());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to enqueue password reset email.");
+            }
+        }
+        else if (!isDevelopment)
+        {
+            _logger.LogError(
+                "Password reset email is not configured in {Environment}; reset token was generated but not returned.",
+                GetEnvironmentName());
+        }
+
+        if (isDevelopment)
+        {
+            return new ForgotPasswordResponseDto
+            {
+                Message = "Password reset link generated for local development.",
+                ResetToken = token,
+                Email = user.Email,
+                ResetLink = resetLink
+            };
+        }
+
+        return CreateGenericForgotPasswordResponse();
     }
 
     public async Task ResetPasswordWithTokenAsync(ResetPasswordWithTokenRequestDto request)
@@ -426,4 +449,15 @@ public class AuthService : IAuthService
         user.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
     }
+
+    private ForgotPasswordResponseDto CreateGenericForgotPasswordResponse() =>
+        new() { Message = ForgotPasswordGenericMessage };
+
+    private bool IsDevelopmentEnvironment() =>
+        string.Equals(GetEnvironmentName(), "Development", StringComparison.OrdinalIgnoreCase);
+
+    private string GetEnvironmentName() =>
+        _configuration["ASPNETCORE_ENVIRONMENT"]
+        ?? _configuration["DOTNET_ENVIRONMENT"]
+        ?? string.Empty;
 }
