@@ -1009,6 +1009,7 @@ public class OrderService : IOrderService
         var order = await _context.LogoOrders
             .Include(o => o.Client)
                 .ThenInclude(c => c.User)
+            .Include(o => o.Designer)
             .FirstOrDefaultAsync(o => o.Id == orderId && !o.IsDeleted);
 
         if (order == null)
@@ -1026,10 +1027,14 @@ public class OrderService : IOrderService
             throw new InvalidOperationException("Invalid status.");
         }
 
+        var isOrderOwner = order.Client?.UserId == userId;
+        var isAssignedDesigner = order.Designer?.UserId == userId;
+        EnsureOrderStatusUpdateAccess(userRole, isOrderOwner, isAssignedDesigner);
+
         // Role-based status transition validation
         if (!string.IsNullOrEmpty(userRole))
         {
-            var allowedStatuses = GetAllowedStatusesForRole(userRole, order.Status, order.Client?.UserId == userId);
+            var allowedStatuses = GetAllowedStatusesForRole(userRole, order.Status, isOrderOwner);
             if (!allowedStatuses.Contains(newStatus))
             {
                 throw new InvalidOperationException($"You don't have permission to change status to '{newStatus}'. Allowed statuses for {userRole}: {string.Join(", ", allowedStatuses)}");
@@ -2303,7 +2308,7 @@ public class OrderService : IOrderService
                 // Clients can only:
                 // - Request revisions when preview is delivered
                 // - Approve final when preview is delivered
-                if (currentStatus == OrderStatus.PreviewDelivered)
+                if (isOrderOwner && currentStatus == OrderStatus.PreviewDelivered)
                 {
                     allowedStatuses.Add(OrderStatus.RevisionRequested);
                     allowedStatuses.Add(OrderStatus.ClientApproved);
@@ -2339,6 +2344,19 @@ public class OrderService : IOrderService
         }
 
         return allowedStatuses;
+    }
+
+    private static void EnsureOrderStatusUpdateAccess(string? userRole, bool isOrderOwner, bool isAssignedDesigner)
+    {
+        if (string.Equals(userRole, "Client", StringComparison.OrdinalIgnoreCase) && !isOrderOwner)
+        {
+            throw new ForbiddenAccessException("You don't have access to this order.");
+        }
+
+        if (string.Equals(userRole, "Designer", StringComparison.OrdinalIgnoreCase) && !isAssignedDesigner)
+        {
+            throw new ForbiddenAccessException("You don't have access to this order.");
+        }
     }
 
     /// <summary>
