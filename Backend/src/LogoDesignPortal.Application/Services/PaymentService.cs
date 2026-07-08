@@ -170,7 +170,8 @@ public class PaymentService : IPaymentService
             throw new InvalidOperationException("Payment not found.");
         }
 
-        bool verified = false;
+        var verified = false;
+        var pendingManualVerification = false;
 
         try
         {
@@ -200,16 +201,26 @@ public class PaymentService : IPaymentService
 
                 case "banktransfer":
                 case "bank":
-                    // For bank transfers, we rely on manual verification via bank reference
-                    if (!string.IsNullOrEmpty(request.BankReference))
+                    if (string.IsNullOrWhiteSpace(request.BankReference))
                     {
-                        payment.TransactionId = request.BankReference;
-                        verified = true; // Admin will manually verify
+                        throw new InvalidOperationException("Bank reference is required for bank transfer payments.");
                     }
+
+                    payment.TransactionId = request.BankReference.Trim();
+                    payment.Status = PaymentStatus.Processing;
+                    payment.CompletedAt = null;
+                    payment.ErrorMessage = null;
+                    pendingManualVerification = true;
                     break;
             }
 
-            if (verified)
+            if (pendingManualVerification)
+            {
+                _logger.LogInformation(
+                    "Bank transfer reference submitted for payment {PaymentId}; awaiting admin verification.",
+                    payment.Id);
+            }
+            else if (verified)
             {
                 payment.Status = PaymentStatus.Completed;
                 payment.CompletedAt = DateTime.UtcNow;
@@ -244,6 +255,10 @@ public class PaymentService : IPaymentService
                 payment.Status = PaymentStatus.Failed;
                 payment.ErrorMessage = "Payment verification failed";
             }
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
