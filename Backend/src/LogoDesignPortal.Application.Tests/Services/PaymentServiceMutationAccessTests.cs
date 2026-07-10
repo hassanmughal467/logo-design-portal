@@ -4,6 +4,7 @@ using LogoDesignPortal.Application.DTOs.Payments;
 using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Mappings;
 using LogoDesignPortal.Application.Services;
+using LogoDesignPortal.Domain.Constants;
 using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using LogoDesignPortal.Infrastructure.Persistence;
@@ -31,8 +32,7 @@ public class PaymentServiceMutationAccessTests
                     PaymentMethod = "banktransfer",
                     Amount = 50m
                 },
-                designerUserId,
-                "Designer"));
+                designerUserId));
 
         await context.DisposeAsync();
     }
@@ -50,10 +50,106 @@ public class PaymentServiceMutationAccessTests
                 PaymentMethod = "banktransfer",
                 Amount = 50m
             },
-            clientUserId,
-            "Client");
+            clientUserId);
 
         Assert.NotEqual(Guid.Empty, result.Id);
+        await context.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task CreatePaymentAsync_OtherClient_ThrowsForbidden()
+    {
+        var (context, invoiceId, _, _) = await CreateClientInvoiceAsync();
+        var otherClientUserId = await SeedOtherClientAsync(context);
+        var service = CreateService(context);
+
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            service.CreatePaymentAsync(
+                new CreatePaymentRequestDto
+                {
+                    InvoiceId = invoiceId,
+                    PaymentMethod = "banktransfer",
+                    Amount = 50m
+                },
+                otherClientUserId));
+
+        Assert.Empty(await context.Payments.ToListAsync());
+        await context.DisposeAsync();
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("SuperAdmin")]
+    public async Task CreatePaymentAsync_AdminRoles_Succeed(string role)
+    {
+        var (context, invoiceId, _, _) = await CreateClientInvoiceAsync();
+        var userId = await SeedUserWithRoleAsync(context, role);
+        var service = CreateService(context);
+
+        var result = await service.CreatePaymentAsync(
+            new CreatePaymentRequestDto
+            {
+                InvoiceId = invoiceId,
+                PaymentMethod = "banktransfer",
+                Amount = 50m
+            },
+            userId);
+
+        Assert.NotEqual(Guid.Empty, result.Id);
+        await context.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task GeneratePaymentLinkAsync_DesignerOnClientInvoice_ThrowsForbidden()
+    {
+        var (context, invoiceId, _, designerUserId) = await CreateClientInvoiceAsync();
+        var service = CreateService(context);
+
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            service.GeneratePaymentLinkAsync(invoiceId, "banktransfer", designerUserId));
+
+        await context.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task GeneratePaymentLinkAsync_OwningClient_Succeeds()
+    {
+        var (context, invoiceId, clientUserId, _) = await CreateClientInvoiceAsync();
+        var service = CreateService(context);
+
+        var result = await service.GeneratePaymentLinkAsync(invoiceId, "banktransfer", clientUserId);
+
+        Assert.Equal(invoiceId, result.InvoiceId);
+        Assert.NotEqual(Guid.Empty, result.PaymentId);
+        await context.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task GeneratePaymentLinkAsync_OtherClient_ThrowsForbidden()
+    {
+        var (context, invoiceId, _, _) = await CreateClientInvoiceAsync();
+        var otherClientUserId = await SeedOtherClientAsync(context);
+        var service = CreateService(context);
+
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            service.GeneratePaymentLinkAsync(invoiceId, "banktransfer", otherClientUserId));
+
+        await context.DisposeAsync();
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("SuperAdmin")]
+    public async Task GeneratePaymentLinkAsync_AdminRoles_Succeed(string role)
+    {
+        var (context, invoiceId, _, _) = await CreateClientInvoiceAsync();
+        var userId = await SeedUserWithRoleAsync(context, role);
+        var service = CreateService(context);
+
+        var result = await service.GeneratePaymentLinkAsync(invoiceId, "banktransfer", userId);
+
+        Assert.Equal(invoiceId, result.InvoiceId);
+        Assert.NotEqual(Guid.Empty, result.PaymentId);
         await context.DisposeAsync();
     }
 
@@ -70,8 +166,7 @@ public class PaymentServiceMutationAccessTests
                 PaymentId = paymentId,
                 BankReference = " BT-12345 "
             },
-            clientUserId,
-            "Client");
+            clientUserId);
 
         Assert.Equal(PaymentStatus.Processing.ToString(), result.Status);
         Assert.Equal("BT-12345", result.TransactionId);
@@ -98,8 +193,7 @@ public class PaymentServiceMutationAccessTests
                     PaymentId = paymentId,
                     BankReference = " "
                 },
-                clientUserId,
-                "Client"));
+                clientUserId));
 
         Assert.Contains("Bank reference is required", ex.Message);
         var payment = await context.Payments.Include(p => p.Invoice).SingleAsync(p => p.Id == paymentId);
@@ -123,8 +217,7 @@ public class PaymentServiceMutationAccessTests
                     PaymentId = paymentId,
                     BankReference = "BT-OTHER"
                 },
-                otherClientUserId,
-                "Client"));
+                otherClientUserId));
 
         var payment = await context.Payments.Include(p => p.Invoice).SingleAsync(p => p.Id == paymentId);
         Assert.Equal(PaymentStatus.Pending, payment.Status);
@@ -175,9 +268,13 @@ public class PaymentServiceMutationAccessTests
         var designerUserId = Guid.NewGuid();
         var profileId = Guid.NewGuid();
 
+        SeedRoles(context);
+
+        var clientRole = context.Roles.Local.First(r => r.Name == nameof(SystemRoles.Client));
+        var designerRole = context.Roles.Local.First(r => r.Name == nameof(SystemRoles.Designer));
         context.Users.AddRange(
-            new User { Id = clientUserId, Email = "c@test.com", PasswordHash = "h", RoleId = Guid.NewGuid() },
-            new User { Id = designerUserId, Email = "d@test.com", PasswordHash = "h", RoleId = Guid.NewGuid() });
+            new User { Id = clientUserId, Email = "c@test.com", PasswordHash = "h", RoleId = clientRole.Id, Role = clientRole },
+            new User { Id = designerUserId, Email = "d@test.com", PasswordHash = "h", RoleId = designerRole.Id, Role = designerRole });
 
         var profile = new ClientProfile { Id = profileId, UserId = clientUserId, User = context.Users.Local.First(u => u.Id == clientUserId) };
         context.ClientProfiles.Add(profile);
@@ -219,12 +316,14 @@ public class PaymentServiceMutationAccessTests
     {
         var otherClientUserId = Guid.NewGuid();
         var otherProfileId = Guid.NewGuid();
+        var clientRole = await context.Roles.SingleAsync(r => r.Name == nameof(SystemRoles.Client));
         var otherUser = new User
         {
             Id = otherClientUserId,
             Email = "other-client@test.com",
             PasswordHash = "h",
-            RoleId = Guid.NewGuid(),
+            RoleId = clientRole.Id,
+            Role = clientRole,
             IsActive = true
         };
 
@@ -238,5 +337,31 @@ public class PaymentServiceMutationAccessTests
         });
         await context.SaveChangesAsync();
         return otherClientUserId;
+    }
+
+    private static async Task<Guid> SeedUserWithRoleAsync(ApplicationDbContext context, string roleName)
+    {
+        var role = await context.Roles.SingleAsync(r => r.Name == roleName);
+        var userId = Guid.NewGuid();
+        context.Users.Add(new User
+        {
+            Id = userId,
+            Email = $"{roleName.ToLowerInvariant()}-{Guid.NewGuid():N}@test.com",
+            PasswordHash = "h",
+            RoleId = role.Id,
+            Role = role,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+        return userId;
+    }
+
+    private static void SeedRoles(ApplicationDbContext context)
+    {
+        context.Roles.AddRange(
+            new Role { Id = SeededRoleIds.SuperAdmin, Name = nameof(SystemRoles.SuperAdmin) },
+            new Role { Id = SeededRoleIds.Admin, Name = nameof(SystemRoles.Admin) },
+            new Role { Id = SeededRoleIds.Designer, Name = nameof(SystemRoles.Designer) },
+            new Role { Id = SeededRoleIds.Client, Name = nameof(SystemRoles.Client) });
     }
 }

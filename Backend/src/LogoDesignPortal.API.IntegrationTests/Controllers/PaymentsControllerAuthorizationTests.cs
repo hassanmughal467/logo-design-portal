@@ -1,7 +1,11 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using LogoDesignPortal.API.IntegrationTests.Helpers;
+using LogoDesignPortal.Domain.Constants;
+using LogoDesignPortal.Domain.Entities;
 using LogoDesignPortal.Domain.Enums;
 using LogoDesignPortal.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +20,13 @@ public class PaymentsControllerAuthorizationTests
     private readonly TestWebApplicationFactory _factory;
 
     public PaymentsControllerAuthorizationTests(TestWebApplicationFactory factory) => _factory = factory;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     [Fact]
     public async Task GetPayment_WithoutAuth_Returns401()
@@ -36,7 +47,7 @@ public class PaymentsControllerAuthorizationTests
 
         var response = await client.PutAsJsonAsync($"/api/payments/{paymentId}/status",
             new { status = "Completed", transactionId = "manual" },
-            IntegrationTestJson.Options);
+            JsonOptions);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -52,10 +63,10 @@ public class PaymentsControllerAuthorizationTests
 
         var response = await client.PostAsJsonAsync("/api/payments/process",
             new { paymentId, bankReference = "BT-CLIENT-123" },
-            IntegrationTestJson.Options);
+            JsonOptions);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var paymentResponse = await response.Content.ReadFromJsonAsync<PaymentIdResponse>(IntegrationTestJson.Options);
+        var paymentResponse = await response.Content.ReadFromJsonAsync<PaymentIdResponse>(JsonOptions);
         Assert.NotNull(paymentResponse);
         Assert.Equal(PaymentStatus.Processing.ToString(), paymentResponse!.Status);
         Assert.Equal("BT-CLIENT-123", paymentResponse.TransactionId);
@@ -81,7 +92,7 @@ public class PaymentsControllerAuthorizationTests
 
         var response = await client.PostAsJsonAsync("/api/payments/process",
             new { paymentId, bankReference = "" },
-            IntegrationTestJson.Options);
+            JsonOptions);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -97,10 +108,10 @@ public class PaymentsControllerAuthorizationTests
 
         var response = await admin.PutAsJsonAsync($"/api/payments/{paymentId}/status",
             new { status = PaymentStatus.Completed.ToString(), transactionId = "BT-VERIFIED-123" },
-            IntegrationTestJson.Options);
+            JsonOptions);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var paymentResponse = await response.Content.ReadFromJsonAsync<PaymentIdResponse>(IntegrationTestJson.Options);
+        var paymentResponse = await response.Content.ReadFromJsonAsync<PaymentIdResponse>(JsonOptions);
         Assert.NotNull(paymentResponse);
         Assert.Equal(PaymentStatus.Completed.ToString(), paymentResponse!.Status);
 
@@ -125,7 +136,7 @@ public class PaymentsControllerAuthorizationTests
 
         var response = await client.PostAsJsonAsync("/api/payments/link",
             new { invoiceId, paymentMethod = "banktransfer" },
-            IntegrationTestJson.Options);
+            JsonOptions);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -141,31 +152,156 @@ public class PaymentsControllerAuthorizationTests
 
         var response = await client.PostAsJsonAsync("/api/payments",
             new { invoiceId, paymentMethod = "banktransfer", amount = 110m, currency = "USD" },
-            IntegrationTestJson.Options);
+            JsonOptions);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    private async Task<Guid> CreateInvoiceForSeededClientAsync()
+    [Fact]
+    public async Task CreatePayment_AsOtherClient_ForClientInvoice_Returns403()
     {
-        var orderId = await IntegrationDatabaseHelper.InsertCompletedBillableOrderAsync(
-            _factory, _factory.ClientProfileId, 110m);
+        var invoiceId = await CreateInvoiceForSeededClientAsync();
+        var otherClientEmail = $"payment-other-client-{Guid.NewGuid():N}@test.com";
+        await SeedOtherClientAsync(otherClientEmail);
+
+        var client = _factory.CreateClient();
+        var token = await AuthHelper.GetAccessTokenAsync(client, otherClientEmail, "Test@123");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.PostAsJsonAsync("/api/payments",
+            new { invoiceId, paymentMethod = "banktransfer", amount = 110m, currency = "USD" },
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreatePayment_AsAdmin_ForClientInvoice_ReturnsCreated()
+    {
+        var invoiceId = await CreateInvoiceForSeededClientAsync();
+
+        var admin = _factory.CreateClient();
+        var token = await AuthHelper.GetAdminTokenAsync(admin);
+        admin.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await admin.PostAsJsonAsync("/api/payments",
+            new { invoiceId, paymentMethod = "banktransfer", amount = 110m, currency = "USD" },
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreatePayment_AsSuperAdmin_ForClientInvoice_ReturnsCreated()
+    {
+        var invoiceId = await CreateInvoiceForSeededClientAsync();
 
         var admin = _factory.CreateClient();
         var token = await AuthHelper.GetSuperAdminTokenAsync(admin);
         admin.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var create = await admin.PostAsJsonAsync("/api/invoices",
-            new
-            {
-                orders = new[] { new { orderId, price = 110m } },
-                billingType = BillingType.PerLogo,
-                taxAmount = 0m
-            },
-            IntegrationTestJson.Options);
-        create.EnsureSuccessStatusCode();
-        var invoice = await create.Content.ReadFromJsonAsync<InvoiceIdResponse>(IntegrationTestJson.Options);
-        return invoice!.Id;
+        var response = await admin.PostAsJsonAsync("/api/payments",
+            new { invoiceId, paymentMethod = "banktransfer", amount = 110m, currency = "USD" },
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GeneratePaymentLink_AsOtherClient_ForClientInvoice_Returns403()
+    {
+        var invoiceId = await CreateInvoiceForSeededClientAsync();
+        var otherClientEmail = $"payment-link-other-client-{Guid.NewGuid():N}@test.com";
+        await SeedOtherClientAsync(otherClientEmail);
+
+        var client = _factory.CreateClient();
+        var token = await AuthHelper.GetAccessTokenAsync(client, otherClientEmail, "Test@123");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.PostAsJsonAsync("/api/payments/link",
+            new { invoiceId, paymentMethod = "banktransfer" },
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("SuperAdmin")]
+    public async Task GeneratePaymentLink_AsAdminRoles_ForClientInvoice_ReturnsOk(string role)
+    {
+        var invoiceId = await CreateInvoiceForSeededClientAsync();
+
+        var admin = _factory.CreateClient();
+        var token = role == "Admin"
+            ? await AuthHelper.GetAdminTokenAsync(admin)
+            : await AuthHelper.GetSuperAdminTokenAsync(admin);
+        admin.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await admin.PostAsJsonAsync("/api/payments/link",
+            new { invoiceId, paymentMethod = "banktransfer" },
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private async Task<Guid> CreateInvoiceForSeededClientAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var client = await context.ClientProfiles.SingleAsync(c => c.Id == _factory.ClientProfileId);
+        var invoice = new Invoice
+        {
+            Id = Guid.NewGuid(),
+            ClientId = client.Id,
+            Client = client,
+            InvoiceNumber = $"PAY-AUTH-{Guid.NewGuid():N}",
+            Amount = 110m,
+            TaxAmount = 0m,
+            TotalAmount = 110m,
+            Status = InvoiceStatus.Pending,
+            BillingType = BillingType.PerLogo,
+            IssueDate = DateTime.UtcNow,
+            DueDate = DateTime.UtcNow.AddDays(30),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.Invoices.Add(invoice);
+        await context.SaveChangesAsync();
+        return invoice.Id;
+    }
+
+    private async Task SeedOtherClientAsync(string email)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var clientRole = await context.Roles.SingleAsync(r => r.Id == SeededRoleIds.Client);
+        var passwordHash = BCrypt.Net.BCrypt.HashPassword("Test@123", BCrypt.Net.BCrypt.GenerateSalt(10));
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            FirstName = "Other",
+            LastName = "PaymentClient",
+            PasswordHash = passwordHash,
+            RoleId = clientRole.Id,
+            Role = clientRole,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.Users.Add(user);
+        context.ClientProfiles.Add(new ClientProfile
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            User = user,
+            CompanyName = "Other Payment Client",
+            ContactName = "Other Payment Client",
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
     }
 
     private async Task<Guid> SeedPendingPaymentAsync()
@@ -190,15 +326,10 @@ public class PaymentsControllerAuthorizationTests
                 amount = 110m,
                 currency = "USD"
             },
-            IntegrationTestJson.Options);
+            JsonOptions);
         create.EnsureSuccessStatusCode();
-        var payment = await create.Content.ReadFromJsonAsync<PaymentIdResponse>(IntegrationTestJson.Options);
+        var payment = await create.Content.ReadFromJsonAsync<PaymentIdResponse>(JsonOptions);
         return (payment!.Id, invoiceId);
-    }
-
-    private sealed class InvoiceIdResponse
-    {
-        public Guid Id { get; set; }
     }
 
     private sealed class PaymentIdResponse

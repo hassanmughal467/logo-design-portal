@@ -1,6 +1,7 @@
 using AutoMapper;
 using LogoDesignPortal.Application.Caching;
 using LogoDesignPortal.Application.DTOs.Payments;
+using LogoDesignPortal.Application.Exceptions;
 using LogoDesignPortal.Application.Helpers;
 using LogoDesignPortal.Application.Interfaces;
 using LogoDesignPortal.Application.Interfaces.Persistence;
@@ -50,15 +51,7 @@ public class PaymentService : IPaymentService
 
     public async Task<PaymentResponseDto> CreatePaymentAsync(CreatePaymentRequestDto request, Guid userId)
     {
-        // Validate invoice exists
-        var invoice = await _context.Invoices
-            .Include(i => i.Client)
-            .FirstOrDefaultAsync(i => i.Id == request.InvoiceId && !i.IsDeleted);
-
-        if (invoice == null)
-        {
-            throw new InvalidOperationException("Invoice not found.");
-        }
+        await AuthorizeInvoicePaymentMutationAsync(request.InvoiceId, userId);
 
         // Create payment record
         var payment = new Payment
@@ -125,14 +118,7 @@ public class PaymentService : IPaymentService
 
     public async Task<PaymentLinkResponseDto> GeneratePaymentLinkAsync(Guid invoiceId, string paymentMethod, Guid userId)
     {
-        var invoice = await _context.Invoices
-            .Include(i => i.Client)
-            .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
-
-        if (invoice == null)
-        {
-            throw new InvalidOperationException("Invoice not found.");
-        }
+        var invoice = await AuthorizeInvoicePaymentMutationAsync(invoiceId, userId);
 
         var request = new CreatePaymentRequestDto
         {
@@ -169,6 +155,8 @@ public class PaymentService : IPaymentService
         {
             throw new InvalidOperationException("Payment not found.");
         }
+
+        await AuthorizeInvoicePaymentMutationAsync(payment.InvoiceId, userId);
 
         var verified = false;
         var pendingManualVerification = false;
@@ -285,6 +273,35 @@ public class PaymentService : IPaymentService
             .FirstOrDefaultAsync(p => p.Id == paymentId && !p.IsDeleted);
 
         return payment == null ? null : _mapper.Map<PaymentResponseDto>(payment);
+    }
+
+    private async Task<Invoice> AuthorizeInvoicePaymentMutationAsync(Guid invoiceId, Guid userId)
+    {
+        var invoice = await _context.Invoices
+            .Include(i => i.Client)
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted);
+
+        if (invoice == null)
+        {
+            throw new InvalidOperationException("Invoice not found.");
+        }
+
+        var currentUser = await _context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == userId && !u.IsDeleted);
+
+        var roleName = currentUser?.Role?.Name;
+        if (roleName == nameof(SystemRoles.Admin) || roleName == nameof(SystemRoles.SuperAdmin))
+        {
+            return invoice;
+        }
+
+        if (roleName == nameof(SystemRoles.Client) && invoice.Client?.UserId == userId)
+        {
+            return invoice;
+        }
+
+        throw new ForbiddenAccessException("You don't have permission to create payments for this invoice.");
     }
 
     public async Task<PaymentResponseDto?> GetPaymentByIdWithAccessAsync(Guid paymentId, Guid userId, string? userRole)
