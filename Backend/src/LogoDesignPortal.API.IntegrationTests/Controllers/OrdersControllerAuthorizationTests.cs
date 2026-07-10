@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using LogoDesignPortal.API.IntegrationTests.Helpers;
 using LogoDesignPortal.Domain.Constants;
 using LogoDesignPortal.Domain.Entities;
@@ -22,12 +24,19 @@ public class OrdersControllerAuthorizationTests
 
     public OrdersControllerAuthorizationTests(TestWebApplicationFactory factory) => _factory = factory;
 
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     [Fact]
     public async Task CreateOrder_WithoutBearer_Returns401()
     {
         var client = _factory.CreateClient();
         var response = await client.PostAsJsonAsync("/api/orders",
-            new { title = "x", description = "y", price = 1 }, IntegrationTestJson.Options);
+            new { title = "x", description = "y", price = 1 }, JsonOptions);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
@@ -39,9 +48,9 @@ public class OrdersControllerAuthorizationTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", clientToken);
 
         var create = await client.PostAsJsonAsync("/api/orders",
-            new { title = "Authz test", description = "d", price = 50 }, IntegrationTestJson.Options);
+            new { title = "Authz test", description = "d", price = 50 }, JsonOptions);
         create.EnsureSuccessStatusCode();
-        var order = await create.Content.ReadFromJsonAsync<OrderIdResponse>(IntegrationTestJson.Options);
+        var order = await create.Content.ReadFromJsonAsync<OrderIdResponse>(JsonOptions);
         Assert.NotNull(order);
 
         var designer = _factory.CreateClient();
@@ -49,7 +58,7 @@ public class OrdersControllerAuthorizationTests
         designer.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", designerToken);
 
         var response = await designer.PutAsJsonAsync($"/api/orders/{order!.Id}/status",
-            new { status = "InProgress", notes = "not assigned" }, IntegrationTestJson.Options);
+            new { status = "InProgress", notes = "not assigned" }, JsonOptions);
 
         Assert.True(
             response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Forbidden,
@@ -63,9 +72,9 @@ public class OrdersControllerAuthorizationTests
         var tokenA = await AuthHelper.GetClientTokenAsync(clientA);
         clientA.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenA);
         var create = await clientA.PostAsJsonAsync("/api/orders",
-            new { title = "Private", description = "d", price = 10 }, IntegrationTestJson.Options);
+            new { title = "Private", description = "d", price = 10 }, JsonOptions);
         create.EnsureSuccessStatusCode();
-        var order = await create.Content.ReadFromJsonAsync<OrderIdResponse>(IntegrationTestJson.Options);
+        var order = await create.Content.ReadFromJsonAsync<OrderIdResponse>(JsonOptions);
 
         // Second client cannot exist in seed — use designer token as non-owner
         var other = _factory.CreateClient();
@@ -90,7 +99,7 @@ public class OrdersControllerAuthorizationTests
 
         var response = await otherClient.PutAsJsonAsync($"/api/orders/{orderId}/status",
             new { status = OrderStatus.ClientApproved.ToString(), notes = "cross-tenant attempt" },
-            IntegrationTestJson.Options);
+            JsonOptions);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
 
@@ -108,12 +117,12 @@ public class OrdersControllerAuthorizationTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var create = await client.PostAsJsonAsync("/api/orders",
-            new { title = "Batch", description = "d", price = 10 }, IntegrationTestJson.Options);
+            new { title = "Batch", description = "d", price = 10 }, JsonOptions);
         create.EnsureSuccessStatusCode();
-        var order = await create.Content.ReadFromJsonAsync<OrderIdResponse>(IntegrationTestJson.Options);
+        var order = await create.Content.ReadFromJsonAsync<OrderIdResponse>(JsonOptions);
 
         var response = await client.PostAsJsonAsync($"/api/orders/{order!.Id}/send-preview-batch",
-            new { previewBatchId = Guid.NewGuid() }, IntegrationTestJson.Options);
+            new { previewBatchId = Guid.NewGuid() }, JsonOptions);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
