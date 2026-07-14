@@ -73,6 +73,23 @@ describe('SharedListDataService', () => {
     });
   });
 
+  it('clearOrdersAdminCache causes a fresh orders fetch', (done) => {
+    api.get.and.returnValues(
+      of(page([{ id: 'o1' }])),
+      of(page([{ id: 'o2' }]))
+    );
+
+    service.getAllOrdersAdmin().subscribe((first) => {
+      service.clearOrdersAdminCache();
+      service.getAllOrdersAdmin().subscribe((second) => {
+        expect(first).toEqual([{ id: 'o1' }]);
+        expect(second).toEqual([{ id: 'o2' }]);
+        expect(api.get).toHaveBeenCalledTimes(2);
+        done();
+      });
+    });
+  });
+
   it('getAllOrdersAdmin fetches multiple pages and combines results', (done) => {
     api.get.and.callFake((endpoint: string): any => {
       if (endpoint.includes('page=1')) {
