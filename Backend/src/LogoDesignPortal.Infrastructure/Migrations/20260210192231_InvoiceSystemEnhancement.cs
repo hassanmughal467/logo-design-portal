@@ -11,12 +11,13 @@ namespace LogoDesignPortal.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // MySQL: Disable FK checks to allow dropping index, then re-enable
-            migrationBuilder.Sql("SET FOREIGN_KEY_CHECKS = 0;");
+            migrationBuilder.DropForeignKey(
+                name: "FK_InvoiceOrders_Invoices_InvoiceId",
+                table: "InvoiceOrders");
+
             migrationBuilder.DropIndex(
                 name: "IX_InvoiceOrders_InvoiceId_OrderId",
                 table: "InvoiceOrders");
-            migrationBuilder.Sql("SET FOREIGN_KEY_CHECKS = 1;");
 
             migrationBuilder.AddColumn<int>(
                 name: "BillingType",
@@ -227,6 +228,14 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 columns: new[] { "InvoiceId", "OrderId" },
                 unique: true);
 
+            migrationBuilder.AddForeignKey(
+                name: "FK_InvoiceOrders_Invoices_InvoiceId",
+                table: "InvoiceOrders",
+                column: "InvoiceId",
+                principalTable: "Invoices",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+
             migrationBuilder.CreateIndex(
                 name: "IX_InvoiceLogs_CreatedAt",
                 table: "InvoiceLogs",
@@ -243,6 +252,10 @@ namespace LogoDesignPortal.Infrastructure.Migrations
         {
             migrationBuilder.DropTable(
                 name: "InvoiceLogs");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_InvoiceOrders_Invoices_InvoiceId",
+                table: "InvoiceOrders");
 
             migrationBuilder.DropIndex(
                 name: "IX_InvoiceOrders_InvoiceId_OrderId",
@@ -408,6 +421,14 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 table: "InvoiceOrders",
                 columns: new[] { "InvoiceId", "OrderId" },
                 unique: true);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_InvoiceOrders_Invoices_InvoiceId",
+                table: "InvoiceOrders",
+                column: "InvoiceId",
+                principalTable: "Invoices",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
         }
     }
 }
