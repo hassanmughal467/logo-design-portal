@@ -15,8 +15,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "ReferenceId",
                 table: "Notifications",
                 type: "char(36)",
-                nullable: true,
-                collation: "ascii_general_ci");
+                nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "ReferenceType",
