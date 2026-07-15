@@ -19,7 +19,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 EXECUTE stmt;
                 DEALLOCATE PREPARE stmt;
                 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'LogoOrders' AND COLUMN_NAME = 'CurrencyCode');
-                SET @sql = IF(@col_exists = 0, 'ALTER TABLE LogoOrders ADD COLUMN CurrencyCode VARCHAR(3) NULL CHARACTER SET utf8mb4', 'SELECT 1');
+                SET @sql = IF(@col_exists = 0, 'ALTER TABLE LogoOrders ADD COLUMN CurrencyCode VARCHAR(3) CHARACTER SET utf8mb4 NULL', 'SELECT 1');
                 PREPARE stmt FROM @sql;
                 EXECUTE stmt;
                 DEALLOCATE PREPARE stmt;
