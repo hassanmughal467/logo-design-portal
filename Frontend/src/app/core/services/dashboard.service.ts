@@ -109,7 +109,8 @@ export class DashboardService {
       );
       
       // Try to fetch invoices (if endpoint exists - will fail gracefully)
-      invoices$ = this.apiService.get<any[]>('invoices').pipe(
+      invoices$ = this.apiService.get<unknown>('invoices').pipe(
+        map((response) => ApiService.extractItems<any>(response)),
         catchError(() => of([]))
       );
 
@@ -119,7 +120,8 @@ export class DashboardService {
       );
     } else if (user.role === 'Client') {
       // Fetch client-specific data
-      invoices$ = this.apiService.get<any[]>('invoices').pipe(
+      invoices$ = this.apiService.get<unknown>('invoices').pipe(
+        map((response) => ApiService.extractItems<any>(response)),
         catchError(() => of([]))
       );
       

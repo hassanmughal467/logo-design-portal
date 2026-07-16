@@ -27,7 +27,8 @@ export class UsersManagementPage extends BasePage {
 
   async openCreateUserDialog(): Promise<void> {
     await this.page.getByTestId(UsersSelectors.openCreate).click();
-    await expect(this.page.getByTestId(UsersSelectors.dialog)).toBeVisible();
+    // p-dialog host with data-testid stays aria-hidden; assert the open overlay instead.
+    await expect(this.page.getByRole('dialog', { name: /Create New User/i })).toBeVisible();
   }
 
   async expectUserInTable(email: string): Promise<void> {

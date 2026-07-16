@@ -26,5 +26,6 @@ test('Elite - API failure then recovery succeeds on retry', async ({ page }) => 
   await expect(page.locator('body')).toContainText(/error|failed|unable|no orders/i, { timeout: 15_000 });
   await page.reload();
   await expect(page.getByRole('heading', { name: /Orders/i })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('orders-open-create')).toBeVisible();
+  // Admins manage orders; Create Order is Client-only.
+  await expect(page.getByTestId('orders-open-quick-completed')).toBeVisible();
 });

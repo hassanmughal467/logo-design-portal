@@ -75,7 +75,8 @@ export class ApiService {
   /** Extract items from paginated API response (handles both { data: { items } } and legacy { items } formats) */
   static extractItems<T>(response: any): T[] {
     if (!response) return [];
-    const items = response?.data?.items ?? response?.items;
+    if (Array.isArray(response)) return response as T[];
+    const items = response?.data?.items ?? response?.items ?? response?.Items;
     return Array.isArray(items) ? items : [];
   }
 

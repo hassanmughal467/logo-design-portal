@@ -18,7 +18,7 @@ export class CreateUserDialogPage {
   constructor(private readonly page: Page) {}
 
   private root() {
-    return this.page.getByTestId(DialogSelectors.root);
+    return this.page.getByRole('dialog', { name: /Create New User/i });
   }
 
   private roleDropdown() {
@@ -31,12 +31,13 @@ export class CreateUserDialogPage {
     lastName: string;
     password: string;
   }): Promise<void> {
-    await this.page.getByTestId(DialogSelectors.email).fill(opts.email);
-    await this.page.getByTestId(DialogSelectors.firstName).fill(opts.firstName);
-    await this.page.getByTestId(DialogSelectors.lastName).fill(opts.lastName);
-    await this.page.getByTestId(DialogSelectors.password).locator('input').fill(opts.password);
+    const dlg = this.root();
+    await dlg.getByTestId(DialogSelectors.email).fill(opts.email);
+    await dlg.getByTestId(DialogSelectors.firstName).fill(opts.firstName);
+    await dlg.getByTestId(DialogSelectors.lastName).fill(opts.lastName);
+    await dlg.getByTestId(DialogSelectors.password).locator('input').fill(opts.password);
     await this.roleDropdown().selectOption('Designer');
-    await this.page.getByTestId(DialogSelectors.submit).click();
+    await dlg.getByTestId(DialogSelectors.submit).click();
   }
 
   async fillAndSubmitClient(opts: {
