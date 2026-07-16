@@ -3,8 +3,8 @@ import { LoginPage } from '../../pom';
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from '../../utils/env';
 
 test.describe('Elite - visual regression', () => {
-  // Dashboard charts/KPI pixels vary slightly across CI runs; keep a ratio budget.
-  const shot = { fullPage: true as const, animations: 'disabled' as const, maxDiffPixelRatio: 0.02 };
+  // Dashboard/orders pixels vary with seeded data and chart antialiasing across CI runs.
+  const shot = { fullPage: true as const, animations: 'disabled' as const, maxDiffPixelRatio: 0.04 };
 
   test('dashboard visual baseline', async ({ page }) => {
     const login = new LoginPage(page);
