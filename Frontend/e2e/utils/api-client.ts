@@ -185,7 +185,30 @@ export async function listInvoicesApi(request: APIRequestContext, token: string)
   if (!res.ok()) {
     throw new Error(`listInvoicesApi failed: ${res.status()} ${await res.text()}`);
   }
-  return res.json() as Promise<Array<{ id: string; status: string; totalAmount?: number }>>;
+  const body = await res.json();
+  const items = Array.isArray(body)
+    ? body
+    : (body?.items ?? body?.data?.items ?? []);
+  return items as Array<{ id: string; status: string; totalAmount?: number }>;
+}
+
+/** Advance order to PreviewDelivered (Admin-only via status API; designers use file-send flow). */
+export async function deliverPreviewApi(
+  request: APIRequestContext,
+  adminToken: string,
+  orderId: string,
+  notes = 'Preview delivered via E2E automation.'
+) {
+  return updateOrderStatusApi(request, adminToken, orderId, 'PreviewDelivered', notes);
+}
+
+export function extractPagedItems<T>(body: unknown): T[] {
+  if (Array.isArray(body)) {
+    return body as T[];
+  }
+  const record = body as { items?: T[]; data?: { items?: T[] } } | null;
+  const items = record?.items ?? record?.data?.items;
+  return Array.isArray(items) ? items : [];
 }
 
 export async function createInvoiceApi(

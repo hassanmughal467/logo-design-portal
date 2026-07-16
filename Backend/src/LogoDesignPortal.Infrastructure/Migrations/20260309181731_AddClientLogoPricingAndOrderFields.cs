@@ -19,7 +19,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 EXECUTE stmt;
                 DEALLOCATE PREPARE stmt;
                 SET @col_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'LogoOrders' AND COLUMN_NAME = 'CurrencyCode');
-                SET @sql = IF(@col_exists = 0, 'ALTER TABLE LogoOrders ADD COLUMN CurrencyCode VARCHAR(3) NULL CHARACTER SET utf8mb4', 'SELECT 1');
+                SET @sql = IF(@col_exists = 0, 'ALTER TABLE LogoOrders ADD COLUMN CurrencyCode VARCHAR(3) CHARACTER SET utf8mb4 NULL', 'SELECT 1');
                 PREPARE stmt FROM @sql;
                 EXECUTE stmt;
                 DEALLOCATE PREPARE stmt;
@@ -29,7 +29,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "ClientLogoPricings",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false, collation: "ascii_general_ci"),
+                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
                     ClientId = table.Column<Guid>(type: "char(36)", nullable: false),
                     DesignCategory = table.Column<int>(type: "int", nullable: false),
                     DesignType = table.Column<int>(type: "int", nullable: false),
@@ -39,11 +39,11 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                     IsActive = table.Column<bool>(type: "tinyint(1)", nullable: false, defaultValue: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: true, collation: "ascii_general_ci"),
-                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true, collation: "ascii_general_ci"),
+                    CreatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
+                    UpdatedBy = table.Column<Guid>(type: "char(36)", nullable: true),
                     IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false),
                     DeletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true, collation: "ascii_general_ci")
+                    DeletedBy = table.Column<Guid>(type: "char(36)", nullable: true)
                 },
                 constraints: table =>
                 {

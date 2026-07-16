@@ -251,10 +251,11 @@ export class ClientDetailComponent implements OnInit, OnDestroy {
   loadInvoices(): void {
     if (this.invoices.length > 0) return; // Already loaded from detail endpoint
     this.invoicesLoading = true;
-    this.apiService.get<any[]>('invoices')
+    this.apiService.get<unknown>('invoices')
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (invoices) => {
+        next: (response) => {
+          const invoices = ApiService.extractItems<any>(response);
           this.invoices = invoices.filter(inv => inv.clientId === this.clientId);
           this.invoicesLoading = false;
         },

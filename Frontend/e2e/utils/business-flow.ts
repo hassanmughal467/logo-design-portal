@@ -46,11 +46,12 @@ export async function runCoreBusinessLifecycle(
   await assertOrderStatusContains(request, actors.clientToken, order.id, 'progress');
 
   await assignDesignerApi(request, actors.adminToken, order.id, actors.designerUserId);
-  await updateOrderStatusApi(request, actors.designerToken, order.id, 'PreviewDelivered', 'Initial draft shared.');
+  // Designers cannot set PreviewDelivered via status API — Admin advances after review.
+  await updateOrderStatusApi(request, actors.adminToken, order.id, 'PreviewDelivered', 'Initial draft shared.');
   await assertOrderStatusContains(request, actors.clientToken, order.id, 'preview');
 
   await requestRevisionApi(request, actors.clientToken, order.id, 'Please tighten spacing and improve icon balance.');
-  await updateOrderStatusApi(request, actors.designerToken, order.id, 'PreviewDelivered', 'Revision completed.');
+  await updateOrderStatusApi(request, actors.adminToken, order.id, 'PreviewDelivered', 'Revision completed.');
   await approveLogoApi(request, actors.clientToken, order.id, 'Looks good after revision.');
   await updateOrderStatusApi(request, actors.adminToken, order.id, 'Completed', 'Closed by automation suite.');
   await assertOrderStatusContains(request, actors.clientToken, order.id, 'completed');

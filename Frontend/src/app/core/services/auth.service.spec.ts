@@ -3,14 +3,20 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { Router } from '@angular/router';
 import { AuthService } from './auth.service';
 import { ApiService } from './api.service';
+import { DashboardService } from './dashboard.service';
+import { SharedListDataService } from './shared-list-data.service';
 
 describe('AuthService', () => {
   let service: AuthService;
   let httpMock: HttpTestingController;
   let router: jasmine.SpyObj<Router>;
+  let dashboardService: jasmine.SpyObj<DashboardService>;
+  let sharedListDataService: jasmine.SpyObj<SharedListDataService>;
 
   beforeEach(() => {
     router = jasmine.createSpyObj('Router', ['navigate']);
+    dashboardService = jasmine.createSpyObj('DashboardService', ['invalidateDashboardCache']);
+    sharedListDataService = jasmine.createSpyObj('SharedListDataService', ['clearAll']);
     localStorage.clear();
     sessionStorage.clear();
 
@@ -20,6 +26,8 @@ describe('AuthService', () => {
         AuthService,
         ApiService,
         { provide: Router, useValue: router },
+        { provide: DashboardService, useValue: dashboardService },
+        { provide: SharedListDataService, useValue: sharedListDataService },
       ],
     });
 
@@ -84,6 +92,8 @@ describe('AuthService', () => {
     service['currentUserSubject'].next({ email: 'x@y.com', roleName: 'Client' } as any);
     service.logout();
     expect(localStorage.getItem('auth_token')).toBeNull();
+    expect(sharedListDataService.clearAll).toHaveBeenCalled();
+    expect(dashboardService.invalidateDashboardCache).toHaveBeenCalled();
     expect(router.navigate).toHaveBeenCalledWith(['/login']);
   });
 

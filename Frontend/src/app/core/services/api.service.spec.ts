@@ -105,6 +105,10 @@ describe('ApiService', () => {
       expect(ApiService.extractItems(null)).toEqual([]);
     });
 
+    it('returns array responses as-is', () => {
+      expect(ApiService.extractItems<number>([1, 2])).toEqual([1, 2]);
+    });
+
     it('reads data.items shape', () => {
       const res = { data: { items: [1, 2] } };
       expect(ApiService.extractItems<number>(res)).toEqual([1, 2]);

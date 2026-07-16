@@ -20,7 +20,12 @@ export class MainLayoutPage extends BasePage {
 
   async logout(): Promise<void> {
     await this.openUserMenu();
-    await this.page.getByRole('menuitem', { name: /^Logout$/i }).click();
+    // PrimeNG popup menu may render as menuitem or plain text link depending on version.
+    const logoutItem = this.page
+      .locator('.p-menu:visible, [role="menu"]:visible')
+      .getByText(/^Logout$/i)
+      .or(this.page.getByRole('menuitem', { name: /^Logout$/i }));
+    await logoutItem.first().click();
     await this.page.waitForURL(/\/(auth\/)?login/);
   }
 

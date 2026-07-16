@@ -5,7 +5,7 @@ import { AuthService } from '@core/services/auth.service';
 import { BillingService, BillingQueueOverview, BillingEligibleOrder } from '@core/services/billing.service';
 import { MessageService } from 'primeng/api';
 import { Subject, firstValueFrom, forkJoin, of } from 'rxjs';
-import { takeUntil, catchError, finalize } from 'rxjs/operators';
+import { takeUntil, catchError, finalize, map } from 'rxjs/operators';
 
 export interface InvoiceItem {
   id: string;
@@ -169,7 +169,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     }
 
     forkJoin({
-      invoices: this.apiService.get<Invoice[]>('invoices').pipe(
+      invoices: this.apiService.get<unknown>('invoices').pipe(
+        map((response) => ApiService.extractItems<Invoice>(response)),
         catchError((error) => {
           console.error('Error loading invoices:', error);
           this.messageService.add({

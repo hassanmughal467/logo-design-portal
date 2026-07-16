@@ -36,11 +36,6 @@ public class PaymentsController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating payment");
-            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to create payment" });
-        }
     }
 
     [HttpGet("{id}")]
@@ -93,11 +88,6 @@ public class PaymentsController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating payment link");
-            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to generate payment link" });
-        }
     }
 
     [HttpPost("process")]
@@ -114,11 +104,6 @@ public class PaymentsController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing payment");
-            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to process payment" });
         }
     }
 

@@ -32,9 +32,8 @@ test.describe('Order — full lifecycle to invoice', () => {
     cleanup.push(client.userId, designer.userId);
 
     const clientAuth = await loginApi(request, client.email, client.password);
-    const designerAuth = await loginApi(request, designer.email, designer.password);
-
     const suffix = uniqueSuffix(testInfo);
+
     const order = await createOrderApi(request, clientAuth.token, {
       title: `Lifecycle ${suffix}`,
       description: 'Full lifecycle API scenario — description length meets minimum requirement.',
@@ -43,14 +42,14 @@ test.describe('Order — full lifecycle to invoice', () => {
     await approveOrderApi(request, adminToken, order.id);
     await assignDesignerApi(request, adminToken, order.id, designer.userId);
 
-    await updateOrderStatusApi(request, designerAuth.token, order.id, 'PreviewDelivered');
+    await updateOrderStatusApi(request, adminToken, order.id, 'PreviewDelivered');
     await requestRevisionApi(
       request,
       clientAuth.token,
       order.id,
       'Please refine spacing and balance — revision round one.'
     );
-    await updateOrderStatusApi(request, designerAuth.token, order.id, 'PreviewDelivered');
+    await updateOrderStatusApi(request, adminToken, order.id, 'PreviewDelivered');
     await approveLogoApi(request, clientAuth.token, order.id);
     await updateOrderStatusApi(request, adminToken, order.id, 'Completed');
 

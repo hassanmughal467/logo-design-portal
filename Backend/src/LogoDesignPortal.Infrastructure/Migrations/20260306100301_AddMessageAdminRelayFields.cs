@@ -22,8 +22,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "ForwardedToMessageId",
                 table: "Messages",
                 type: "char(36)",
-                nullable: true,
-                collation: "ascii_general_ci");
+                nullable: true);
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsRejected",
@@ -48,8 +47,7 @@ namespace LogoDesignPortal.Infrastructure.Migrations
                 name: "RejectedBy",
                 table: "Messages",
                 type: "char(36)",
-                nullable: true,
-                collation: "ascii_general_ci");
+                nullable: true);
 
             migrationBuilder.AddColumn<bool>(
                 name: "RequiresAdminApproval",

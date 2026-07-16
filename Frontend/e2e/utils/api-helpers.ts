@@ -46,6 +46,19 @@ export async function getAdminToken(request: APIRequestContext): Promise<string>
 }
 
 /**
+ * Provision a Client and return credentials for UI login in create-order scenarios.
+ * Callers should push `userId` into their cleanup list.
+ */
+export async function provisionClientForUi(
+  request: APIRequestContext,
+  testInfo: TestInfo,
+  password = 'Test@123'
+): Promise<ProvisionedClient> {
+  const adminToken = await getAdminToken(request);
+  return provisionClientUser(request, adminToken, testInfo, password);
+}
+
+/**
  * Deletes users created during a test when SuperAdmin is available.
  * Hard delete requires SuperAdmin (`UsersController.DeleteUser`).
  */

@@ -5,6 +5,7 @@ import {
   approveLogoApi,
   approveOrderApi,
   assignDesignerApi,
+  extractPagedItems,
   getOrderApi,
   loginApi,
   requestRevisionApi,
@@ -35,33 +36,34 @@ test.describe('Elite - multi user workflow', () => {
       createRoleSession(browser, { email: designer.email, password: designer.password }),
       createRoleSession(browser, { email: client.email, password: client.password }),
     ]);
-    const [adminSession] = sessions;
+    const [, , clientSession] = sessions;
 
     const clientAuth = await loginApi(request, client.email, client.password);
-    const designerAuth = await loginApi(request, designer.email, designer.password);
 
     const orderTitle = `Multi-user ${uniqueSuffix(testInfo)}`;
-    const adminOrders = new OrdersListPage(adminSession.page);
-    await adminOrders.goto();
-    await adminOrders.openCreateOrderModal();
-    await adminOrders.createOrder.fillAndSubmit(
+    // Only Clients can create orders (RBAC).
+    const clientOrders = new OrdersListPage(clientSession.page);
+    await clientOrders.goto();
+    await clientOrders.openCreateOrderModal();
+    await clientOrders.createOrder.fillAndSubmit(
       orderTitle,
-      'Multi-user workflow order created from admin UI for cross-role collaboration.'
+      'Multi-user workflow order created from client UI for cross-role collaboration.'
     );
 
-    const allOrdersRes = await request.get(apiUrl('/orders'), {
-      headers: { Authorization: `Bearer ${adminToken}` },
+    const myOrdersRes = await request.get(apiUrl('/orders/my-orders'), {
+      headers: { Authorization: `Bearer ${clientAuth.token}` },
     });
-    expect(allOrdersRes.ok()).toBeTruthy();
-    const allOrders = (await allOrdersRes.json()) as Array<{ id: string; title: string }>;
-    const created = allOrders.find((x) => x.title === orderTitle);
+    expect(myOrdersRes.ok()).toBeTruthy();
+    const myOrders = extractPagedItems<{ id: string; title: string }>(await myOrdersRes.json());
+    const created = myOrders.find((x) => x.title === orderTitle);
     expect(created).toBeTruthy();
 
     await approveOrderApi(request, adminToken, created!.id);
     await assignDesignerApi(request, adminToken, created!.id, designer.userId);
-    await updateOrderStatusApi(request, designerAuth.token, created!.id, 'PreviewDelivered', 'Draft shared.');
+    // Admin advances to PreviewDelivered (designers cannot via status API).
+    await updateOrderStatusApi(request, adminToken, created!.id, 'PreviewDelivered', 'Draft shared.');
     await requestRevisionApi(request, clientAuth.token, created!.id, 'Need a second revision before approval.');
-    await updateOrderStatusApi(request, designerAuth.token, created!.id, 'PreviewDelivered', 'Second draft shared.');
+    await updateOrderStatusApi(request, adminToken, created!.id, 'PreviewDelivered', 'Second draft shared.');
     await approveLogoApi(request, clientAuth.token, created!.id, 'Approved by client.');
 
     const final = await getOrderApi(request, clientAuth.token, created!.id);

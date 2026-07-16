@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { apiUrl } from '../../utils/api-client';
+import { apiUrl, extractPagedItems } from '../../utils/api-client';
 import { getAdminToken } from '../../utils/api-helpers';
 
 /**
@@ -12,5 +12,6 @@ test('admin can GET /api/invoices', async ({ request }) => {
   });
   expect(res.ok()).toBeTruthy();
   const body = await res.json();
-  expect(Array.isArray(body)).toBeTruthy();
+  const items = extractPagedItems(body);
+  expect(Array.isArray(items)).toBeTruthy();
 });

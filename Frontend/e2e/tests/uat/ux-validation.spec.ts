@@ -14,7 +14,8 @@ test('UAT - core pages have visible controls and readable content', async ({ pag
 
   await page.goto('/orders');
   await expect(page.getByRole('heading', { name: /Orders/i })).toBeVisible();
-  await expect(page.getByTestId('orders-open-create')).toBeVisible();
+  // Admins cannot create client orders; they can add completed orders.
+  await expect(page.getByTestId('orders-open-quick-completed')).toBeVisible();
 
   await page.goto('/invoices');
   await expect(page.getByText('Invoices Management')).toBeVisible();
