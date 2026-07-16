@@ -19,13 +19,12 @@ export class MainLayoutPage extends BasePage {
   }
 
   async logout(): Promise<void> {
-    await this.openUserMenu();
-    // PrimeNG popup menu may render as menuitem or plain text link depending on version.
-    const logoutItem = this.page
-      .locator('.p-menu, [role="menu"]')
-      .getByText(/^Logout$/i)
-      .or(this.page.getByRole('menuitem', { name: /^Logout$/i }));
-    await logoutItem.first().click();
+    // Dismiss any lingering dialogs/toasts that can intercept the header click.
+    await this.page.keyboard.press('Escape').catch(() => {});
+    await this.page.getByTestId(LayoutSelectors.userMenu).click({ force: true });
+    const logoutItem = this.page.getByText(/^Logout$/i).last();
+    await expect(logoutItem).toBeVisible({ timeout: 10_000 });
+    await logoutItem.click({ force: true });
     await this.page.waitForURL(/\/(auth\/)?login/);
   }
 

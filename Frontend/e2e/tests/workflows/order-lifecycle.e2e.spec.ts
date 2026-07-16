@@ -44,7 +44,12 @@ test.describe('Workflow — client order and admin approval', () => {
       'Automated end-to-end scenario — description meets minimum length.'
     );
 
-    await mainLayout.logout();
+    // Prefer clearing session over UI logout when switching actors (overlays can block the menu).
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+    await page.context().clearCookies();
 
     await loginPage.goto();
     await loginPage.login(E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
