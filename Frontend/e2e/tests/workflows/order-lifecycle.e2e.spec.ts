@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { LoginPage, MainLayoutPage, OrdersListPage } from '../../pom';
+import { LoginPage, OrdersListPage } from '../../pom';
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from '../../utils/env';
 import { apiUrl, cancelOrderApi, createOrderApi, getOrderApi, loginApi } from '../../utils/api-client';
 import { getAdminToken, provisionClientUser, teardownUsers } from '../../utils/api-helpers';
@@ -30,7 +30,6 @@ test.describe('Workflow — client order and admin approval', () => {
     const orderTitle = `E2E Order ${suffix}`;
 
     const loginPage = new LoginPage(page);
-    const mainLayout = new MainLayoutPage(page);
     const orders = new OrdersListPage(page);
 
     await loginPage.goto();
