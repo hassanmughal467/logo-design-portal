@@ -623,6 +623,68 @@ public class PaymentService : IPaymentService
         }
     }
 
+    public async Task ProcessPayPalWebhookEventAsync(string webhookEventJson)
+    {
+        var webhookEvent = JsonSerializer.Deserialize<JsonElement>(webhookEventJson);
+
+        if (!webhookEvent.TryGetProperty("event_type", out var eventTypeProp) ||
+            !webhookEvent.TryGetProperty("resource", out var resource))
+        {
+            _logger.LogWarning("PayPal webhook event missing event_type or resource");
+            return;
+        }
+
+        var eventType = eventTypeProp.GetString();
+
+        // Capture-level events carry the order id under supplementary_data.related_ids.order_id;
+        // order-level events (e.g. CHECKOUT.ORDER.APPROVED) have the order id as resource.id itself.
+        string? orderId = null;
+        if (resource.TryGetProperty("supplementary_data", out var supplementaryData) &&
+            supplementaryData.TryGetProperty("related_ids", out var relatedIds) &&
+            relatedIds.TryGetProperty("order_id", out var relatedOrderIdProp))
+        {
+            orderId = relatedOrderIdProp.GetString();
+        }
+        else if (resource.TryGetProperty("id", out var resourceIdProp))
+        {
+            orderId = resourceIdProp.GetString();
+        }
+
+        if (string.IsNullOrEmpty(eventType) || string.IsNullOrEmpty(orderId))
+        {
+            _logger.LogWarning("PayPal webhook event {EventType} has no resolvable order id", eventType);
+            return;
+        }
+
+        // TransactionId is set to the PayPal order id at payment creation/capture time; keep it as the
+        // stable lookup key so later events for the same order (e.g. a refund after completion) still resolve.
+        var payment = await _context.Payments
+            .FirstOrDefaultAsync(p => p.TransactionId == orderId && !p.IsDeleted);
+
+        if (payment == null)
+        {
+            _logger.LogWarning("PayPal webhook event {EventType} references unknown order {OrderId}", eventType, orderId);
+            return;
+        }
+
+        var newStatus = eventType switch
+        {
+            "PAYMENT.CAPTURE.COMPLETED" => PaymentStatus.Completed,
+            "PAYMENT.CAPTURE.PENDING" => PaymentStatus.Processing,
+            "PAYMENT.CAPTURE.DENIED" => PaymentStatus.Failed,
+            "PAYMENT.CAPTURE.REFUNDED" or "PAYMENT.CAPTURE.REVERSED" => PaymentStatus.Refunded,
+            _ => (PaymentStatus?)null
+        };
+
+        if (newStatus == null)
+        {
+            _logger.LogInformation("PayPal webhook event {EventType} has no status mapping; ignoring", eventType);
+            return;
+        }
+
+        await UpdatePaymentStatusAsync(payment.Id, newStatus.Value.ToString());
+    }
+
     // Private helper methods
     private async Task<(string PaymentLink, string? TransactionId)> CreatePayPalPaymentAsync(CreatePaymentRequestDto request)
     {

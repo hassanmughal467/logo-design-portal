@@ -243,6 +243,96 @@ public class PaymentServiceMutationAccessTests
         await context.DisposeAsync();
     }
 
+    [Fact]
+    public async Task ProcessPayPalWebhookEventAsync_CaptureCompleted_CompletesPaymentAndMarksInvoicePaid()
+    {
+        var (context, invoiceId, clientUserId, _) = await CreateClientInvoiceAsync();
+        var paymentId = await SeedPendingPayPalPaymentAsync(context, invoiceId, clientUserId, "ORDER-123");
+        var service = CreateService(context);
+
+        await service.ProcessPayPalWebhookEventAsync("""
+            {
+              "event_type": "PAYMENT.CAPTURE.COMPLETED",
+              "resource": {
+                "id": "CAPTURE-1",
+                "supplementary_data": { "related_ids": { "order_id": "ORDER-123" } }
+              }
+            }
+            """);
+
+        var payment = await context.Payments.Include(p => p.Invoice).SingleAsync(p => p.Id == paymentId);
+        Assert.Equal(PaymentStatus.Completed, payment.Status);
+        Assert.Equal(InvoiceStatus.Paid, payment.Invoice.Status);
+        Assert.NotNull(payment.CompletedAt);
+        // TransactionId stays the order id so subsequent webhook events for this order still resolve.
+        Assert.Equal("ORDER-123", payment.TransactionId);
+        await context.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ProcessPayPalWebhookEventAsync_CaptureDenied_MarksPaymentFailed()
+    {
+        var (context, invoiceId, clientUserId, _) = await CreateClientInvoiceAsync();
+        var paymentId = await SeedPendingPayPalPaymentAsync(context, invoiceId, clientUserId, "ORDER-456");
+        var service = CreateService(context);
+
+        await service.ProcessPayPalWebhookEventAsync("""
+            {
+              "event_type": "PAYMENT.CAPTURE.DENIED",
+              "resource": {
+                "id": "CAPTURE-2",
+                "supplementary_data": { "related_ids": { "order_id": "ORDER-456" } }
+              }
+            }
+            """);
+
+        var payment = await context.Payments.Include(p => p.Invoice).SingleAsync(p => p.Id == paymentId);
+        Assert.Equal(PaymentStatus.Failed, payment.Status);
+        Assert.Equal(InvoiceStatus.Pending, payment.Invoice.Status);
+        await context.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ProcessPayPalWebhookEventAsync_UnknownOrderId_LeavesPaymentUnchanged()
+    {
+        var (context, invoiceId, clientUserId, _) = await CreateClientInvoiceAsync();
+        var paymentId = await SeedPendingPayPalPaymentAsync(context, invoiceId, clientUserId, "ORDER-789");
+        var service = CreateService(context);
+
+        await service.ProcessPayPalWebhookEventAsync("""
+            {
+              "event_type": "PAYMENT.CAPTURE.COMPLETED",
+              "resource": {
+                "id": "CAPTURE-3",
+                "supplementary_data": { "related_ids": { "order_id": "SOME-OTHER-ORDER" } }
+              }
+            }
+            """);
+
+        var payment = await context.Payments.SingleAsync(p => p.Id == paymentId);
+        Assert.Equal(PaymentStatus.Pending, payment.Status);
+        await context.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ProcessPayPalWebhookEventAsync_UnmappedEventType_LeavesPaymentUnchanged()
+    {
+        var (context, invoiceId, clientUserId, _) = await CreateClientInvoiceAsync();
+        var paymentId = await SeedPendingPayPalPaymentAsync(context, invoiceId, clientUserId, "ORDER-321");
+        var service = CreateService(context);
+
+        await service.ProcessPayPalWebhookEventAsync("""
+            {
+              "event_type": "CHECKOUT.ORDER.APPROVED",
+              "resource": { "id": "ORDER-321" }
+            }
+            """);
+
+        var payment = await context.Payments.SingleAsync(p => p.Id == paymentId);
+        Assert.Equal(PaymentStatus.Pending, payment.Status);
+        await context.DisposeAsync();
+    }
+
     private static PaymentService CreateService(ApplicationDbContext context)
     {
         var mapperConfig = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>());
@@ -305,6 +395,25 @@ public class PaymentServiceMutationAccessTests
             Amount = 50m,
             Currency = "USD",
             Status = PaymentStatus.Pending,
+            CreatedBy = createdBy,
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+        return paymentId;
+    }
+
+    private static async Task<Guid> SeedPendingPayPalPaymentAsync(ApplicationDbContext context, Guid invoiceId, Guid createdBy, string orderId)
+    {
+        var paymentId = Guid.NewGuid();
+        context.Payments.Add(new Payment
+        {
+            Id = paymentId,
+            InvoiceId = invoiceId,
+            PaymentMethod = "paypal",
+            Amount = 50m,
+            Currency = "USD",
+            Status = PaymentStatus.Pending,
+            TransactionId = orderId,
             CreatedBy = createdBy,
             CreatedAt = DateTime.UtcNow
         });

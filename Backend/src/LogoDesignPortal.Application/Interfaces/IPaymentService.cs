@@ -25,4 +25,8 @@ public interface IPaymentService
     /// Verifies a PayPal webhook signature. Returns true if valid.
     /// </summary>
     Task<bool> VerifyPayPalWebhookSignatureAsync(string transmissionId, string transmissionTime, string transmissionSig, string authAlgo, string certUrl, string webhookEventJson);
+    /// <summary>
+    /// Processes a signature-verified PayPal webhook event, updating the matching payment/invoice status.
+    /// </summary>
+    Task ProcessPayPalWebhookEventAsync(string webhookEventJson);
 }
