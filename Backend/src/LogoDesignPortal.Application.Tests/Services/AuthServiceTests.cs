@@ -166,6 +166,74 @@ public class AuthServiceTests
         Assert.Contains(Uri.EscapeDataString(user.Email), response.ResetLink);
     }
 
+    [Fact]
+    public async Task ChangePasswordAsync_ValidRequest_InvalidatesExistingRefreshToken()
+    {
+        await using var context = CreateContext();
+        var user = await SeedActiveUserAsync(context, "client@example.com", password: "Old@Password1");
+        user.RefreshToken = "existing-refresh-token";
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        await context.SaveChangesAsync();
+        var service = CreateService(context, CreateConfiguration("Production", smtpConfigured: false), new RecordingBackgroundJobScheduler());
+
+        await service.ChangePasswordAsync(user.Id, new ChangePasswordRequestDto
+        {
+            CurrentPassword = "Old@Password1",
+            NewPassword = "New@Password1",
+            ConfirmPassword = "New@Password1"
+        });
+
+        var savedUser = await context.Users.SingleAsync(u => u.Id == user.Id);
+        Assert.Null(savedUser.RefreshToken);
+        Assert.Null(savedUser.RefreshTokenExpiryTime);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_ValidRequest_InvalidatesExistingRefreshToken()
+    {
+        await using var context = CreateContext();
+        var user = await SeedActiveUserAsync(context, "client@example.com");
+        user.RefreshToken = "existing-refresh-token";
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        await context.SaveChangesAsync();
+        var service = CreateService(context, CreateConfiguration("Production", smtpConfigured: false), new RecordingBackgroundJobScheduler());
+
+        await service.ResetPasswordAsync(user.Id, new ResetPasswordRequestDto
+        {
+            UserId = user.Id,
+            NewPassword = "New@Password1"
+        });
+
+        var savedUser = await context.Users.SingleAsync(u => u.Id == user.Id);
+        Assert.Null(savedUser.RefreshToken);
+        Assert.Null(savedUser.RefreshTokenExpiryTime);
+    }
+
+    [Fact]
+    public async Task ResetPasswordWithTokenAsync_ValidToken_InvalidatesExistingRefreshToken()
+    {
+        await using var context = CreateContext();
+        var user = await SeedActiveUserAsync(context, "client@example.com");
+        user.RefreshToken = "existing-refresh-token";
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        user.PasswordResetToken = "valid-reset-token";
+        user.PasswordResetTokenExpiryTime = DateTime.UtcNow.AddHours(1);
+        await context.SaveChangesAsync();
+        var service = CreateService(context, CreateConfiguration("Production", smtpConfigured: false), new RecordingBackgroundJobScheduler());
+
+        await service.ResetPasswordWithTokenAsync(new ResetPasswordWithTokenRequestDto
+        {
+            Email = user.Email,
+            Token = "valid-reset-token",
+            NewPassword = "New@Password1",
+            ConfirmPassword = "New@Password1"
+        });
+
+        var savedUser = await context.Users.SingleAsync(u => u.Id == user.Id);
+        Assert.Null(savedUser.RefreshToken);
+        Assert.Null(savedUser.RefreshTokenExpiryTime);
+    }
+
     private static void AssertGenericForgotPasswordResponse(ForgotPasswordResponseDto response)
     {
         Assert.Equal("If an account exists for that email address, a password reset link will be sent.", response.Message);
@@ -213,7 +281,7 @@ public class AuthServiceTests
             .Build();
     }
 
-    private static async Task<User> SeedActiveUserAsync(ApplicationDbContext context, string email)
+    private static async Task<User> SeedActiveUserAsync(ApplicationDbContext context, string email, string password = "Test@123")
     {
         var role = new Role
         {
@@ -227,7 +295,7 @@ public class AuthServiceTests
             Email = email,
             FirstName = "Client",
             LastName = "User",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Test@123"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
             RoleId = role.Id,
             Role = role,
             IsActive = true,

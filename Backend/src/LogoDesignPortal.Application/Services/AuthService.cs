@@ -299,6 +299,9 @@ public class AuthService : IAuthService
 
         // Update password with higher work factor for better security
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword, workFactor: 12);
+        // Invalidate any existing refresh token so a stolen one doesn't outlive this password change.
+        user.RefreshToken = null;
+        user.RefreshTokenExpiryTime = null;
         user.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
     }
@@ -322,6 +325,9 @@ public class AuthService : IAuthService
 
         // Update password
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword, workFactor: 12);
+        // Invalidate any existing refresh token so a stolen one doesn't outlive this reset.
+        user.RefreshToken = null;
+        user.RefreshTokenExpiryTime = null;
         user.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
     }
@@ -446,6 +452,9 @@ public class AuthService : IAuthService
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword, workFactor: 12);
         user.PasswordResetToken = null; // Clear token after use
         user.PasswordResetTokenExpiryTime = null;
+        // Invalidate any existing refresh token so a stolen one doesn't outlive this reset.
+        user.RefreshToken = null;
+        user.RefreshTokenExpiryTime = null;
         user.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
     }
