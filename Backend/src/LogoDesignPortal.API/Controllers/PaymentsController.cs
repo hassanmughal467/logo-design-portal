@@ -203,8 +203,9 @@ public class PaymentsController : ControllerBase
                 return StatusCode(StatusCodes.Status401Unauthorized, new { error = "Webhook signature verification failed." });
             }
 
-            // TODO: Process webhook events (e.g. PAYMENT.CAPTURE.COMPLETED) to update payment status
-            _logger.LogInformation("PayPal webhook verified and received successfully");
+            await _paymentService.ProcessPayPalWebhookEventAsync(webhookEventJson);
+
+            _logger.LogInformation("PayPal webhook verified and processed successfully");
             return Ok();
         }
         catch (Exception ex)
