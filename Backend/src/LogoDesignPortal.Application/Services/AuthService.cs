@@ -56,11 +56,11 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid email or password.");
         }
 
-        // Check if account is locked
+        // Check if account is locked. Return the same generic message as a wrong password so an
+        // attacker cannot distinguish a real (locked) account from a nonexistent one by the error text.
         if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.UtcNow)
         {
-            var lockoutMinutes = (int)(user.LockoutEnd.Value - DateTime.UtcNow).TotalMinutes;
-            throw new UnauthorizedAccessException($"Account is locked. Please try again in {lockoutMinutes} minute(s).");
+            throw new UnauthorizedAccessException("Invalid email or password.");
         }
 
         // Verify password
@@ -137,7 +137,7 @@ public class AuthService : IAuthService
             Email = request.Email,
             FirstName = request.FirstName,
             LastName = request.LastName,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password, workFactor: 12),
             RoleId = clientRole.Id,
             IsActive = true,
             SecondaryEmail = request.SecondaryEmail,
@@ -332,7 +332,7 @@ public class AuthService : IAuthService
         await _context.SaveChangesAsync();
     }
 
-    public async Task ResetSuperAdminPasswordAsync()
+    public async Task<string> ResetSuperAdminPasswordAsync()
     {
         var superAdmin = await _context.Users
             .Include(u => u.Role)
@@ -343,11 +343,19 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("SuperAdmin user not found.");
         }
 
-        const string defaultPassword = "SuperAdmin@123";
-        superAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword(defaultPassword);
+        // Generate a random one-time password instead of using a fixed source-visible value.
+        // The caller logs this server-side; it is never returned in the API response body.
+        var randomBytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(18);
+        var generatedPassword = Convert.ToBase64String(randomBytes)
+            .Replace("+", "A").Replace("/", "B").Replace("=", "C");
+
+        superAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword(generatedPassword, workFactor: 12);
+        superAdmin.RefreshToken = null;
+        superAdmin.RefreshTokenExpiryTime = null;
         superAdmin.IsActive = true;
         superAdmin.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+        return generatedPassword;
     }
 
     public async Task<ForgotPasswordResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto request)

@@ -201,11 +201,12 @@ public class AuthController : ControllerBase
                 return StatusCode(StatusCodes.Status403Forbidden, new { error = "This endpoint is only available from localhost." });
             }
 
-            _logger.LogInformation("Resetting SuperAdmin password to default");
-            await _authService.ResetSuperAdminPasswordAsync();
-            _logger.LogWarning("SuperAdmin password reset. Dev credentials: superadmin@logodesign.com / SuperAdmin@123 - Check server logs only, never expose in API.");
-            return Ok(new { 
-                message = "SuperAdmin password has been reset to default. Check server logs for credentials (development only)."
+            _logger.LogInformation("Resetting SuperAdmin password");
+            var generatedPassword = await _authService.ResetSuperAdminPasswordAsync();
+            // Log the one-time password server-side ONLY — never include it in the response body.
+            _logger.LogWarning("SuperAdmin password reset. One-time credentials: superadmin@logodesign.com / {Password} — change immediately after login.", generatedPassword);
+            return Ok(new {
+                message = "SuperAdmin password has been reset. Check the server logs for the one-time credential (development only). Change it immediately after login."
             });
         }
         catch (Exception ex)

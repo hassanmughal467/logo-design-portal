@@ -9,7 +9,8 @@ public interface IAuthService
     Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto request);
     Task ChangePasswordAsync(Guid userId, ChangePasswordRequestDto request);
     Task ResetPasswordAsync(Guid targetUserId, ResetPasswordRequestDto request);
-    Task ResetSuperAdminPasswordAsync();
+    /// <summary>Returns the newly generated one-time password (log server-side only; never send to client).</summary>
+    Task<string> ResetSuperAdminPasswordAsync();
     Task<ForgotPasswordResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto request);
     Task ResetPasswordWithTokenAsync(ResetPasswordWithTokenRequestDto request);
 }
