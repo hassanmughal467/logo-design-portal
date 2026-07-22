@@ -1,15 +1,18 @@
 import { Injectable, Injector } from '@angular/core';
 import { BehaviorSubject, Observable, throwError } from 'rxjs';
-import { map, catchError, tap } from 'rxjs/operators';
+import { catchError, tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { ApiService } from './api.service';
 import { SharedListDataService } from './shared-list-data.service';
 import { DashboardService } from './dashboard.service';
 import { LoginRequest, LoginResponse, RegisterRequest, User } from '@shared/models/user.model';
 
-const TOKEN_KEY = 'auth_token';
+// The access token is kept in-memory only so XSS cannot read it via storage APIs.
+// TOKEN_FOR_REFRESH holds the raw JWT solely for the /auth/refresh-token call; it is NOT
+// used for validity checks (getAccessToken() uses the in-memory value). This key survives
+// a page reload so the token interceptor can perform a silent refresh on the first 401.
+const TOKEN_FOR_REFRESH_KEY = 'auth_token_for_refresh';
 const REFRESH_TOKEN_KEY = 'auth_refresh_token';
-const EXPIRES_AT_KEY = 'auth_expires_at';
 const USER_KEY = 'auth_user';
 
 @Injectable({
@@ -19,7 +22,6 @@ export class AuthService {
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
   
-  // Token in memory for fast access; persisted in localStorage for refresh
   private accessToken: string | null = null;
   private tokenExpiry: number | null = null;
 
@@ -66,10 +68,11 @@ export class AuthService {
     );
   }
 
-  /** Returns stored token + refreshToken for refresh attempt (even when access token expired) */
+  /** Returns tokens needed for a refresh attempt. The raw JWT is read from sessionStorage so it
+   *  survives a page reload even though the in-memory copy is gone. */
   getStoredTokensForRefresh(): { token: string; refreshToken: string } | null {
-    const token = localStorage.getItem(TOKEN_KEY);
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    const token = sessionStorage.getItem(TOKEN_FOR_REFRESH_KEY);
+    const refreshToken = sessionStorage.getItem(REFRESH_TOKEN_KEY);
     if (token && refreshToken) {
       return { token, refreshToken };
     }
@@ -86,31 +89,20 @@ export class AuthService {
     this.accessToken = null;
     this.tokenExpiry = null;
     this.currentUserSubject.next(null);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(EXPIRES_AT_KEY);
-    localStorage.removeItem(USER_KEY);
-    sessionStorage.removeItem('user');
+    sessionStorage.removeItem(TOKEN_FOR_REFRESH_KEY);
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
+    // Also clear any tokens that may have been written by an older version of the app.
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_refresh_token');
+    localStorage.removeItem('auth_expires_at');
+    localStorage.removeItem('auth_user');
     this.router.navigate(['/login']);
   }
 
   getAccessToken(): string | null {
-    // Use in-memory token if available and not expired
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
       return this.accessToken;
-    }
-    // Fall back to localStorage (e.g. after refresh)
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    const storedExpiry = localStorage.getItem(EXPIRES_AT_KEY);
-    if (storedToken && storedExpiry) {
-      const expiry = parseInt(storedExpiry, 10);
-      if (Date.now() < expiry) {
-        this.accessToken = storedToken;
-        this.tokenExpiry = expiry;
-        return storedToken;
-      }
-      // Token expired - return null but keep storage for refresh attempt
-      return null;
     }
     return null;
   }
@@ -118,8 +110,7 @@ export class AuthService {
   isAuthenticated(): boolean {
     const token = this.getAccessToken();
     const user = this.currentUserSubject.value;
-    const hasRefreshToken = !!localStorage.getItem(REFRESH_TOKEN_KEY);
-    // Valid token + user, or user + refresh token (will try refresh on next API call)
+    const hasRefreshToken = !!sessionStorage.getItem(REFRESH_TOKEN_KEY);
     return (!!token && !!user) || (!!user && hasRefreshToken);
   }
 
@@ -158,23 +149,23 @@ export class AuthService {
   }
 
   private setAuthData(response: LoginResponse): void {
+    // Keep access token in-memory only — not accessible to XSS via storage APIs.
     this.accessToken = response.token;
-    const expiresAt = new Date(response.expiresAt);
-    this.tokenExpiry = expiresAt.getTime();
-    
+    this.tokenExpiry = new Date(response.expiresAt).getTime();
+
     const user: User = {
       ...response.user,
       role: (response.user as any).roleName || (response.user as any).role || 'Client'
     };
-    
-    // Persist in localStorage so session survives page refresh
-    localStorage.setItem(TOKEN_KEY, response.token);
+
+    // Store raw JWT for the refresh endpoint only — survives page reload so a silent refresh
+    // can occur on the first 401 after reload. Not used for validity checks.
+    sessionStorage.setItem(TOKEN_FOR_REFRESH_KEY, response.token);
+    // Refresh token and user profile go to sessionStorage (tab-scoped, cleared on tab close).
     if (response.refreshToken) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+      sessionStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
     }
-    localStorage.setItem(EXPIRES_AT_KEY, String(this.tokenExpiry));
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-    sessionStorage.setItem('user', JSON.stringify(user));
+    sessionStorage.setItem(USER_KEY, JSON.stringify(user));
     this.currentUserSubject.next(user);
   }
 
@@ -182,44 +173,41 @@ export class AuthService {
     this.accessToken = null;
     this.tokenExpiry = null;
     this.currentUserSubject.next(null);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(EXPIRES_AT_KEY);
-    localStorage.removeItem(USER_KEY);
-    sessionStorage.removeItem('user');
+    sessionStorage.removeItem(TOKEN_FOR_REFRESH_KEY);
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
   }
 
   private loadUserFromStorage(): void {
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    const storedExpiry = localStorage.getItem(EXPIRES_AT_KEY);
-    const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    const userStr = localStorage.getItem(USER_KEY) || sessionStorage.getItem('user');
-    
-    if (!storedToken || !userStr) {
+    // On page reload the in-memory access token is gone. Restore the user profile from
+    // sessionStorage so the AuthGuard doesn't immediately redirect to login; the token
+    // interceptor will trigger a silent refresh on the first 401 if the refresh token is present.
+    const refreshToken = sessionStorage.getItem(REFRESH_TOKEN_KEY);
+    const userStr = sessionStorage.getItem(USER_KEY);
+
+    // Also migrate any tokens left in localStorage by an older version of the app.
+    this.migrateLegacyLocalStorage();
+
+    if (!userStr || !refreshToken) {
       this.clearStoredAuth();
       return;
     }
-    
-    const expiry = storedExpiry ? parseInt(storedExpiry, 10) : 0;
-    const tokenExpired = Date.now() >= expiry;
-    if (tokenExpired && !storedRefreshToken) {
-      this.clearStoredAuth();
-      return;
-    }
-    
+
     try {
       const userData = JSON.parse(userStr);
       const user: User = {
         ...userData,
         role: userData.role || userData.roleName || 'Client'
       };
-      if (!tokenExpired) {
-        this.accessToken = storedToken;
-        this.tokenExpiry = expiry;
-      }
+      // Access token is gone after reload — interceptor will refresh on first 401.
       this.currentUserSubject.next(user);
     } catch {
       this.clearStoredAuth();
     }
+  }
+
+  private migrateLegacyLocalStorage(): void {
+    ['auth_token', 'auth_token_for_refresh', 'auth_refresh_token', 'auth_expires_at', 'auth_user']
+      .forEach(k => localStorage.removeItem(k));
   }
 }
