@@ -223,12 +223,20 @@ builder.Services.AddCors(options =>
         .AllowCredentials()); // Required for SignalR WebSocket and JWT cookies
 });
 
-// Forwarded headers for IIS deployment (X-Forwarded-Proto, X-Forwarded-For)
+// Forwarded headers for IIS deployment (X-Forwarded-Proto, X-Forwarded-For).
+// SECURITY: do NOT clear KnownNetworks/KnownProxies - an empty allowlist trusts X-Forwarded-For from
+// any client, letting requests spoof their own IP (this previously defeated IP-based rate limiting).
+// Keep the default (loopback-only) trust, plus any explicitly configured trusted proxy/load balancer.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
+
+    var trustedProxies = builder.Configuration.GetSection("ForwardedHeaders:TrustedProxies").Get<string[]>() ?? Array.Empty<string>();
+    foreach (var proxy in trustedProxies)
+    {
+        if (System.Net.IPAddress.TryParse(proxy.Trim(), out var proxyIp))
+            options.KnownProxies.Add(proxyIp);
+    }
 });
 
 var app = builder.Build();
