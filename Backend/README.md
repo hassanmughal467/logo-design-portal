@@ -111,14 +111,15 @@ LogoDesignPortal.sln
    }
    ```
 
-3. **Update JWT settings** (change in production!):
+3. **Set a JWT signing key** — generate your own random 32+ character secret (do not reuse an example value) in `appsettings.Development.json`, or via the `Jwt__Key` environment variable:
    ```json
    "Jwt": {
-     "Key": "YourSuperSecretKeyForJWTTokenGenerationThatShouldBeAtLeast32CharactersLong!",
+     "Key": "<your own random secret, 32+ characters>",
      "Issuer": "LogoDesignPortal",
      "Audience": "LogoDesignPortalUsers"
    }
    ```
+   Staging/Production must set `Jwt__Key` and `ConnectionStrings__DefaultConnection` as real environment variables — the checked-in `appsettings.*.json` values for those environments are intentionally non-functional placeholders, and the app fails fast at startup if they're still in effect.
 
 4. **Run the application:**
    ```bash
