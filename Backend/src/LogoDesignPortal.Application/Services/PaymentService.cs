@@ -326,6 +326,27 @@ public class PaymentService : IPaymentService
         return _mapper.Map<PaymentResponseDto>(payment);
     }
 
+    public async Task<bool?> VerifyPayPalPaymentWithAccessAsync(string orderId, string paymentId, Guid userId, string? userRole)
+    {
+        var payment = await _context.Payments
+            .Include(p => p.Invoice)
+                .ThenInclude(i => i.Client)
+            .FirstOrDefaultAsync(p => p.TransactionId == orderId && !p.IsDeleted);
+
+        if (payment == null)
+        {
+            return null;
+        }
+
+        // Access control: Client can only verify payments for their own invoices; Admin/SuperAdmin can access all
+        if (userRole == "Client" && payment.Invoice.Client.UserId != userId)
+        {
+            return null;
+        }
+
+        return await VerifyPayPalPaymentAsync(orderId, paymentId);
+    }
+
     public async Task<List<PaymentResponseDto>> GetPaymentsByInvoiceAsync(Guid invoiceId)
     {
         var payments = await _context.Payments

@@ -19,6 +19,11 @@ public interface IPaymentService
     Task<List<PaymentResponseDto>?> GetPaymentsByInvoiceWithAccessAsync(Guid invoiceId, Guid userId, string? userRole);
     Task<BankDetailsResponseDto> GetBankDetailsAsync();
     Task<bool> VerifyPayPalPaymentAsync(string orderId, string paymentId);
+    /// <summary>
+    /// Verifies a PayPal payment with access control. Returns null if no payment is associated with
+    /// the given order ID, or the user lacks access to it.
+    /// </summary>
+    Task<bool?> VerifyPayPalPaymentWithAccessAsync(string orderId, string paymentId, Guid userId, string? userRole);
     Task<bool> VerifyWisePaymentAsync(string transferId);
     Task<PaymentResponseDto> UpdatePaymentStatusAsync(Guid paymentId, string status, string? transactionId = null);
     /// <summary>

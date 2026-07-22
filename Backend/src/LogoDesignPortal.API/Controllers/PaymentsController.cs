@@ -119,12 +119,19 @@ public class PaymentsController : ControllerBase
     [HttpPost("verify/paypal")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> VerifyPayPalPayment([FromBody] VerifyPayPalRequestDto request)
     {
         try
         {
-            var verified = await _paymentService.VerifyPayPalPaymentAsync(request.OrderId, request.PaymentId);
-            return Ok(new { verified });
+            var userId = User.GetUserIdOrThrow();
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            var verified = await _paymentService.VerifyPayPalPaymentWithAccessAsync(request.OrderId, request.PaymentId, userId, userRole);
+            if (verified == null)
+            {
+                return NotFound(new { error = "Payment not found." });
+            }
+            return Ok(new { verified = verified.Value });
         }
         catch (Exception ex)
         {

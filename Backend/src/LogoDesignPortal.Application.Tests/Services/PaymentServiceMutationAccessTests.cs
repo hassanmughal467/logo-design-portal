@@ -333,6 +333,61 @@ public class PaymentServiceMutationAccessTests
         await context.DisposeAsync();
     }
 
+    [Fact]
+    public async Task VerifyPayPalPaymentWithAccessAsync_OwningClient_ReturnsVerificationResult()
+    {
+        var (context, invoiceId, clientUserId, _) = await CreateClientInvoiceAsync();
+        await SeedPendingPayPalPaymentAsync(context, invoiceId, clientUserId, "ORDER-OWNED");
+        var service = CreateService(context);
+
+        var result = await service.VerifyPayPalPaymentWithAccessAsync("ORDER-OWNED", "CAPTURE-1", clientUserId, "Client");
+
+        // PayPal credentials aren't configured in this test env, so VerifyPayPalPaymentAsync itself
+        // returns false - the point here is that access was granted (non-null), not the PayPal result.
+        Assert.NotNull(result);
+        Assert.False(result.Value);
+    }
+
+    [Fact]
+    public async Task VerifyPayPalPaymentWithAccessAsync_OtherClient_ReturnsNull()
+    {
+        var (context, invoiceId, clientUserId, _) = await CreateClientInvoiceAsync();
+        var otherClientUserId = await SeedOtherClientAsync(context);
+        await SeedPendingPayPalPaymentAsync(context, invoiceId, clientUserId, "ORDER-OWNED");
+        var service = CreateService(context);
+
+        var result = await service.VerifyPayPalPaymentWithAccessAsync("ORDER-OWNED", "CAPTURE-1", otherClientUserId, "Client");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task VerifyPayPalPaymentWithAccessAsync_UnknownOrderId_ReturnsNull()
+    {
+        var (context, invoiceId, clientUserId, _) = await CreateClientInvoiceAsync();
+        await SeedPendingPayPalPaymentAsync(context, invoiceId, clientUserId, "ORDER-OWNED");
+        var service = CreateService(context);
+
+        var result = await service.VerifyPayPalPaymentWithAccessAsync("SOME-OTHER-ORDER", "CAPTURE-1", clientUserId, "Client");
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("SuperAdmin")]
+    public async Task VerifyPayPalPaymentWithAccessAsync_AdminRoles_ReturnVerificationResultRegardlessOfOwnership(string role)
+    {
+        var (context, invoiceId, clientUserId, _) = await CreateClientInvoiceAsync();
+        await SeedPendingPayPalPaymentAsync(context, invoiceId, clientUserId, "ORDER-OWNED");
+        var adminUserId = await SeedUserWithRoleAsync(context, role);
+        var service = CreateService(context);
+
+        var result = await service.VerifyPayPalPaymentWithAccessAsync("ORDER-OWNED", "CAPTURE-1", adminUserId, role);
+
+        Assert.NotNull(result);
+    }
+
     private static PaymentService CreateService(ApplicationDbContext context)
     {
         var mapperConfig = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>());
