@@ -1,0 +1,85 @@
+name: Release — Publish deploy artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-artifacts:
+    name: Build API + Frontend packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Restore & test (fast gate)
+        working-directory: Backend
+        run: |
+          dotnet restore LogoDesignPortal.sln
+          dotnet test src/LogoDesignPortal.API.IntegrationTests/LogoDesignPortal.API.IntegrationTests.csproj -c Release \
+            --filter "FullyQualifiedName~CsrfCookieAuth|FullyQualifiedName~CorsAllowedOrigins|FullyQualifiedName~ProductionConfiguration|FullyQualifiedName~EnvironmentAppSettings" \
+            --verbosity minimal
+
+      - name: Publish API (Release)
+        run: |
+          dotnet publish "Backend/src/LogoDesignPortal.API/LogoDesignPortal.API.csproj" \
+            -c Release \
+            -o "${{ runner.temp }}/publish-api" \
+            --no-self-contained
+
+      - name: Build Angular (production)
+        working-directory: Frontend
+        run: |
+          npm ci
+          npx ng build --configuration=production
+
+      - name: Package API artifact
+        run: |
+          cd "${{ runner.temp }}/publish-api"
+          zip -r "${{ runner.temp }}/LogoDesignPortal-API.zip" .
+
+      - name: Package Frontend artifact
+        run: |
+          DIST="${{ github.workspace }}/Frontend/dist/logo-design-portal-frontend"
+          cp "${{ github.workspace }}/Frontend/web.config" "$DIST/"
+          cd "$DIST"
+          zip -r "${{ runner.temp }}/LogoDesignPortal-Frontend.zip" .
+
+      - name: Upload API artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LogoDesignPortal-API
+          path: ${{ runner.temp }}/LogoDesignPortal-API.zip
+          retention-days: 30
+
+      - name: Upload Frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LogoDesignPortal-Frontend
+          path: ${{ runner.temp }}/LogoDesignPortal-Frontend.zip
+          retention-days: 30
+
+      - name: Deployment summary
+        run: |
+          echo "## Deploy artifacts" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **LogoDesignPortal-API** — unzip to IIS \`api\` folder (see \`deploy-to-iis.ps1\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **LogoDesignPortal-Frontend** — unzip to IIS \`wwwroot\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Set IIS environment variables: \`ConnectionStrings__DefaultConnection\`, \`ConnectionStrings__Redis\`, \`Jwt__Key\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Post-deploy: \`docs/POST_DEPLOY_VALIDATION.md\`" >> "$GITHUB_STEP_SUMMARY"
