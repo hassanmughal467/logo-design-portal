@@ -1,12 +1,16 @@
 import { Injectable } from '@angular/core';
 import { HttpInterceptor, HttpRequest, HttpHandler, HttpEvent, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
-import { catchError, switchMap } from 'rxjs/operators';
+import { catchError, finalize, shareReplay, switchMap } from 'rxjs/operators';
 import { AuthService } from '../services/auth.service';
+import { LoginResponse } from '@shared/models/user.model';
 import { MessageService } from 'primeng/api';
 
 @Injectable()
 export class TokenInterceptor implements HttpInterceptor {
+  // Memoized in-flight refresh so concurrent 401s share one call instead of racing rotated refresh tokens.
+  private refreshInFlight$: Observable<LoginResponse> | null = null;
+
   constructor(
     private authService: AuthService,
     private messageService: MessageService
@@ -26,7 +30,7 @@ export class TokenInterceptor implements HttpInterceptor {
         if (error.status === 401 && !isAuthEndpoint && !isRefreshEndpoint) {
           const stored = this.authService.getStoredTokensForRefresh();
           if (stored) {
-            return this.authService.refreshToken().pipe(
+            return this.sharedRefresh().pipe(
               switchMap(() => {
                 const newToken = this.authService.getAccessToken();
                 const retryRequest = request.clone({
@@ -47,5 +51,18 @@ export class TokenInterceptor implements HttpInterceptor {
         return throwError(() => error);
       })
     );
+  }
+
+  // Starts (or reuses) the single in-flight refresh; finalize resets the memo on success or failure.
+  private sharedRefresh(): Observable<LoginResponse> {
+    if (!this.refreshInFlight$) {
+      this.refreshInFlight$ = this.authService.refreshToken().pipe(
+        finalize(() => {
+          this.refreshInFlight$ = null;
+        }),
+        shareReplay(1)
+      );
+    }
+    return this.refreshInFlight$;
   }
 }
