@@ -70,6 +70,7 @@ export class RealtimeNotificationService implements OnDestroy {
           accessTokenFactory: () => this.authService.getAccessToken() ?? ''
         })
         .withAutomaticReconnect()
+        .configureLogging(signalR.LogLevel.Warning)
         .build();
 
       this.connection.on('ReceiveNotification', (payload: unknown) => {
