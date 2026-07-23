@@ -34,11 +34,11 @@ import { LayoutModule } from './layout/layout.module';
   ],
   providers: [
     MessageService,
-    {
-      provide: HTTP_INTERCEPTORS,
-      useClass: TokenInterceptor,
-      multi: true
-    },
+    // HTTP_INTERCEPTORS run request-side in registration order, but response/error
+    // propagation unwinds in REVERSE order — the last-registered interceptor sees a
+    // response error first. TokenInterceptor must be registered last so it gets the
+    // chance to silently refresh on a 401 before HttpLoadingErrorInterceptor logs the
+    // user out (see fix/silent-refresh-interceptor-order).
     {
       provide: HTTP_INTERCEPTORS,
       useClass: HttpRequestTrackerInterceptor,
@@ -47,6 +47,11 @@ import { LayoutModule } from './layout/layout.module';
     {
       provide: HTTP_INTERCEPTORS,
       useClass: HttpLoadingErrorInterceptor,
+      multi: true
+    },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: TokenInterceptor,
       multi: true
     }
   ],
