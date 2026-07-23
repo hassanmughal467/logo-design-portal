@@ -306,6 +306,14 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
     ResponseWriter = HealthCheckResponseWriter.WriteAsync
 });
 
+// Liveness: process is up and can handle requests. Excludes all registered checks (no DB/Redis/
+// Hangfire/file-storage dependency) so it can't be dragged down by a downstream outage.
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
+});
+
 // Initialize file storage directories at startup (Files, Files/Temporary, Files/Permanent)
 var fileStorageInitializer = app.Services.GetRequiredService<LogoDesignPortal.API.Services.FileStorageInitializer>();
 fileStorageInitializer.Initialize();
