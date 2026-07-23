@@ -138,6 +138,71 @@ describe('AuthService', () => {
     });
   });
 
+  describe('initializeSession', () => {
+    /** Simulates "reload happened": user/session survived in sessionStorage but the
+     *  in-memory access token did not (a fresh AuthService instance would look like this). */
+    function seedStoredSessionWithoutInMemoryToken(): void {
+      sessionStorage.setItem('auth_token_for_refresh', 'old');
+      sessionStorage.setItem('auth_refresh_token', 'r1');
+      service['currentUserSubject'].next({ id: '1', email: 'a@b.com', roleName: 'Admin' } as any);
+      service['accessToken'] = null;
+      service['tokenExpiry'] = null;
+    }
+
+    it('triggers exactly one refresh when a stored session exists but no in-memory token does', async () => {
+      seedStoredSessionWithoutInMemoryToken();
+      const future = new Date(Date.now() + 120_000).toISOString();
+
+      const promise = service.initializeSession();
+      const req = httpMock.expectOne((r) => r.url.includes('/auth/refresh-token'));
+      req.flush({
+        token: 'newtok',
+        refreshToken: 'r2',
+        expiresAt: future,
+        user: { id: '1', email: 'a@b.com', firstName: 'A', lastName: 'B', roleName: 'Admin' },
+      });
+      await promise;
+
+      expect(service.getAccessToken()).toBe('newtok');
+    });
+
+    it('does not trigger a refresh when no stored session exists', async () => {
+      await service.initializeSession();
+      // No unresolved request was created; httpMock.verify() in afterEach would fail otherwise.
+      expect(service.getAccessToken()).toBeNull();
+    });
+
+    it('does not trigger a refresh when a valid in-memory access token already exists', async () => {
+      const future = new Date(Date.now() + 120_000).toISOString();
+      service.login({ email: 'a@b.com', password: 'x' }).subscribe();
+      httpMock.expectOne((r) => r.url.includes('/auth/login')).flush({
+        token: 'tok',
+        refreshToken: 'ref',
+        expiresAt: future,
+        user: { id: '1', email: 'a@b.com', firstName: 'A', lastName: 'B', roleName: 'Admin' },
+      });
+
+      await service.initializeSession();
+
+      // Only the login request above was made; a stray refresh-token request would leave an
+      // unflushed open request and fail here.
+      httpMock.verify();
+      expect(service.getAccessToken()).toBe('tok');
+    });
+
+    it('completes without rejecting when the proactive refresh fails, and preserves existing logout behavior', async () => {
+      seedStoredSessionWithoutInMemoryToken();
+
+      const promise = service.initializeSession();
+      const req = httpMock.expectOne((r) => r.url.includes('/auth/refresh-token'));
+      req.flush({ message: 'Invalid refresh token' }, { status: 401, statusText: 'Unauthorized' });
+
+      await expectAsync(promise).toBeResolved();
+      expect(service.getAccessToken()).toBeNull();
+      expect(router.navigate).toHaveBeenCalledWith(['/login']);
+    });
+  });
+
   it('register, changePassword, forgotPassword, reset helpers forward to API', () => {
     service.register({} as any).subscribe();
     httpMock.expectOne((r) => r.url.includes('/auth/register')).flush({});

@@ -1,5 +1,5 @@
 import { Injectable, Injector } from '@angular/core';
-import { BehaviorSubject, Observable, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, firstValueFrom, throwError } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { ApiService } from './api.service';
@@ -65,6 +65,28 @@ export class AuthService {
         this.logout();
         return throwError(() => error);
       })
+    );
+  }
+
+  /**
+   * Called once from an APP_INITIALIZER during bootstrap. If a prior session (user + refresh
+   * token) survived a full page reload but the in-memory access token did not, proactively
+   * refreshes before the app renders — so route guards, resolvers, and components don't fan out
+   * a burst of token-less requests that would otherwise each 401 and rely on the reactive
+   * refresh in TokenInterceptor. Reuses refreshToken() directly (same rotation, same
+   * logout-on-failure behavior); never rejects, so bootstrap always completes.
+   */
+  initializeSession(): Promise<void> {
+    if (this.getAccessToken()) {
+      return Promise.resolve();
+    }
+    const hasStoredSession = !!this.getCurrentUser() && !!this.getStoredTokensForRefresh();
+    if (!hasStoredSession) {
+      return Promise.resolve();
+    }
+    return firstValueFrom(this.refreshToken()).then(
+      () => undefined,
+      () => undefined // refreshToken() already calls logout() on failure; swallow so bootstrap doesn't fail
     );
   }
 
