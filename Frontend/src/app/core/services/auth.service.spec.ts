@@ -98,8 +98,8 @@ describe('AuthService', () => {
   });
 
   it('getStoredTokensForRefresh returns pair when present', () => {
-    localStorage.setItem('auth_token', 'a');
-    localStorage.setItem('auth_refresh_token', 'b');
+    sessionStorage.setItem('auth_token_for_refresh', 'a');
+    sessionStorage.setItem('auth_refresh_token', 'b');
     expect(service.getStoredTokensForRefresh()).toEqual({ token: 'a', refreshToken: 'b' });
   });
 
@@ -110,8 +110,8 @@ describe('AuthService', () => {
   });
 
   it('refreshToken posts and updates session', (done) => {
-    localStorage.setItem('auth_token', 'old');
-    localStorage.setItem('auth_refresh_token', 'r');
+    sessionStorage.setItem('auth_token_for_refresh', 'old');
+    sessionStorage.setItem('auth_refresh_token', 'r');
     const future = new Date(Date.now() + 120_000).toISOString();
     service.refreshToken().subscribe({
       next: () => {
