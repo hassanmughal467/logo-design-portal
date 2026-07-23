@@ -67,10 +67,12 @@ export class HttpLoadingErrorInterceptor implements HttpInterceptor {
 
     const requestUrl = (request.url || '').toLowerCase();
     const isAuthEndpoint = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register');
+    // AuthService.refreshToken() already owns logout on a failed refresh; don't duplicate it here.
+    const isRefreshEndpoint = requestUrl.includes('/auth/refresh-token');
 
     switch (error.status) {
       case 401:
-        if (!isAuthEndpoint) {
+        if (!isAuthEndpoint && !isRefreshEndpoint) {
           this.authService.logout();
           this.router.navigate(['/login']);
         }
