@@ -57,3 +57,19 @@ export function buildDesignerUserPayload(email: string, password: string) {
     isAvailable: true,
   };
 }
+
+/** Dedicated SuperAdmin-role account for tests that hold a live UI session as an admin persona.
+ *  Each caller gets its own account (see provisionAdminForUi) so concurrent sessions never
+ *  share one refresh-token row and rotate each other's refresh token out from under them.
+ *  Must be SuperAdmin, not Admin — the account it replaces (superadmin@logodesign.com) is
+ *  SuperAdmin, and some endpoints (e.g. UsersController PUT /{id}) are SuperAdmin-only; only an
+ *  existing SuperAdmin token can assign the SuperAdmin role (see UsersController.CreateUser). */
+export function buildAdminUserPayload(email: string, password: string) {
+  return {
+    email,
+    firstName: 'E2E',
+    lastName: 'Admin',
+    password,
+    roleId: SeededRoleIds.SuperAdmin,
+  };
+}

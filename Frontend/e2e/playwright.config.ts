@@ -79,13 +79,17 @@ function buildReporters(): ReporterDescription[] {
  * Playwright configuration for the Logo Design Portal (Angular + ASP.NET API).
  *
  * Projects:
- * - `setup` — logs in once as the admin operator and writes `e2e/.auth/admin.json` (storageState).
+ * - `setup` — logs in once as a dedicated, freshly-provisioned admin operator and writes
+ *   `e2e/.auth/admin.json` (storageState) + `e2e/.auth/admin-meta.json` (that account's userId).
  * - `admin-chromium` — role suites that should start already authenticated as that operator.
  * - `chromium` — anonymous / multi-actor flows (workflows log in as different users).
+ * - `cleanup-admin` — deletes the `setup` operator account; runs once, after every project that
+ *   depends on `setup` (i.e. `admin-chromium`) has finished (`teardown: 'cleanup-admin'`).
  *
  * Parallelism:
  * - `fullyParallel: true` + per-project workers so independent files run concurrently.
- * - `setup` runs first (no retries); `admin-chromium` and `chromium` run in parallel after it.
+ * - `setup` runs first (no retries); `admin-chromium` and `chromium` run in parallel after it;
+ *   `cleanup-admin` runs last.
  * - Serial suites remain opt-in via `test.describe.configure({ mode: 'serial' })`.
  */
 export default defineConfig({
@@ -119,6 +123,13 @@ export default defineConfig({
     {
       name: 'setup',
       testMatch: /auth\.setup\.ts/,
+      fullyParallel: false,
+      retries: 0,
+      teardown: 'cleanup-admin',
+    },
+    {
+      name: 'cleanup-admin',
+      testMatch: /auth\.teardown\.ts/,
       fullyParallel: false,
       retries: 0,
     },

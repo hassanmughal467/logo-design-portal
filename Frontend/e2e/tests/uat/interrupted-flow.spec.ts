@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { LoginPage } from '../../pom';
-import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from '../../utils/env';
-import { provisionClientForUi, teardownUsers } from '../../utils/api-helpers';
+import { provisionAdminForUi, provisionClientForUi, teardownUsers } from '../../utils/api-helpers';
 
 test.describe('UAT - interrupted flow', () => {
   const cleanup: string[] = [];
@@ -30,12 +29,17 @@ test.describe('UAT - interrupted flow', () => {
     await expect(page.getByRole('heading', { name: /Orders/i })).toBeVisible();
   });
 
-  test('UAT - close and reopen session allows safe continuation', async ({ browser }) => {
+  test('UAT - close and reopen session allows safe continuation', async ({ browser, request }, testInfo) => {
+    // Dedicated admin account: this session is captured and replayed in a second context below,
+    // and must not share a refresh-token row with other concurrently-running admin sessions.
+    const admin = await provisionAdminForUi(request, testInfo);
+    cleanup.push(admin.userId);
+
     const contextA = await browser.newContext();
     const pageA = await contextA.newPage();
     const loginA = new LoginPage(pageA);
     await loginA.goto();
-    await loginA.login(E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
+    await loginA.login(admin.email, admin.password);
     await loginA.expectRedirectToDashboard();
     const state = await contextA.storageState();
     await contextA.close();

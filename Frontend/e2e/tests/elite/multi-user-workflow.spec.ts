@@ -11,7 +11,13 @@ import {
   requestRevisionApi,
   updateOrderStatusApi,
 } from '../../utils/api-client';
-import { getAdminToken, provisionClientUser, provisionDesignerUser, teardownUsers } from '../../utils/api-helpers';
+import {
+  getAdminToken,
+  provisionAdminUser,
+  provisionClientUser,
+  provisionDesignerUser,
+  teardownUsers,
+} from '../../utils/api-helpers';
 import { createRoleSession, closeRoleSessions } from '../../utils/role-session';
 import { uniqueSuffix } from '../../utils/test-data';
 
@@ -30,9 +36,14 @@ test.describe('Elite - multi user workflow', () => {
     const designer = await provisionDesignerUser(request, adminToken, testInfo);
     cleanup.push(client.userId, designer.userId);
 
-    const adminCreds = { email: process.env.E2E_ADMIN_EMAIL!, password: process.env.E2E_ADMIN_PASSWORD! };
+    // Dedicated admin account for the live UI session below (kept open for the whole test) —
+    // must not share a refresh-token row with other concurrently-running admin sessions. The
+    // one-shot `adminToken` above is unaffected since it's never refreshed, only reused directly.
+    const adminForUi = await provisionAdminUser(request, adminToken, testInfo);
+    cleanup.push(adminForUi.userId);
+
     const sessions = await Promise.all([
-      createRoleSession(browser, adminCreds),
+      createRoleSession(browser, { email: adminForUi.email, password: adminForUi.password }),
       createRoleSession(browser, { email: designer.email, password: designer.password }),
       createRoleSession(browser, { email: client.email, password: client.password }),
     ]);

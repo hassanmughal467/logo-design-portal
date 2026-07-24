@@ -1,6 +1,6 @@
 import type { APIRequestContext } from '@playwright/test';
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from './env';
-import { buildClientUserPayload, buildDesignerUserPayload, uniqueSuffix } from './test-data';
+import { buildAdminUserPayload, buildClientUserPayload, buildDesignerUserPayload, uniqueSuffix } from './test-data';
 import type { TestInfo } from '@playwright/test';
 import { createUserApi, deleteUserApi, loginApi } from './api-client';
 
@@ -11,6 +11,7 @@ import { createUserApi, deleteUserApi, loginApi } from './api-client';
 
 export type ProvisionedClient = { email: string; password: string; userId: string };
 export type ProvisionedDesigner = { email: string; password: string; userId: string };
+export type ProvisionedAdmin = { email: string; password: string; userId: string };
 
 /** Creates a disposable Client user via API using the SuperAdmin / admin token. */
 export async function provisionClientUser(
@@ -39,10 +40,44 @@ export async function provisionDesignerUser(
   return { email, password, userId: created.id };
 }
 
-/** Obtain admin API token using configured operator credentials (SuperAdmin in dev). */
+/** Obtain admin API token using configured operator credentials (SuperAdmin in dev).
+ *  Safe to call concurrently: this is a one-shot token used immediately for API calls, never
+ *  later refreshed, so it isn't affected by another session rotating the account's refresh token. */
 export async function getAdminToken(request: APIRequestContext): Promise<string> {
   const auth = await loginApi(request, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   return auth.token;
+}
+
+/** Creates a disposable Admin-role user via the API using the seeded SuperAdmin's token. */
+export async function provisionAdminUser(
+  request: APIRequestContext,
+  adminToken: string,
+  testInfo: TestInfo,
+  password = 'Test@123'
+): Promise<ProvisionedAdmin> {
+  const suffix = uniqueSuffix(testInfo);
+  const email = `e2e-admin-${suffix}@example.com`.toLowerCase();
+  const payload = buildAdminUserPayload(email, password);
+  const created = await createUserApi(request, adminToken, payload);
+  return { email, password, userId: created.id };
+}
+
+/**
+ * Provision a dedicated Admin account for UI login/session tests. Use this instead of the raw
+ * E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD constants whenever a test holds a live, ongoing UI session
+ * as an admin persona (i.e. it will be refreshed over time) — the seeded SuperAdmin account has
+ * exactly one active refresh token (see AuthService.RefreshTokenAsync), so any two concurrent
+ * live sessions sharing it will rotate each other's refresh token out from under them and fail
+ * with "Invalid refresh token". A one-shot API call (login, provision) does not have this
+ * problem since nothing refreshes it later — only ongoing UI sessions need their own account.
+ */
+export async function provisionAdminForUi(
+  request: APIRequestContext,
+  testInfo: TestInfo,
+  password = 'Test@123'
+): Promise<ProvisionedAdmin> {
+  const adminToken = await getAdminToken(request);
+  return provisionAdminUser(request, adminToken, testInfo, password);
 }
 
 /**
