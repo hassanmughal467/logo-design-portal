@@ -599,6 +599,64 @@ Do not modify code during a review unless explicitly instructed.
 - Do not delete branches without explicit approval.
 - Review the relevant diff before reporting completion.
 
+## Branch Promotion and Deployment Safety
+
+Rules:
+
+1. The required promotion path is:
+   feature branch → develop → staging-environment → main
+
+2. Never suggest, create, approve, merge, or execute a pull request into staging-environment or main unless the user explicitly asks for that exact promotion in the current conversation.
+
+3. Never treat "next", "proceed", "continue", "merge it", or similar general approval as authorization to promote into staging-environment or main.
+
+4. Promotion into staging-environment requires the user to write an explicit statement equivalent to:
+   "Approve creating the develop to staging-environment PR."
+
+5. Merging into staging-environment requires a separate explicit statement equivalent to:
+   "Approve merging PR #<number> into staging-environment."
+
+6. Promotion into main requires the user to write an explicit statement equivalent to:
+   "Approve creating the staging-environment to main PR."
+
+7. Merging into main requires a separate explicit statement equivalent to:
+   "Approve merging PR #<number> into main."
+
+8. Deployment is a separate operation from merging. Never deploy automatically after a merge.
+
+9. A staging deployment requires a separate explicit statement:
+   "Approve deploying staging."
+
+10. A production/live deployment requires a separate explicit statement:
+    "Approve deploying production."
+
+11. Before suggesting any staging or production promotion, run the appropriate release review:
+    - /release-check before develop → staging-environment
+    - /qa-full before staging-environment → main
+
+12. Do not recommend promotion while:
+    - tests are pending;
+    - required tests failed;
+    - the working tree is dirty;
+    - commits are not pushed;
+    - unresolved review findings exist;
+    - staging URLs or production settings are unconfirmed;
+    - deployment rollback steps are unverified.
+
+13. A known failing test may only be accepted through a written exception approved by the user. Never assume an earlier exception applies to a new PR.
+
+14. Always stop after:
+    - creating a promotion PR;
+    - receiving final CI results;
+    - merging a promotion PR;
+    - completing a deployment.
+
+15. Never combine PR creation, merge, and deployment into one stage.
+
+16. Do not modify staging-environment or main branch pointers directly. Use pull requests only.
+
+17. If the user requests a merge without naming the target branch, inspect the PR target first. If the target is staging-environment or main, stop and request explicit promotion approval.
+
 ## Deployment Rules
 
 - Do not deploy unless explicitly instructed.
