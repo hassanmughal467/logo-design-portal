@@ -42,14 +42,20 @@ test.describe('Elite - multi user workflow', () => {
     const adminForUi = await provisionAdminUser(request, adminToken, testInfo);
     cleanup.push(adminForUi.userId);
 
+    // Obtain the client's one-shot API token BEFORE the client's UI session logs in below.
+    // AuthService.LoginAsync unconditionally overwrites the account's single stored refresh
+    // token on every login (same field RefreshTokenAsync checks). Calling loginApi() after the
+    // UI session started would silently invalidate that session's refresh token, so the next
+    // full-page navigation (clientOrders.goto() below) would fail its proactive refresh with
+    // "Invalid refresh token" and get logged out.
+    const clientAuth = await loginApi(request, client.email, client.password);
+
     const sessions = await Promise.all([
       createRoleSession(browser, { email: adminForUi.email, password: adminForUi.password }),
       createRoleSession(browser, { email: designer.email, password: designer.password }),
       createRoleSession(browser, { email: client.email, password: client.password }),
     ]);
     const [, , clientSession] = sessions;
-
-    const clientAuth = await loginApi(request, client.email, client.password);
 
     const orderTitle = `Multi-user ${uniqueSuffix(testInfo)}`;
     // Only Clients can create orders (RBAC).
