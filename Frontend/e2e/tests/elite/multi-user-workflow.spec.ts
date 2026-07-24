@@ -11,7 +11,13 @@ import {
   requestRevisionApi,
   updateOrderStatusApi,
 } from '../../utils/api-client';
-import { getAdminToken, provisionClientUser, provisionDesignerUser, teardownUsers } from '../../utils/api-helpers';
+import {
+  getAdminToken,
+  provisionAdminUser,
+  provisionClientUser,
+  provisionDesignerUser,
+  teardownUsers,
+} from '../../utils/api-helpers';
 import { createRoleSession, closeRoleSessions } from '../../utils/role-session';
 import { uniqueSuffix } from '../../utils/test-data';
 
@@ -30,15 +36,26 @@ test.describe('Elite - multi user workflow', () => {
     const designer = await provisionDesignerUser(request, adminToken, testInfo);
     cleanup.push(client.userId, designer.userId);
 
-    const adminCreds = { email: process.env.E2E_ADMIN_EMAIL!, password: process.env.E2E_ADMIN_PASSWORD! };
+    // Dedicated admin account for the live UI session below (kept open for the whole test) —
+    // must not share a refresh-token row with other concurrently-running admin sessions. The
+    // one-shot `adminToken` above is unaffected since it's never refreshed, only reused directly.
+    const adminForUi = await provisionAdminUser(request, adminToken, testInfo);
+    cleanup.push(adminForUi.userId);
+
+    // Obtain the client's one-shot API token BEFORE the client's UI session logs in below.
+    // AuthService.LoginAsync unconditionally overwrites the account's single stored refresh
+    // token on every login (same field RefreshTokenAsync checks). Calling loginApi() after the
+    // UI session started would silently invalidate that session's refresh token, so the next
+    // full-page navigation (clientOrders.goto() below) would fail its proactive refresh with
+    // "Invalid refresh token" and get logged out.
+    const clientAuth = await loginApi(request, client.email, client.password);
+
     const sessions = await Promise.all([
-      createRoleSession(browser, adminCreds),
+      createRoleSession(browser, { email: adminForUi.email, password: adminForUi.password }),
       createRoleSession(browser, { email: designer.email, password: designer.password }),
       createRoleSession(browser, { email: client.email, password: client.password }),
     ]);
     const [, , clientSession] = sessions;
-
-    const clientAuth = await loginApi(request, client.email, client.password);
 
     const orderTitle = `Multi-user ${uniqueSuffix(testInfo)}`;
     // Only Clients can create orders (RBAC).

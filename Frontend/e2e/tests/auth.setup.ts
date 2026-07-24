@@ -4,6 +4,7 @@ import fs from 'fs';
 import { LoginPage, MainLayoutPage } from '../pom';
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD, E2E_API_URL } from '../utils/env';
 import { apiUrl } from '../utils/api-client';
+import { provisionAdminForUi } from '../utils/api-helpers';
 
 /**
  * Production-style session bootstrap: perform a real UI login once, then reuse `storageState`
@@ -12,8 +13,13 @@ import { apiUrl } from '../utils/api-client';
  * Output path must match `storageState` in `playwright.config.ts` (`e2e/.auth/admin.json`).
  */
 const authFile = path.join(__dirname, '..', '.auth', 'admin.json');
+// Records the dedicated admin's userId so `auth.teardown.ts` (runs once, after every project
+// that depends on this `setup` project has finished — see `teardown: 'cleanup-admin'` in
+// playwright.config.ts) can delete it. The account must stay valid for the whole suite, so it
+// cannot be cleaned up inline here.
+const adminMetaFile = path.join(__dirname, '..', '.auth', 'admin-meta.json');
 
-setup('authenticate admin operator', async ({ page, request }) => {
+setup('authenticate admin operator', async ({ page, request }, testInfo) => {
   const healthUrl = `${E2E_API_URL}/api/system/health`;
   let health: Awaited<ReturnType<typeof request.get>> | null = null;
   try {
@@ -48,11 +54,18 @@ setup('authenticate admin operator', async ({ page, request }) => {
     throw new Error(`Unexpected login response during setup: ${loginCheck.status()} ${await loginCheck.text()}`);
   }
 
+  // Authenticate the storageState session as a dedicated, freshly-provisioned Admin account
+  // rather than the seeded E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD directly. That account is shared
+  // by other tests that also hold a live UI session (see provisionAdminForUi) — every ongoing
+  // session refreshing the same account's single refresh-token row would rotate the others out.
+  const admin = await provisionAdminForUi(request, testInfo);
+
   fs.mkdirSync(path.dirname(authFile), { recursive: true });
+  fs.writeFileSync(adminMetaFile, JSON.stringify({ userId: admin.userId }), 'utf-8');
 
   const loginPage = new LoginPage(page);
   await loginPage.goto();
-  await loginPage.login(E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
+  await loginPage.login(admin.email, admin.password);
   await loginPage.expectRedirectToDashboard();
   await new MainLayoutPage(page).expectUserHeaderVisible();
 
