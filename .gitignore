@@ -1,3 +1,6 @@
+# Root-level dependencies (Stryker mutation-testing orchestration package.json)
+/node_modules
+
 # Local Coverlet output folders (dotnet test with ad-hoc output paths)
 Backend/cov-*/
 
